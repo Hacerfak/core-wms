@@ -1,9 +1,12 @@
 package br.com.hacerfak.coreWMS.modules.cadastro.service;
 
+import br.com.hacerfak.coreWMS.core.config.MultiTenantConfig;
+import br.com.hacerfak.coreWMS.core.multitenant.MultiTenantDataSource;
 import org.flywaydb.core.Flyway;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy; // Importante para evitar ciclo
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.datasource.DriverManagerDataSource; // Importante!
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.stereotype.Service;
 
 import javax.sql.DataSource;
@@ -11,7 +14,9 @@ import javax.sql.DataSource;
 @Service
 public class TenantProvisioningService {
 
-    private final JdbcTemplate jdbcTemplate; // Conectado ao MASTER
+    private final JdbcTemplate jdbcTemplate; // Conectado ao Master
+    private final MultiTenantDataSource multiTenantDataSource; // Bean de Roteamento
+    private final MultiTenantConfig multiTenantConfig;
 
     @Value("${spring.datasource.url}")
     private String masterUrl;
@@ -20,12 +25,18 @@ public class TenantProvisioningService {
     @Value("${spring.datasource.password}")
     private String password;
 
-    public TenantProvisioningService(DataSource masterDataSource) {
+    // Use @Lazy no MultiTenantDataSource para evitar dependência circular na
+    // inicialização
+    public TenantProvisioningService(DataSource masterDataSource,
+            @Lazy MultiTenantDataSource multiTenantDataSource,
+            MultiTenantConfig multiTenantConfig) {
         this.jdbcTemplate = new JdbcTemplate(masterDataSource);
+        this.multiTenantDataSource = multiTenantDataSource;
+        this.multiTenantConfig = multiTenantConfig;
     }
 
     public void criarBancoDeDados(String tenantId) {
-        // ... (código de verificação e criação do banco permanece igual) ...
+        // 1. Verifica e cria (Mantém igual seu código anterior)
         String checkSql = "SELECT count(*) FROM pg_database WHERE datname = ?";
         Integer count = jdbcTemplate.queryForObject(checkSql, Integer.class, tenantId);
 
@@ -35,8 +46,14 @@ public class TenantProvisioningService {
             System.out.println("Banco de dados " + tenantId + " criado com sucesso!");
         }
 
-        // 3. Roda as migrações (Cria as tabelas, incluindo tb_empresa_config)
+        // 2. Roda Migrations (Mantém igual)
         rodarMigracoes(tenantId);
+    }
+
+    private void registrarTenantNoPool(String tenantId) {
+        System.out.println(">>> Adicionando tenant " + tenantId + " ao pool de conexões (Hot Reload)...");
+        DataSource novoDs = multiTenantConfig.createTenantDataSource(tenantId);
+        multiTenantDataSource.addTenant(tenantId, novoDs);
     }
 
     // --- NOVO MÉTODO ---
@@ -67,6 +84,9 @@ public class TenantProvisioningService {
 
         // Aqui definimos os defaults. Por exemplo, recebimento cego começa TRUE.
         tenantJdbc.update(sql, razaoSocial, cnpj, true);
+
+        // NOVO: Passo Final - Registra no Spring para uso imediato
+        registrarTenantNoPool(tenantId);
 
         System.out.println(">>> Configuração do tenant " + tenantId + " atualizada com sucesso!");
     }

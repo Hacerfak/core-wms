@@ -1,5 +1,6 @@
 package br.com.hacerfak.coreWMS.modules.seguranca.service;
 
+import br.com.hacerfak.coreWMS.core.multitenant.TenantContext; // <--- IMPORTANTE
 import br.com.hacerfak.coreWMS.modules.seguranca.domain.Usuario;
 import br.com.hacerfak.coreWMS.modules.seguranca.dto.AuthenticationDTO;
 import br.com.hacerfak.coreWMS.modules.seguranca.dto.EmpresaResumoDTO;
@@ -23,13 +24,13 @@ public class AuthService {
 
     // --- LOGICA DE LOGIN ---
     public LoginResponseDTO login(AuthenticationDTO data) {
-        // 1. Autentica no Spring Security (Valida senha)
+        // ... (Mantenha o código de login igual, ele já funciona pois o token inicial
+        // não tem tenant) ...
         var usernamePassword = new UsernamePasswordAuthenticationToken(data.login(), data.password());
         var auth = authenticationManager.authenticate(usernamePassword);
 
         Usuario usuario = (Usuario) auth.getPrincipal();
 
-        // 2. Gera a lista de empresas ativas
         List<EmpresaResumoDTO> acessos = usuario.getAcessos().stream()
                 .filter(acesso -> acesso.getEmpresa().isAtivo())
                 .map(acesso -> new EmpresaResumoDTO(
@@ -39,33 +40,46 @@ public class AuthService {
                         acesso.getRole().name()))
                 .toList();
 
-        // 3. Gera Token INICIAL (Sem Tenant)
         var token = tokenService.generateToken(usuario, null);
 
         return new LoginResponseDTO(token, usuario.getLogin(), acessos);
     }
 
-    // --- LÓGICA DE SELEÇÃO DE EMPRESA ---
+    // --- LÓGICA DE SELEÇÃO DE EMPRESA (CORRIGIDA) ---
     public LoginResponseDTO selecionarEmpresa(String tenantId) {
-        // Pega o usuário já autenticado pelo Token atual
-        String login = SecurityContextHolder.getContext().getAuthentication().getName();
+        // 1. Salva o contexto atual (só por precaução)
+        String tenantAtual = TenantContext.getTenant();
 
-        Usuario usuario = usuarioRepository.findByLogin(login)
-                .orElseThrow(() -> new RuntimeException("Usuário não encontrado"));
+        // 2. FORÇA O CONTEXTO PARA O MASTER
+        // Precisamos acessar a tabela 'tb_usuario' e 'tb_empresa' que só existem no
+        // Master
+        TenantContext.setTenant(TenantContext.DEFAULT_TENANT_ID);
 
-        // Valida se ele realmente tem acesso à empresa solicitada
-        boolean temAcesso = usuario.getAcessos().stream()
-                .anyMatch(a -> a.getEmpresa().getTenantId().equals(tenantId) && a.getEmpresa().isAtivo());
+        try {
+            // Agora a busca vai rodar no banco correto (Master)
+            String login = SecurityContextHolder.getContext().getAuthentication().getName();
 
-        if (!temAcesso) {
-            throw new RuntimeException("Acesso negado a esta empresa");
+            Usuario usuario = usuarioRepository.findByLogin(login)
+                    .orElseThrow(() -> new RuntimeException("Usuário não encontrado"));
+
+            // Valida se ele realmente tem acesso à empresa solicitada
+            boolean temAcesso = usuario.getAcessos().stream()
+                    .anyMatch(a -> a.getEmpresa().getTenantId().equals(tenantId) && a.getEmpresa().isAtivo());
+
+            if (!temAcesso) {
+                throw new RuntimeException("Acesso negado a esta empresa");
+            }
+
+            // Gera NOVO Token (COM Tenant)
+            var tokenComTenant = tokenService.generateToken(usuario, tenantId);
+
+            return new LoginResponseDTO(tokenComTenant, usuario.getLogin(), List.of());
+
+        } finally {
+            // 3. (Opcional) Restaura o contexto anterior para não afetar o resto da
+            // requisição
+            // Embora neste caso a requisição acabe aqui.
+            TenantContext.setTenant(tenantAtual);
         }
-
-        // Gera NOVO Token (COM Tenant)
-        var tokenComTenant = tokenService.generateToken(usuario, tenantId);
-
-        // Retorna o novo token (a lista de empresas pode ir vazia ou repetida,
-        // opcional)
-        return new LoginResponseDTO(tokenComTenant, usuario.getLogin(), List.of());
     }
 }
