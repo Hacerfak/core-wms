@@ -1,0 +1,2 @@
+ALTER TABLE tb_produto
+ADD COLUMN dun14 VARCHAR(14);
