@@ -11,7 +11,7 @@ services:
       - wms_main_data:/var/lib/postgresql/data
       - ./docker/init-databases.sh:/docker-entrypoint-initdb.d/init-databases.sh
     ports:
-      - "5434:5432"
+      - "5432:5432"
     networks:
       - wms-network
     restart: always

@@ -22,4 +22,4 @@ docker compose -f docker-compose.prod.yml up -d
 docker image prune -f
 
 echo "🎉 DEPLOY SUCESSO!"
-echo "Acesse no navegador: http://IP-DO-SEU-SERVIDOR (Porta 80)"
+echo "Acesse no navegador: http://localhost (Porta 80)"
