@@ -5,24 +5,36 @@ import 'react-toastify/dist/ReactToastify.css';
 
 import theme from './theme/theme';
 import { AuthProvider, AuthContext } from './contexts/AuthContext';
-import Login from './pages/Login/Login';
-import Dashboard from './pages/Dashboard/Dashboard';
-import Recebimento from './pages/Recebimento/Recebimento';
-import RecebimentoList from './pages/Recebimento/RecebimentoList';
-import Conferencia from './pages/Recebimento/Conferencia';
-import Configuracoes from './pages/Configuracao/Configuracoes';
-import MainLayout from './layout/MainLayout'; // <--- Importe
 import { useContext } from 'react';
 
-// Wrapper para rotas protegidas que adiciona o Layout
+// Páginas
+import Login from './pages/Login/Login';
+import SelecaoEmpresa from './pages/Login/SelecaoEmpresa'; // <--- Importe
+import Onboarding from './pages/Login/Onboarding';         // <--- Importe
+import Dashboard from './pages/Dashboard/Dashboard';
+import RecebimentoList from './pages/Recebimento/RecebimentoList';
+import Recebimento from './pages/Recebimento/Recebimento';
+import Conferencia from './pages/Recebimento/Conferencia';
+import Configuracoes from './pages/Configuracao/Configuracoes';
+import MainLayout from './layout/MainLayout';
+
+// Wrapper para rotas protegidas (Dashboard e internas)
 const PrivateRoute = ({ children }) => {
   const { authenticated, loading } = useContext(AuthContext);
 
   if (loading) return null;
   if (!authenticated) return <Navigate to="/login" />;
 
-  // Agora o Layout "abraça" a página filha
+  // Aqui poderíamos checar se tem Tenant selecionado, mas o Backend barra se não tiver.
   return <MainLayout>{children}</MainLayout>;
+};
+
+// Wrapper simples para telas de Seleção/Onboarding (autenticadas, mas sem Layout com Menu)
+const AuthRoute = ({ children }) => {
+  const { authenticated, loading } = useContext(AuthContext);
+  if (loading) return null;
+  if (!authenticated) return <Navigate to="/login" />;
+  return children;
 };
 
 function App() {
@@ -36,36 +48,21 @@ function App() {
           <Routes>
             <Route path="/login" element={<Login />} />
 
-            <Route path="/dashboard" element={
-              <PrivateRoute>
-                <Dashboard />
-              </PrivateRoute>
+            {/* Rotas de Entrada (Sem Menu Lateral) */}
+            <Route path="/selecao-empresa" element={
+              <AuthRoute><SelecaoEmpresa /></AuthRoute>
             } />
-            {/* LISTAGEM (Tela Principal) */}
-            <Route path="/recebimento" element={
-              <PrivateRoute>
-                <RecebimentoList />
-              </PrivateRoute>
+            <Route path="/onboarding" element={
+              <AuthRoute><Onboarding /></AuthRoute>
             } />
-            {/* UPLOAD (Nova Importação) */}
-            <Route path="/recebimento/novo" element={
-              <PrivateRoute>
-                <Recebimento />
-              </PrivateRoute>
-            } />
-            {/* CONFERÊNCIA (Operação) */}
-            <Route path="/recebimento/:id/conferencia" element={
-              <PrivateRoute>
-                <Conferencia />
-              </PrivateRoute>
-            } />
-            {/* CONFIGURAÇÕES DO SISTEMA */}
-            <Route path="/config" element={
-              <PrivateRoute>
-                <Configuracoes />
-              </PrivateRoute>
-            } />
-            {/* Redireciona raiz para dashboard */}
+
+            {/* Rotas do Sistema (Com Menu Lateral) */}
+            <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
+            <Route path="/recebimento" element={<PrivateRoute><RecebimentoList /></PrivateRoute>} />
+            <Route path="/recebimento/novo" element={<PrivateRoute><Recebimento /></PrivateRoute>} />
+            <Route path="/recebimento/:id/conferencia" element={<PrivateRoute><Conferencia /></PrivateRoute>} />
+            <Route path="/config" element={<PrivateRoute><Configuracoes /></PrivateRoute>} />
+
             <Route path="/" element={<Navigate to="/dashboard" />} />
             <Route path="*" element={<Navigate to="/login" />} />
           </Routes>
