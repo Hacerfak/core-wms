@@ -34,13 +34,6 @@ ALTER TABLE tb_pedido_saida
 ADD COLUMN IF NOT EXISTS data_atualizacao TIMESTAMP;
 ALTER TABLE tb_pedido_saida
 ADD COLUMN IF NOT EXISTS data_finalizacao TIMESTAMP;
--- Usuario
-ALTER TABLE tb_usuario
-ADD COLUMN IF NOT EXISTS data_criacao TIMESTAMP DEFAULT NOW();
-ALTER TABLE tb_usuario
-ADD COLUMN IF NOT EXISTS data_atualizacao TIMESTAMP;
-ALTER TABLE tb_usuario
-ADD COLUMN IF NOT EXISTS data_finalizacao TIMESTAMP;
 -- Estoque Saldo (Opcional, mas bom para saber a idade do saldo)
 ALTER TABLE tb_estoque_saldo
 ADD COLUMN IF NOT EXISTS data_criacao TIMESTAMP DEFAULT NOW();

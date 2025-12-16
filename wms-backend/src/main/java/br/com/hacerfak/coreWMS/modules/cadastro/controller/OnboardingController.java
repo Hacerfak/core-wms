@@ -48,6 +48,9 @@ public class OnboardingController {
         // Isso precisa rodar fora de transação
         provisioningService.criarBancoDeDados(tenantId);
 
+        // --- NOVO: Inicializa a tabela de configuração interna do tenant ---
+        provisioningService.inicializarConfiguracao(tenantId, dados.getRazaoSocial(), dados.getCnpj());
+
         try {
             // 5. Salva a Empresa no Banco Master
             Empresa novaEmpresa = Empresa.builder()

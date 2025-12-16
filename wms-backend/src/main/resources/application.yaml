@@ -35,7 +35,7 @@ spring:
     # "validate" checa se o Java bate com o Banco. 
     # Como usamos Flyway, nunca use "update" em produção.
     hibernate:
-      ddl-auto: validate
+      ddl-auto: none
     show-sql: true
     open-in-view: false
     properties:
@@ -56,7 +56,8 @@ spring:
   # ===================================================================
   flyway:
     enabled: true
-    locations: classpath:db/migration
+    # MUDANÇA CRÍTICA AQUI: Aponta apenas para a pasta master
+    locations: classpath:db/migration/master
     baseline-on-migrate: true
     out-of-order: true
 
