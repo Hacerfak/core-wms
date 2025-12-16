@@ -17,10 +17,6 @@ import br.com.hacerfak.coreWMS.core.domain.BaseEntity;
 @EqualsAndHashCode(callSuper = true)
 public class Recebimento extends BaseEntity {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-
     @Column(name = "num_nota_fiscal")
     private String numNotaFiscal;
 

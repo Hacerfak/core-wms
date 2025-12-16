@@ -21,10 +21,6 @@ import br.com.hacerfak.coreWMS.core.domain.BaseEntity;
 @EqualsAndHashCode(callSuper = true)
 public class Produto extends BaseEntity {
 
-        @Id
-        @GeneratedValue(strategy = GenerationType.IDENTITY)
-        private Long id;
-
         @Column(nullable = false, length = 50)
         private String sku;
 

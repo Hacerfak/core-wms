@@ -9,6 +9,7 @@ CREATE TABLE tb_produto (
     ativo BOOLEAN NOT NULL DEFAULT TRUE,
     data_criacao TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
     data_atualizacao TIMESTAMP WITHOUT TIME ZONE,
+    data_finalizacao TIMESTAMP WITHOUT TIME ZONE,
     CONSTRAINT uk_produto_sku UNIQUE (sku)
 );
 -- Índices para performance nas consultas do coletor de dados

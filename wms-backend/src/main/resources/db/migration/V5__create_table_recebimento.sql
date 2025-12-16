@@ -5,6 +5,7 @@ CREATE TABLE tb_recebimento (
     fornecedor VARCHAR(200),
     status VARCHAR(20) NOT NULL,
     data_criacao TIMESTAMP DEFAULT NOW(),
+    data_atualizacao TIMESTAMP,
     data_finalizacao TIMESTAMP
 );
 CREATE TABLE tb_item_recebimento (

@@ -16,10 +16,6 @@ import br.com.hacerfak.coreWMS.core.domain.BaseEntity;
 @EqualsAndHashCode(callSuper = true)
 public class Parceiro extends BaseEntity {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-
     @Column(nullable = false, length = 20) // CNPJ ou CPF (apenas números)
     private String documento;
 

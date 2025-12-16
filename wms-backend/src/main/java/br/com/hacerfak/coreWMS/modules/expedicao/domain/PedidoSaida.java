@@ -18,10 +18,6 @@ import br.com.hacerfak.coreWMS.core.domain.BaseEntity;
 @EqualsAndHashCode(callSuper = true)
 public class PedidoSaida extends BaseEntity {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-
     @Column(unique = true)
     private String codigoPedidoExterno; // ID do pedido no ERP/E-commerce
 

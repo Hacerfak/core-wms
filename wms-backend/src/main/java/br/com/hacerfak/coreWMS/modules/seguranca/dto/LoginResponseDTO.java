@@ -1,5 +1,9 @@
 package br.com.hacerfak.coreWMS.modules.seguranca.dto;
 
+import java.util.List;
+
 public record LoginResponseDTO(
-        String token) {
+                String nome,
+                String token, // Token "Global" ou temporário
+                List<EmpresaResumoDTO> acessos) {
 }

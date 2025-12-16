@@ -5,6 +5,7 @@ CREATE TABLE tb_pedido_saida (
     cliente_id BIGINT NOT NULL,
     status VARCHAR(20),
     data_criacao TIMESTAMP DEFAULT NOW(),
+    data_atualizacao TIMESTAMP,
     data_finalizacao TIMESTAMP DEFAULT NOW(),
     CONSTRAINT fk_pedido_cliente FOREIGN KEY (cliente_id) REFERENCES tb_parceiro(id)
 );

@@ -1,25 +1,103 @@
 spring:
   application:
     name: wms-core-api
+  
+  # ===================================================================
+  # CONFIGURAÇÃO DE OVERRIDE (Crítico para Multi-Tenant)
+  # Permite que nosso Bean customizado substitua o DataSource padrão
+  # ===================================================================
+  main:
+    allow-bean-definition-overriding: true
 
+  # ===================================================================
+  # BANCO DE DADOS PRINCIPAL (PostgreSQL - MASTER)
+  # O Java conecta via rede interna do Docker (wms-db-main:5432)
+  # ===================================================================
   datasource:
-    url: jdbc:postgresql://localhost:5432/wms_core
+    url: jdbc:postgresql://wms-db-main:5432/wms_master
     username: wms_user
     password: wms_password
     driver-class-name: org.postgresql.Driver
+    
+    # Pool de Conexões (HikariCP)
+    hikari:
+      pool-name: WmsMasterPool
+      minimum-idle: 5
+      maximum-pool-size: 20
+      idle-timeout: 30000
+      max-lifetime: 1800000
+      connection-timeout: 30000
 
+  # ===================================================================
+  # JPA / HIBERNATE
+  # ===================================================================
   jpa:
-    open-in-view: false # Boa prática: evita conexões presas na renderização
-    show-sql: true
+    # "validate" checa se o Java bate com o Banco. 
+    # Como usamos Flyway, nunca use "update" em produção.
     hibernate:
-      ddl-auto: validate # CRÍTICO: Nunca use 'update' em produção. O Flyway que manda.
+      ddl-auto: validate
+    show-sql: true
+    open-in-view: false
     properties:
       hibernate:
         format_sql: true
-        # Dialeto otimizado para Postgres com JSONB
         dialect: org.hibernate.dialect.PostgreSQLDialect
 
+  # ===================================================================
+  # BANCO DE AUDITORIA (MongoDB)
+  # ===================================================================
+  data:
+    mongodb:
+      # URI: protocolo://usuario:senha@host:porta/banco?authSource=admin
+      uri: mongodb://admin:mongo_password@wms-mongo:27017/wms_audit_global?authSource=admin
+
+  # ===================================================================
+  # FLYWAY (Migrações de Banco Relacional)
+  # ===================================================================
   flyway:
     enabled: true
-    baseline-on-migrate: true
     locations: classpath:db/migration
+    baseline-on-migrate: true
+    out-of-order: true
+
+  # ===================================================================
+  # FORMATACAO JSON E DATA/HORA
+  # ===================================================================
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: America/Sao_Paulo
+
+  # ===================================================================
+  # UPLOAD DE ARQUIVOS (Para XMLs grandes)
+  # ===================================================================
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
+# ===================================================================
+# SERVIDOR WEB
+# ===================================================================
+server:
+  port: 8080
+  servlet:
+    context-path: /
+
+# ===================================================================
+# SEGURANÇA E TOKENS (JWT)
+# ===================================================================
+api:
+  security:
+    token:
+      # Lê da variável de ambiente do Docker. Se não achar, usa o valor padrão.
+      secret: ${API_SECURITY_TOKEN_SECRET:chave_secreta_padrao_desenvolvimento_123}
+
+# ===================================================================
+# LOGS
+# ===================================================================
+logging:
+  level:
+    root: INFO
+    br.com.hacerfak.coreWMS: DEBUG
+    org.hibernate.SQL: INFO
+    # org.hibernate.type.descriptor.sql.BasicBinder: TRACE # Descomente para ver valores do SQL (?, ?)

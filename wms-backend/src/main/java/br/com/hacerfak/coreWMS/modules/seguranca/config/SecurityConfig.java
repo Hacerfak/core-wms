@@ -31,21 +31,21 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity) throws Exception {
         return httpSecurity
                 .csrf(csrf -> csrf.disable())
-
-                // --- CORREÇÃO: ADICIONE ESTA LINHA ---
-                // Sem isso, o bean corsConfigurationSource abaixo é ignorado
+                // Mantém sua configuração de CORS
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-                // -------------------------------------
 
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
-                        // Rotas Públicas
+                        // Rotas Públicas (Login inicial)
                         .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/auth/register").permitAll()
-                        // Swagger UI
+
+                        // Swagger
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
-                        // Todo o resto precisa de autenticação
+
+                        // Todo o resto precisa de autenticação (incluindo selecionar-empresa)
                         .anyRequest().authenticated())
+
                 .addFilterBefore(securityFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
     }

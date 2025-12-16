@@ -7,6 +7,7 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
@@ -18,10 +19,6 @@ import java.util.List;
 @AllArgsConstructor
 @Builder
 public class Usuario extends BaseEntity implements UserDetails {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
 
     @Column(nullable = false, unique = true)
     private String login;
@@ -37,6 +34,10 @@ public class Usuario extends BaseEntity implements UserDetails {
 
     @Builder.Default
     private boolean ativo = true;
+
+    @Builder.Default
+    @OneToMany(mappedBy = "usuario", cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+    private List<UsuarioEmpresa> acessos = new ArrayList<>();
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {

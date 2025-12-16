@@ -1,8 +1,6 @@
 package br.com.hacerfak.coreWMS.core.domain;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.EntityListeners;
-import jakarta.persistence.MappedSuperclass;
+import jakarta.persistence.*; // Importa Id, GeneratedValue, GenerationType, etc.
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.data.annotation.CreatedDate;
@@ -11,11 +9,15 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
 
-@MappedSuperclass // Não vira tabela, mas passa os campos para as filhas
-@EntityListeners(AuditingEntityListener.class) // O "Espião" do Spring
+@MappedSuperclass
+@EntityListeners(AuditingEntityListener.class)
 @Getter
 @Setter
 public abstract class BaseEntity {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
     @CreatedDate
     @Column(name = "data_criacao", updatable = false)
@@ -24,4 +26,16 @@ public abstract class BaseEntity {
     @LastModifiedDate
     @Column(name = "data_atualizacao")
     private LocalDateTime dataAtualizacao;
+
+    // --- O CAMPO NOVO ---
+    // Usaremos para Soft Delete (se estiver preenchido, o registro foi "excluído")
+    @Column(name = "data_finalizacao")
+    private LocalDateTime dataFinalizacao;
+
+    /**
+     * Método utilitário para saber se está ativo
+     */
+    public boolean isAtivo() {
+        return dataFinalizacao == null;
+    }
 }

@@ -16,10 +16,6 @@ import br.com.hacerfak.coreWMS.core.domain.BaseEntity;
 @EqualsAndHashCode(callSuper = true)
 public class Localizacao extends BaseEntity {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-
     @Column(unique = true, nullable = false)
     private String codigo; // Ex: A-01-01 (Rua-Predio-Nivel)
 
