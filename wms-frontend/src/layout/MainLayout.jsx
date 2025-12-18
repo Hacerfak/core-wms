@@ -1,13 +1,14 @@
 import { Box, AppBar, Toolbar, Typography, IconButton, Avatar, Menu, MenuItem, Divider, ListItemIcon, Tooltip, Chip } from '@mui/material';
-import { LogOut, User, Building2, ChevronDown, Check } from 'lucide-react';
+import { LogOut, Building2, Check } from 'lucide-react';
 import { useContext, useState, useMemo } from 'react';
-import { AuthContext } from '../contexts/AuthContext'; // Ajuste o caminho se necessário
+import { AuthContext } from '../contexts/AuthContext';
 import Sidebar from '../components/Sidebar';
 import Can from '../components/Can';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Outlet } from 'react-router-dom'; // <--- ADICIONADO Outlet
 import { jwtDecode } from 'jwt-decode';
 
-const MainLayout = ({ children }) => {
+// REMOVIDO: { children } das props
+const MainLayout = () => {
     const { logout, user, selecionarEmpresa } = useContext(AuthContext);
     const navigate = useNavigate();
     const [anchorEl, setAnchorEl] = useState(null);
@@ -27,20 +28,19 @@ const MainLayout = ({ children }) => {
         if (!token || !user?.empresas) return null;
         try {
             const decoded = jwtDecode(token);
-            // Procura na lista de empresas do usuário qual tem o tenantId do token
             return user.empresas.find(e => e.tenantId === decoded.tenant);
         } catch (e) {
             return null;
         }
-    }, [user]); // Recalcula se o usuário mudar
+    }, [user]);
 
     const handleTrocarEmpresa = async (tenantId) => {
         handleClose();
-        if (empresaAtual?.tenantId === tenantId) return; // Já está nela
+        if (empresaAtual?.tenantId === tenantId) return;
 
         const success = await selecionarEmpresa(tenantId);
         if (success) {
-            navigate(0); // Recarrega a página para garantir limpeza de estados de telas anteriores
+            navigate(0); // Reload para limpar estados
         }
     };
 
@@ -52,10 +52,9 @@ const MainLayout = ({ children }) => {
             {/* 2. Área Principal */}
             <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
-                {/* Barra de Topo (Header) */}
+                {/* Barra de Topo (Header) - MANTIDA IGUAL */}
                 <AppBar position="static" color="transparent" elevation={0} sx={{ borderBottom: '1px solid #e2e8f0', bgcolor: 'white', px: 2 }}>
                     <Toolbar>
-                        {/* Nome da Empresa Atual em Destaque */}
                         <Box sx={{ flexGrow: 1, display: 'flex', alignItems: 'center', gap: 2 }}>
                             <Typography variant="h6" sx={{ color: 'text.secondary', fontSize: '1rem', fontWeight: 500 }}>
                                 Visão Geral
@@ -102,7 +101,6 @@ const MainLayout = ({ children }) => {
                                     </Typography>
                                 </Box>
 
-                                {/* Lista de Empresas para Troca Rápida */}
                                 {user?.empresas?.map((empresa) => (
                                     <MenuItem
                                         key={empresa.tenantId}
@@ -138,7 +136,8 @@ const MainLayout = ({ children }) => {
 
                 {/* Conteúdo da Página */}
                 <Box sx={{ flexGrow: 1, overflow: 'auto', p: 3 }}>
-                    {children}
+                    {/* AQUI ESTÁ A MUDANÇA: Outlet no lugar de children */}
+                    <Outlet />
                 </Box>
             </Box>
         </Box>

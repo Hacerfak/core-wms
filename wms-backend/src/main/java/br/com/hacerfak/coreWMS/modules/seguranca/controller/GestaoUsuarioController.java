@@ -64,4 +64,11 @@ public class GestaoUsuarioController {
         usuarioService.excluirUsuarioGlobal(id);
         return ResponseEntity.noContent().build();
     }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('USUARIO_EDITAR') or hasRole('ADMIN')")
+    public ResponseEntity<Void> atualizarUsuario(@PathVariable Long id, @RequestBody CriarUsuarioRequest request) {
+        usuarioService.atualizarUsuario(id, request);
+        return ResponseEntity.noContent().build();
+    }
 }

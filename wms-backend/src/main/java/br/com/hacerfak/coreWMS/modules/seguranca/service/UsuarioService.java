@@ -160,6 +160,63 @@ public class UsuarioService {
         }
     }
 
+    public void atualizarUsuario(Long id, CriarUsuarioRequest request) {
+        String tenantId = TenantContext.getTenant();
+        boolean isMasterUser = false;
+
+        // 1. Atualizar dados Globais (Login e Senha) no Banco Master
+        TenantContext.setTenant(TenantContext.DEFAULT_TENANT_ID);
+        try {
+            Usuario usuario = usuarioRepository.findById(id)
+                    .orElseThrow(() -> new EntityNotFoundException("Usuário não encontrado."));
+
+            // Verifica se é o Master/Admin para pular lógica de perfil depois
+            if (usuario.getRole() == UserRole.ADMIN) {
+                isMasterUser = true;
+            }
+
+            // Verifica se mudou o login e se já existe
+            if (!usuario.getLogin().equals(request.login())) {
+                if (isMasterUser) {
+                    // Opcional: Bloquear mudança de login do Master se quiser
+                    // throw new IllegalArgumentException("Não é permitido alterar o login do
+                    // Master.");
+                }
+                if (usuarioRepository.findByLogin(request.login()).isPresent()) {
+                    throw new IllegalArgumentException("Este login já está em uso por outro usuário.");
+                }
+                usuario.setLogin(request.login());
+            }
+
+            // Atualiza senha apenas se foi informada
+            if (request.senha() != null && !request.senha().isBlank()) {
+                usuario.setSenha(passwordEncoder.encode(request.senha()));
+            }
+
+            usuarioRepository.save(usuario);
+        } finally {
+            TenantContext.setTenant(tenantId);
+        }
+
+        // 2. Atualizar Perfil no Banco Local (Tenant)
+        // Se for Master, NÃO mexe em perfis locais (ele não precisa)
+        // Se não veio perfilId no request (ex: edição parcial), ignoramos também
+        if (!isMasterUser && request.perfilId() != null) {
+            var perfisAntigos = usuarioPerfilRepository.findByUsuarioId(id);
+            usuarioPerfilRepository.deleteAll(perfisAntigos);
+
+            Perfil novoPerfil = perfilRepository.findById(request.perfilId())
+                    .orElseThrow(() -> new EntityNotFoundException("Perfil não encontrado."));
+
+            UsuarioPerfil usuarioPerfil = UsuarioPerfil.builder()
+                    .usuarioId(id)
+                    .perfil(novoPerfil)
+                    .build();
+
+            usuarioPerfilRepository.save(usuarioPerfil);
+        }
+    }
+
     // --- 3. CRIAÇÃO OU VÍNCULO (O Coração da mudança) ---
     public void salvarUsuarioParaEmpresa(CriarUsuarioRequest request) {
         String tenantId = TenantContext.getTenant();

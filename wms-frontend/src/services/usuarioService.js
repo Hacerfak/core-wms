@@ -6,6 +6,11 @@ export const getUsuarios = async () => {
     return response.data;
 };
 
+export const verificarUsuario = async (login) => {
+    const response = await api.get(`/api/gestao-usuarios/verificar/${login}`);
+    return response.data;
+};
+
 export const criarUsuario = async (dados) => {
     await api.post('/api/gestao-usuarios', dados);
 };
@@ -17,6 +22,10 @@ export const removerUsuarioLocal = async (id) => {
 
 export const excluirUsuarioGlobal = async (id) => {
     await api.delete(`/api/gestao-usuarios/${id}/global`);
+};
+
+export const atualizarUsuario = async (id, dados) => {
+    await api.put(`/api/gestao-usuarios/${id}`, dados);
 };
 
 // --- PERFIS (Novo) ---

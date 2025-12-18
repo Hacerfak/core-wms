@@ -1,24 +1,35 @@
 import { createContext, useState, useEffect, useCallback } from 'react';
 import api from '../services/api';
 import { jwtDecode } from 'jwt-decode';
+import { useNavigate, useLocation } from 'react-router-dom'; // IMPORTANTE
 
 export const AuthContext = createContext();
 
+// Mapa de rotas principais e suas permissões (sincronizado com Sidebar)
+const ROUTE_PERMISSIONS = {
+    '/recebimento': 'RECEBIMENTO_VISUALIZAR',
+    '/estoque': 'ESTOQUE_VISUALIZAR',
+    '/expedicao': 'PEDIDO_VISUALIZAR',
+    '/usuarios': 'USUARIO_LISTAR',
+    '/perfis': 'PERFIL_GERENCIAR',
+    '/config': 'CONFIG_GERENCIAR'
+};
+
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
-    const [permissions, setPermissions] = useState([]); // Nova lista de permissões
+    const [permissions, setPermissions] = useState([]);
     const [loading, setLoading] = useState(true);
 
+    const navigate = useNavigate(); // Hook de navegação
+    const location = useLocation(); // Hook para saber onde estou
 
-    // Função auxiliar para processar o token e extrair permissões
     const processToken = useCallback((token) => {
-        if (!token) return;
+        if (!token) return null;
         try {
             const decoded = jwtDecode(token);
-            // O backend manda as permissões na claim "roles"
             const userPermissions = decoded.roles || [];
             setPermissions(userPermissions);
-            return decoded; // Retorna para uso imediato se precisar
+            return { decoded, userPermissions }; // Retorna permissões também
         } catch (error) {
             console.error("Erro ao decodificar token", error);
             return null;
@@ -31,8 +42,8 @@ export const AuthProvider = ({ children }) => {
 
         if (token && recoveredUser) {
             try {
-                const decoded = processToken(token); // Processa permissões ao carregar
-                if (decoded && decoded.exp * 1000 < Date.now()) {
+                const result = processToken(token);
+                if (result && result.decoded.exp * 1000 < Date.now()) {
                     logout();
                 } else {
                     setUser(JSON.parse(recoveredUser));
@@ -48,13 +59,11 @@ export const AuthProvider = ({ children }) => {
     const login = async (username, password) => {
         try {
             const response = await api.post('/auth/login', { login: username, password });
-
             const { token, empresas, usuario, role } = response.data;
 
             localStorage.setItem('wms_token', token);
             api.defaults.headers.Authorization = `Bearer ${token}`;
 
-            // Processa as permissões do token inicial
             processToken(token);
 
             const userData = { login: usuario, role, empresas };
@@ -76,8 +85,35 @@ export const AuthProvider = ({ children }) => {
             localStorage.setItem('wms_token', newToken);
             api.defaults.headers.Authorization = `Bearer ${newToken}`;
 
-            // ATUALIZA AS PERMISSÕES COM O NOVO TOKEN DO TENANT
-            processToken(newToken);
+            // Processa o novo token e PEGA AS NOVAS PERMISSÕES
+            const result = processToken(newToken);
+            const newPermissions = result ? result.userPermissions : [];
+
+            // --- REDIRECIONAMENTO INTELIGENTE ---
+            const currentPath = location.pathname;
+
+            // Verifica se a rota atual exige permissão
+            let requiredPermission = null;
+            // Procura se a rota atual começa com alguma das chaves do mapa (ex: /recebimento/novo começa com /recebimento)
+            for (const route in ROUTE_PERMISSIONS) {
+                if (currentPath.startsWith(route)) {
+                    requiredPermission = ROUTE_PERMISSIONS[route];
+                    break;
+                }
+            }
+
+            // Se a rota exige permissão e o usuário NÃO tem (e não é Master Admin)
+            if (requiredPermission) {
+                const isMaster = user?.role === 'ADMIN';
+                const hasPermission = newPermissions.includes(requiredPermission) ||
+                    newPermissions.includes('ROLE_ADMIN') ||
+                    isMaster;
+
+                if (!hasPermission) {
+                    console.warn(`Redirecionando para Dashboard: Sem permissão ${requiredPermission} na nova empresa.`);
+                    navigate('/dashboard');
+                }
+            }
 
             return true;
         } catch (error) {
@@ -92,30 +128,35 @@ export const AuthProvider = ({ children }) => {
         api.defaults.headers.Authorization = null;
         setUser(null);
         setPermissions([]);
+        navigate('/login'); // Força ida para login ao deslogar
     };
 
-    // --- A NOVA FUNÇÃO MÁGICA: userCan ---
     const userCan = (permission) => {
         if (!user) return false;
-
-        // 1. GOD MODE: Admin Global pode tudo
         if (user.role === 'ADMIN') return true;
-
-        // 2. Admin Local (ROLE_ADMIN no Token) também pode tudo dentro da empresa
         if (permissions.includes('ROLE_ADMIN')) return true;
-
-        // 3. Checa a permissão específica (ex: RECEBIMENTO_CRIAR)
         return permissions.includes(permission);
+    };
+
+    const forceUpdatePermissions = async () => {
+        try {
+            const response = await api.post('/auth/refresh-permissions');
+            const newToken = response.data.token;
+            localStorage.setItem('wms_token', newToken);
+            api.defaults.headers.Authorization = `Bearer ${newToken}`;
+            processToken(newToken);
+            return true;
+        } catch (error) {
+            console.error("Erro ao atualizar permissões", error);
+            return false;
+        }
     };
 
     const refreshUserCompanies = async () => {
         try {
-            // Chama o endpoint que já existe no EmpresaController
             const response = await api.get('/empresas/meus-acessos');
             const novasEmpresas = response.data;
-
             if (user) {
-                // Atualiza o estado e o LocalStorage
                 const updatedUser = { ...user, empresas: novasEmpresas };
                 setUser(updatedUser);
                 localStorage.setItem('wms_user', JSON.stringify(updatedUser));
@@ -127,34 +168,12 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    // --- NOVA FUNÇÃO: Atualiza o token em background ---
-    const forceUpdatePermissions = async () => {
-        try {
-            // Chama o endpoint novo
-            const response = await api.post('/auth/refresh-permissions');
-            const newToken = response.data.token;
-
-            // Atualiza LocalStorage e API
-            localStorage.setItem('wms_token', newToken);
-            api.defaults.headers.Authorization = `Bearer ${newToken}`;
-
-            // Reprocessa as permissões na memória (Contexto)
-            processToken(newToken);
-
-            console.log("Permissões atualizadas com sucesso!");
-            return true;
-        } catch (error) {
-            console.error("Erro ao atualizar permissões", error);
-            return false;
-        }
-    };
-
     return (
         <AuthContext.Provider value={{
             authenticated: !!user,
             user,
-            permissions, // Expõe a lista crua se precisar
-            userCan,     // Expõe a função de verificação
+            permissions,
+            userCan,
             login,
             logout,
             loading,
