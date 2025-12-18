@@ -193,6 +193,13 @@ public class UsuarioService {
                 usuario.setSenha(passwordEncoder.encode(request.senha()));
             }
 
+            // --- NOVO: Atualiza Status ---
+            if (request.ativo() != null) {
+                // Regra: Não deixar inativar o próprio usuário ou o Master supremo se não
+                // quiser
+                usuario.setAtivo(request.ativo());
+            }
+
             usuarioRepository.save(usuario);
         } finally {
             TenantContext.setTenant(tenantId);

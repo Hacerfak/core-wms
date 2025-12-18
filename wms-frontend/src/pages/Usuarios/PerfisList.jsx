@@ -5,11 +5,16 @@ import { getPerfis, excluirPerfil } from '../../services/usuarioService';
 import PerfilForm from './PerfilForm';
 import { toast } from 'react-toastify';
 import Can from '../../components/Can';
+import ConfirmDialog from '../../components/ConfirmDialog'; // <--- Import
 
 const PerfisList = () => {
     const [perfis, setPerfis] = useState([]);
     const [modalOpen, setModalOpen] = useState(false);
     const [perfilEditando, setPerfilEditando] = useState(null);
+
+    // Estado do Confirm
+    const [confirmOpen, setConfirmOpen] = useState(false);
+    const [confirmAction, setConfirmAction] = useState(null);
 
     const loadData = async () => {
         try {
@@ -22,18 +27,12 @@ const PerfisList = () => {
 
     useEffect(() => { loadData(); }, []);
 
-    const handleEdit = (perfil) => {
-        setPerfilEditando(perfil);
-        setModalOpen(true);
-    };
+    const handleEdit = (perfil) => { setPerfilEditando(perfil); setModalOpen(true); };
+    const handleNew = () => { setPerfilEditando(null); setModalOpen(true); };
 
-    const handleNew = () => {
-        setPerfilEditando(null);
-        setModalOpen(true);
-    };
-
-    const handleDelete = async (id) => {
-        if (window.confirm("Tem certeza? Usuários vinculados a este perfil perderão o acesso.")) {
+    // Lógica antiga substituída
+    const handleDeleteClick = (id) => {
+        setConfirmAction(() => async () => {
             try {
                 await excluirPerfil(id);
                 toast.success("Perfil excluído");
@@ -41,7 +40,8 @@ const PerfisList = () => {
             } catch (error) {
                 toast.error("Erro ao excluir. Verifique se há usuários vinculados.");
             }
-        }
+        });
+        setConfirmOpen(true);
     };
 
     return (
@@ -76,17 +76,13 @@ const PerfisList = () => {
                                         </Box>
                                     </TableCell>
                                     <TableCell>{p.descricao}</TableCell>
-                                    <TableCell>
-                                        <Chip label={`${p.permissoes.length} Ações`} size="small" variant="outlined" />
-                                    </TableCell>
+                                    <TableCell><Chip label={`${p.permissoes.length} Ações`} size="small" variant="outlined" /></TableCell>
                                     <TableCell align="center">
                                         <Can I="PERFIL_GERENCIAR">
-                                            <IconButton size="small" onClick={() => handleEdit(p)} color="primary">
-                                                <Edit size={18} />
-                                            </IconButton>
-                                            <IconButton size="small" onClick={() => handleDelete(p.id)} color="error">
-                                                <Trash2 size={18} />
-                                            </IconButton>
+                                            <IconButton size="small" onClick={() => handleEdit(p)} color="primary"><Edit size={18} /></IconButton>
+
+                                            {/* Botão com nova lógica */}
+                                            <IconButton size="small" onClick={() => handleDeleteClick(p.id)} color="error"><Trash2 size={18} /></IconButton>
                                         </Can>
                                     </TableCell>
                                 </TableRow>
@@ -96,14 +92,16 @@ const PerfisList = () => {
                 </TableContainer>
             </Paper>
 
-            {modalOpen && (
-                <PerfilForm
-                    open={modalOpen}
-                    onClose={() => setModalOpen(false)}
-                    perfil={perfilEditando}
-                    onSuccess={() => { setModalOpen(false); loadData(); }}
-                />
-            )}
+            {modalOpen && <PerfilForm open={modalOpen} onClose={() => setModalOpen(false)} perfil={perfilEditando} onSuccess={() => { setModalOpen(false); loadData(); }} />}
+
+            {/* Componente Confirm */}
+            <ConfirmDialog
+                open={confirmOpen}
+                onClose={() => setConfirmOpen(false)}
+                onConfirm={confirmAction}
+                title="Excluir Perfil"
+                message="Tem certeza? Usuários vinculados a este perfil perderão o acesso."
+            />
         </Box>
     );
 };

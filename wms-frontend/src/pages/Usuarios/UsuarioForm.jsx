@@ -1,40 +1,41 @@
 import { useState, useEffect } from 'react';
-import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, MenuItem, Box, Typography, Alert, InputAdornment, CircularProgress } from '@mui/material';
-import { getPerfis, criarUsuario, atualizarUsuario, verificarUsuario } from '../../services/usuarioService'; // Import verificarUsuario
+import {
+    Dialog, DialogTitle, DialogContent, DialogActions, Button,
+    TextField, MenuItem, Box, Alert, CircularProgress,
+    FormControlLabel, Switch // <--- Importado
+} from '@mui/material';
+import { getPerfis, criarUsuario, atualizarUsuario, verificarUsuario } from '../../services/usuarioService';
 import { toast } from 'react-toastify';
-import { Search, ShieldAlert, CheckCircle, UserPlus } from 'lucide-react';
+import { Search, ShieldAlert, CheckCircle } from 'lucide-react';
 
 const UsuarioForm = ({ open, onClose, onSuccess, usuario }) => {
     const [perfis, setPerfis] = useState([]);
-    const [form, setForm] = useState({ login: '', senha: '', perfilId: '' });
 
-    // null = não verificado, 'existente' = encontrado no banco, 'novo' = livre para cadastro
+    // Adicionado campo 'ativo' no estado inicial
+    const [form, setForm] = useState({ login: '', senha: '', perfilId: '', ativo: true });
+
     const [statusUsuario, setStatusUsuario] = useState(null);
-
     const [loading, setLoading] = useState(false);
     const [verificando, setVerificando] = useState(false);
 
-    // Verifica se é o Super Admin (Master)
     const isMaster = usuario?.perfilNome === 'MASTER' || usuario?.login === 'master';
 
     useEffect(() => {
         if (open) {
-            // Só carrega perfis se NÃO for o Master
-            if (!isMaster) {
-                carregarPerfis();
-            }
+            if (!isMaster) carregarPerfis();
 
             if (usuario) {
                 // MODO EDIÇÃO
                 setForm({
                     login: usuario.login,
                     senha: '',
-                    perfilId: usuario.perfilId || ''
+                    perfilId: usuario.perfilId || '',
+                    ativo: usuario.ativo // <--- Carrega do usuário
                 });
-                setStatusUsuario('existente'); // Já existe
+                setStatusUsuario('existente');
             } else {
-                // MODO CRIAÇÃO (Reset)
-                setForm({ login: '', senha: '', perfilId: '' });
+                // MODO CRIAÇÃO
+                setForm({ login: '', senha: '', perfilId: '', ativo: true });
                 setStatusUsuario(null);
             }
         }
@@ -44,7 +45,6 @@ const UsuarioForm = ({ open, onClose, onSuccess, usuario }) => {
         try {
             const data = await getPerfis();
             setPerfis(data);
-
             if (usuario && !form.perfilId) {
                 const perfilEncontrado = data.find(p => p.nome === usuario.perfilNome);
                 if (perfilEncontrado) {
@@ -56,7 +56,6 @@ const UsuarioForm = ({ open, onClose, onSuccess, usuario }) => {
         }
     };
 
-    // --- LÓGICA DE PESQUISA RESTAURADA ---
     const handleVerificarLogin = async () => {
         if (!form.login) return;
         setVerificando(true);
@@ -64,10 +63,10 @@ const UsuarioForm = ({ open, onClose, onSuccess, usuario }) => {
             const data = await verificarUsuario(form.login);
             if (data.existe) {
                 setStatusUsuario('existente');
-                toast.info(`Usuário "${form.login}" encontrado! Será vinculado à empresa.`);
+                toast.info(`Usuário "${form.login}" encontrado! Será vinculado.`);
             } else {
                 setStatusUsuario('novo');
-                toast.success(`Usuário disponível. Será criado um novo cadastro.`);
+                toast.success(`Usuário disponível.`);
             }
         } catch (error) {
             toast.error("Erro ao verificar usuário.");
@@ -79,7 +78,6 @@ const UsuarioForm = ({ open, onClose, onSuccess, usuario }) => {
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        // Validação extra para garantir que pesquisou antes de salvar novo
         if (!usuario && statusUsuario === null) {
             toast.warning("Por favor, verifique o login antes de salvar.");
             return;
@@ -90,15 +88,15 @@ const UsuarioForm = ({ open, onClose, onSuccess, usuario }) => {
             if (usuario) {
                 // UPDATE
                 const payload = isMaster
-                    ? { login: form.login, senha: form.senha }
+                    ? { login: form.login, senha: form.senha, ativo: form.ativo }
                     : form;
 
                 await atualizarUsuario(usuario.id, payload);
                 toast.success("Dados atualizados com sucesso!");
             } else {
-                // CREATE (ou VINCULAR)
+                // CREATE
                 await criarUsuario(form);
-                toast.success(statusUsuario === 'existente' ? "Usuário vinculado com sucesso!" : "Usuário criado com sucesso!");
+                toast.success("Usuário salvo com sucesso!");
             }
             onSuccess();
         } catch (error) {
@@ -117,28 +115,14 @@ const UsuarioForm = ({ open, onClose, onSuccess, usuario }) => {
                 <DialogContent>
                     <Box display="flex" flexDirection="column" gap={3}>
 
-                        {isMaster ? (
+                        {isMaster && (
                             <Alert severity="info" icon={<ShieldAlert />}>
-                                Usuário <b>Master</b>. O perfil não pode ser alterado, apenas a senha.
+                                Usuário <b>Master</b>. O perfil não pode ser alterado.
                             </Alert>
-                        ) : (
-                            usuario && (
-                                <Alert severity="warning">
-                                    Atenção: Alterar o Login ou Senha mudará o acesso deste usuário em <b>todas as empresas</b>.
-                                </Alert>
-                            )
                         )}
 
-                        {/* Feedback visual da pesquisa */}
                         {!usuario && statusUsuario === 'existente' && (
-                            <Alert severity="info" icon={<CheckCircle />}>
-                                Usuário já existe no sistema global. Clique em Salvar para conceder acesso a esta empresa.
-                            </Alert>
-                        )}
-                        {!usuario && statusUsuario === 'novo' && (
-                            <Alert severity="success" icon={<UserPlus />}>
-                                Login disponível. Preencha a senha e o perfil para criar.
-                            </Alert>
+                            <Alert severity="info" icon={<CheckCircle />}>Usuário já existe. Clique em Salvar para vincular.</Alert>
                         )}
 
                         <Box display="flex" gap={1}>
@@ -148,18 +132,11 @@ const UsuarioForm = ({ open, onClose, onSuccess, usuario }) => {
                                 value={form.login}
                                 onChange={e => {
                                     setForm({ ...form, login: e.target.value });
-                                    if (!usuario) setStatusUsuario(null); // Reseta status se mudar o texto
+                                    if (!usuario) setStatusUsuario(null);
                                 }}
-                                disabled={isMaster}
+                                disabled={isMaster || !!usuario} // Login não muda na edição comum
                                 required
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter' && !usuario) {
-                                        e.preventDefault();
-                                        handleVerificarLogin();
-                                    }
-                                }}
                             />
-                            {/* BOTÃO DE PESQUISA REATIVADO */}
                             {!usuario && (
                                 <Button
                                     variant="contained"
@@ -178,29 +155,37 @@ const UsuarioForm = ({ open, onClose, onSuccess, usuario }) => {
                             fullWidth
                             value={form.senha}
                             onChange={e => setForm({ ...form, senha: e.target.value })}
-                            // Senha só é obrigatória se for NOVO usuário. Se for vincular (existente) ou editar, é opcional.
                             required={!usuario && statusUsuario === 'novo'}
-                            disabled={!usuario && statusUsuario === 'existente'} // Se já existe, não precisa senha para vincular
-                            helperText={!usuario && statusUsuario === 'existente' ? "Senha não necessária para vincular usuário existente." : ""}
                             autoFocus={isMaster}
                         />
 
                         {!isMaster && (
                             <TextField
                                 select
-                                label="Perfil de Acesso nesta Empresa"
+                                label="Perfil de Acesso"
                                 fullWidth
                                 value={form.perfilId}
                                 onChange={e => setForm({ ...form, perfilId: e.target.value })}
                                 required
                             >
                                 {perfis.map(p => (
-                                    <MenuItem key={p.id} value={p.id}>
-                                        <Typography fontWeight="bold">{p.nome}</Typography>
-                                    </MenuItem>
+                                    <MenuItem key={p.id} value={p.id}>{p.nome}</MenuItem>
                                 ))}
                             </TextField>
                         )}
+
+                        {/* NOVO SWITCH ATIVO/INATIVO */}
+                        <FormControlLabel
+                            control={
+                                <Switch
+                                    checked={form.ativo}
+                                    onChange={(e) => setForm({ ...form, ativo: e.target.checked })}
+                                    color="success"
+                                />
+                            }
+                            label={form.ativo ? "Usuário Ativo" : "Usuário Inativo"}
+                        />
+
                     </Box>
                 </DialogContent>
                 <DialogActions>
