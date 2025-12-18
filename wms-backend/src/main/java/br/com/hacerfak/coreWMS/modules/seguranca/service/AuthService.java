@@ -128,4 +128,43 @@ public class AuthService {
         var tokenComTenant = tokenService.generateToken(usuario, tenantId, authorities);
         return new LoginResponseDTO(tokenComTenant, usuario.getLogin(), usuario.getRole().name(), List.of());
     }
+
+    // NOVO MÉTODO: Recarrega permissões sem mudar de empresa
+    public LoginResponseDTO atualizarCredenciais() {
+        String tenantAtual = TenantContext.getTenant();
+
+        // 1. Identifica usuário logado
+        TenantContext.setTenant(TenantContext.DEFAULT_TENANT_ID);
+        Usuario usuario;
+        try {
+            String login = SecurityContextHolder.getContext().getAuthentication().getName();
+            usuario = usuarioRepository.findByLogin(login).orElseThrow();
+        } finally {
+            TenantContext.setTenant(tenantAtual);
+        }
+
+        // 2. Recalcula permissões no Tenant Atual (Igual ao selecionarEmpresa)
+        List<String> authorities = new ArrayList<>();
+
+        if (usuario.getRole() == UserRole.ADMIN) {
+            authorities.add("ROLE_ADMIN");
+            for (PermissaoEnum p : PermissaoEnum.values()) {
+                authorities.add(p.name());
+            }
+        } else {
+            // Busca permissões atualizadas no banco
+            var perfis = usuarioPerfilRepository.findByUsuarioId(usuario.getId());
+            for (UsuarioPerfil up : perfis) {
+                if (up.getPerfil().isAtivo()) {
+                    up.getPerfil().getPermissoes().forEach(p -> authorities.add(p.name()));
+                }
+            }
+        }
+
+        // 3. Gera novo token
+        var novoToken = tokenService.generateToken(usuario, tenantAtual, authorities);
+
+        // Retorna estrutura padrão, mas só o token importa aqui
+        return new LoginResponseDTO(novoToken, usuario.getLogin(), usuario.getRole().name(), List.of());
+    }
 }

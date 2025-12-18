@@ -127,6 +127,28 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
+    // --- NOVA FUNÇÃO: Atualiza o token em background ---
+    const forceUpdatePermissions = async () => {
+        try {
+            // Chama o endpoint novo
+            const response = await api.post('/auth/refresh-permissions');
+            const newToken = response.data.token;
+
+            // Atualiza LocalStorage e API
+            localStorage.setItem('wms_token', newToken);
+            api.defaults.headers.Authorization = `Bearer ${newToken}`;
+
+            // Reprocessa as permissões na memória (Contexto)
+            processToken(newToken);
+
+            console.log("Permissões atualizadas com sucesso!");
+            return true;
+        } catch (error) {
+            console.error("Erro ao atualizar permissões", error);
+            return false;
+        }
+    };
+
     return (
         <AuthContext.Provider value={{
             authenticated: !!user,
@@ -137,7 +159,8 @@ export const AuthProvider = ({ children }) => {
             logout,
             loading,
             selecionarEmpresa,
-            refreshUserCompanies
+            refreshUserCompanies,
+            forceUpdatePermissions
         }}>
             {children}
         </AuthContext.Provider>

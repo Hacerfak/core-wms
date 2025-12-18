@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import {
     Dialog, DialogTitle, DialogContent, DialogActions, Button,
     TextField, Box, Typography, Checkbox, FormControlLabel,
@@ -6,8 +6,10 @@ import {
 } from '@mui/material';
 import { getPermissoesDisponiveis, salvarPerfil } from '../../services/usuarioService';
 import { toast } from 'react-toastify';
+import { AuthContext } from '../../contexts/AuthContext';
 
 const PerfilForm = ({ open, onClose, perfil, onSuccess }) => {
+    const { forceUpdatePermissions } = useContext(AuthContext); // Hook para forçar atualização de permissões
     const [form, setForm] = useState({ nome: '', descricao: '', permissoes: [] });
     const [opcoesPermissoes, setOpcoesPermissoes] = useState({}); // Mapa agrupado
     const [loading, setLoading] = useState(false);
@@ -66,6 +68,11 @@ const PerfilForm = ({ open, onClose, perfil, onSuccess }) => {
         try {
             await salvarPerfil(form);
             toast.success("Perfil salvo com sucesso!");
+
+            // MÁGICA: Atualiza as permissões do usuário logado imediatamente
+            // (Caso o perfil alterado seja o dele, já aplica na hora)
+            await forceUpdatePermissions();
+
             onSuccess();
         } catch (error) {
             toast.error("Erro ao salvar perfil");

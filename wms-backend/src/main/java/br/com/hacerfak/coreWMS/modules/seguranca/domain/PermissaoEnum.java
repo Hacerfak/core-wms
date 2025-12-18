@@ -41,6 +41,7 @@ public enum PermissaoEnum {
     // --- GESTÃO DE ACESSO E CONFIGURAÇÃO ---
     USUARIO_LISTAR,
     USUARIO_CRIAR, // Vincular usuário à empresa
+    USUARIO_EXCLUIR, // Remover acesso de usuário na empresa
     PERFIL_GERENCIAR, // Criar/Editar Perfis de Acesso
     CONFIG_GERENCIAR // Alterar configurações da empresa (ex: logo, regras)
 }

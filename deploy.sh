@@ -8,7 +8,7 @@ echo "🚀 Iniciando Deploy Completo do WMS..."
 # 1. Parar containers antigos
 echo "🛑 Parando serviços..."
 # O flag --remove-orphans limpa containers que não estão mais no arquivo yaml
-docker compose -f docker-compose.prod.yml down --remove-orphans -v
+docker compose -f docker-compose.prod.yml down --remove-orphans # -v
 
 # 2. Reconstruir as imagens (Backend Java + Frontend React)
 echo "🔨 Compilando e Construindo imagens (Isso pode demorar)..."

@@ -52,4 +52,9 @@ public class AuthenticationController {
 
         return ResponseEntity.ok().build();
     }
+
+    @PostMapping("/refresh-permissions")
+    public ResponseEntity<LoginResponseDTO> refreshPermissions() {
+        return ResponseEntity.ok(authService.atualizarCredenciais());
+    }
 }

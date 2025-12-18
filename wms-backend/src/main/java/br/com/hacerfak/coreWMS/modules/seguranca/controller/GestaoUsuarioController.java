@@ -47,4 +47,21 @@ public class GestaoUsuarioController {
     public ResponseEntity<List<Perfil>> listarPerfis() {
         return ResponseEntity.ok(perfilRepository.findAll());
     }
+
+    // --- NOVOS ENDPOINTS DE EXCLUSÃO ---
+    // Qualquer um com permissão de excluir usuário na empresa pode fazer isso
+    @DeleteMapping("/{id}/local")
+    @PreAuthorize("hasAuthority('USUARIO_EXCLUIR') or hasRole('ADMIN')")
+    public ResponseEntity<Void> removerAcessoLocal(@PathVariable Long id) {
+        usuarioService.removerAcessoLocal(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    // SOMENTE O ADMIN MASTER PODE FAZER ISSO
+    @DeleteMapping("/{id}/global")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> excluirUsuarioGlobal(@PathVariable Long id) {
+        usuarioService.excluirUsuarioGlobal(id);
+        return ResponseEntity.noContent().build();
+    }
 }

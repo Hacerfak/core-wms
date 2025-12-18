@@ -8,6 +8,8 @@ import br.com.hacerfak.coreWMS.modules.seguranca.domain.*;
 import br.com.hacerfak.coreWMS.modules.seguranca.dto.*;
 import br.com.hacerfak.coreWMS.modules.seguranca.repository.*;
 import lombok.RequiredArgsConstructor;
+
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -78,6 +80,84 @@ public class UsuarioService {
             }
         }
         return resultado;
+    }
+
+    // --- Helper para pegar o ID do usuário logado ---
+    private Long getUsuarioLogadoId() {
+        try {
+            Usuario usuario = (Usuario) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+            return usuario.getId();
+        } catch (Exception e) {
+            throw new RuntimeException("Erro ao identificar usuário logado.");
+        }
+    }
+
+    // --- EXCLUSÃO LOCAL (Admin da Empresa) ---
+    public void removerAcessoLocal(Long usuarioAlvoId) {
+        // TRAVA DE SEGURANÇA: Não pode se remover
+        if (getUsuarioLogadoId().equals(usuarioAlvoId)) {
+            throw new IllegalArgumentException("Você não pode remover seu próprio acesso.");
+        }
+
+        String tenantAtual = TenantContext.getTenant();
+
+        // 1. Remove perfil no banco do tenant
+        var perfis = usuarioPerfilRepository.findByUsuarioId(usuarioAlvoId);
+        usuarioPerfilRepository.deleteAll(perfis);
+
+        // 2. Remove vínculo no banco Master
+        TenantContext.setTenant(TenantContext.DEFAULT_TENANT_ID);
+        try {
+            Empresa empresa = empresaRepository.findByTenantId(tenantAtual)
+                    .orElseThrow(() -> new EntityNotFoundException("Empresa atual não identificada no Master"));
+
+            var vinculo = usuarioEmpresaRepository.findByEmpresaId(empresa.getId()).stream()
+                    .filter(v -> v.getUsuario().getId().equals(usuarioAlvoId))
+                    .findFirst()
+                    .orElseThrow(() -> new EntityNotFoundException(
+                            "Vínculo não encontrado ou usuário não pertence a esta empresa"));
+
+            usuarioEmpresaRepository.delete(vinculo);
+        } finally {
+            TenantContext.setTenant(tenantAtual);
+        }
+    }
+
+    // --- EXCLUSÃO GLOBAL (Master Admin) ---
+    public void excluirUsuarioGlobal(Long usuarioAlvoId) {
+        // TRAVA DE SEGURANÇA
+        if (getUsuarioLogadoId().equals(usuarioAlvoId)) {
+            throw new IllegalArgumentException("Você não pode excluir sua própria conta globalmente.");
+        }
+
+        String tenantOriginal = TenantContext.getTenant();
+
+        try {
+            TenantContext.setTenant(TenantContext.DEFAULT_TENANT_ID);
+            Usuario usuario = usuarioRepository.findById(usuarioAlvoId)
+                    .orElseThrow(() -> new EntityNotFoundException("Usuário não encontrado"));
+
+            List<UsuarioEmpresa> acessos = new ArrayList<>(usuario.getAcessos());
+
+            for (UsuarioEmpresa acesso : acessos) {
+                String tenantDestino = acesso.getEmpresa().getTenantId();
+                try {
+                    TenantContext.setTenant(tenantDestino);
+                    var perfisLocais = usuarioPerfilRepository.findByUsuarioId(usuarioAlvoId);
+                    if (!perfisLocais.isEmpty()) {
+                        usuarioPerfilRepository.deleteAll(perfisLocais);
+                    }
+                } catch (Exception e) {
+                    System.err.println("Erro ao limpar tenant " + tenantDestino);
+                }
+            }
+
+            TenantContext.setTenant(TenantContext.DEFAULT_TENANT_ID);
+            usuarioRepository.deleteById(usuarioAlvoId);
+
+        } finally {
+            TenantContext.setTenant(tenantOriginal);
+        }
     }
 
     // --- 3. CRIAÇÃO OU VÍNCULO (O Coração da mudança) ---

@@ -1,17 +1,19 @@
-import { useState, useEffect } from 'react';
-import { Box, Typography, Button, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Chip, LinearProgress } from '@mui/material';
-import { Plus, User, UserPlus, Shield } from 'lucide-react'; // Ícone Shield adicionado
+import { useState, useEffect, useContext } from 'react'; // useContext adicionado
+import { Box, Typography, Button, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Chip, LinearProgress, IconButton, Tooltip } from '@mui/material';
+import { Plus, User, UserPlus, Shield, Trash2 } from 'lucide-react';
 import { toast } from 'react-toastify';
-import { getUsuarios } from '../../services/usuarioService';
+import { getUsuarios, removerUsuarioLocal, excluirUsuarioGlobal } from '../../services/usuarioService'; // Novos imports
 import UsuarioForm from './UsuarioForm';
-import { useNavigate } from 'react-router-dom'; // Import useNavigate
-import Can from '../../components/Can'; // Import Can para proteção
+import { useNavigate } from 'react-router-dom';
+import Can from '../../components/Can';
+import { AuthContext } from '../../contexts/AuthContext'; // Importar AuthContext
 
 const UsuariosList = () => {
     const [usuarios, setUsuarios] = useState([]);
     const [loading, setLoading] = useState(true);
     const [modalOpen, setModalOpen] = useState(false);
-    const navigate = useNavigate(); // Hook de navegação
+    const navigate = useNavigate();
+    const { user } = useContext(AuthContext); // Pegar usuário logado para saber se é ADMIN MASTER
 
     const loadData = async () => {
         try {
@@ -27,13 +29,46 @@ const UsuariosList = () => {
 
     useEffect(() => { loadData(); }, []);
 
+    const handleDelete = async (usuarioAlvo) => {
+        const isMasterAdmin = user?.role === 'ADMIN'; // Verifica se EU sou o Master
+        const isSelf = user?.login === usuarioAlvo.login;
+
+        if (isSelf) {
+            toast.warning("Você não pode se excluir.");
+            return;
+        }
+
+        // Lógica de Confirmação Diferenciada
+        if (isMasterAdmin) {
+            if (window.confirm(`ATENÇÃO MASTER:\nIsso excluirá o usuário "${usuarioAlvo.login}" do sistema GLOBALMENTE e de TODAS as empresas.\n\nDeseja continuar?`)) {
+                try {
+                    await excluirUsuarioGlobal(usuarioAlvo.id);
+                    toast.success("Usuário excluído globalmente.");
+                    loadData();
+                } catch (error) {
+                    toast.error("Erro ao excluir usuário global.");
+                }
+            }
+        } else {
+            // Admin Local
+            if (window.confirm(`Deseja remover o acesso de "${usuarioAlvo.login}" desta empresa?\n(A conta dele continuará existindo em outras empresas)`)) {
+                try {
+                    await removerUsuarioLocal(usuarioAlvo.id);
+                    toast.success("Acesso removido com sucesso.");
+                    loadData();
+                } catch (error) {
+                    toast.error("Erro ao remover acesso local.");
+                }
+            }
+        }
+    };
+
     return (
         <Box>
             <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
                 <Typography variant="h5" fontWeight="bold">Gestão de Usuários</Typography>
 
                 <Box display="flex" gap={2}>
-                    {/* BOTÃO NOVO: Gerenciar Perfis */}
                     <Can I="PERFIL_GERENCIAR">
                         <Button
                             variant="outlined"
@@ -44,7 +79,6 @@ const UsuariosList = () => {
                         </Button>
                     </Can>
 
-                    {/* Botão Novo Usuário */}
                     <Can I="USUARIO_CRIAR">
                         <Button
                             variant="contained"
@@ -61,11 +95,12 @@ const UsuariosList = () => {
                 {loading && <LinearProgress />}
                 <TableContainer>
                     <Table>
-                        <TableHead sx={{ bgcolor: '#f8fafc' }}>
+                        <TableHead sx={{ bgcolor: 'background.subtle' }}>
                             <TableRow>
                                 <TableCell><b>Login</b></TableCell>
                                 <TableCell><b>Perfil</b></TableCell>
                                 <TableCell><b>Status</b></TableCell>
+                                <TableCell align="center"><b>Ações</b></TableCell>
                             </TableRow>
                         </TableHead>
                         <TableBody>
@@ -81,6 +116,23 @@ const UsuariosList = () => {
                                     </TableCell>
                                     <TableCell>
                                         <Chip label={u.ativo ? "Ativo" : "Inativo"} color={u.ativo ? "success" : "default"} size="small" />
+                                    </TableCell>
+                                    <TableCell align="center">
+                                        {/* Botão de Excluir protegido */}
+                                        <Can I="USUARIO_EXCLUIR">
+                                            {/* Não permite excluir o próprio admin master ou super users protegidos visualmente */}
+                                            {!u.perfilNome.includes('MASTER') && (
+                                                <Tooltip title="Remover Acesso / Excluir">
+                                                    <IconButton
+                                                        size="small"
+                                                        color="error"
+                                                        onClick={() => handleDelete(u)}
+                                                    >
+                                                        <Trash2 size={18} />
+                                                    </IconButton>
+                                                </Tooltip>
+                                            )}
+                                        </Can>
                                     </TableCell>
                                 </TableRow>
                             ))}

@@ -10,6 +10,15 @@ export const criarUsuario = async (dados) => {
     await api.post('/api/gestao-usuarios', dados);
 };
 
+// --- NOVOS MÉTODOS EXCLUSÃO ---
+export const removerUsuarioLocal = async (id) => {
+    await api.delete(`/api/gestao-usuarios/${id}/local`);
+};
+
+export const excluirUsuarioGlobal = async (id) => {
+    await api.delete(`/api/gestao-usuarios/${id}/global`);
+};
+
 // --- PERFIS (Novo) ---
 export const getPerfis = async () => {
     const response = await api.get('/api/gestao-perfis'); // URL Corrigida para o novo controller
