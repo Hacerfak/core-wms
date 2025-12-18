@@ -10,12 +10,12 @@ CREATE TABLE tb_usuario (
     data_finalizacao TIMESTAMP
 );
 -- Mantém o insert do admin
-INSERT INTO tb_usuario (login, senha, role, data_criacao, ativo)
+INSERT INTO tb_usuario (login, senha, role, ativo, data_criacao)
 VALUES (
-        'master',
+        'admin',
         '$2a$10$9lJ7gK5L0SZjQRP15SbKcummYMhAl2AwH3tCIV5N4VyMgYZMce9Mq',
         -- senha: "123456"
         'ADMIN',
-        NOW(),
-        TRUE
+        TRUE,
+        NOW()
     );

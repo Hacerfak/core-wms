@@ -36,6 +36,10 @@ public class SecurityConfig {
 
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
+
+                        // Permite OPTIONS (Preflight) explicitamente para evitar 403
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
                         // Rotas Públicas (Login inicial)
                         .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/auth/register").permitAll()
@@ -69,17 +73,17 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
 
-        configuration.setAllowedOrigins(Arrays.asList(
-                "http://localhost:5173", // Vite (Dev local)
-                "http://localhost:3000", // React Padrão
-                "http://localhost", // Docker/Nginx (Porta 80)
-                "http://127.0.0.1", // IP Local
-                "http://127.0.0.1:5173", // Vite via IP
-                "http://127.0.0.1:3000" // React Padrão via IP
-        ));
+        // --- SOLUÇÃO NUCLEAR PARA DEV ---
+        // Permite qualquer origem (Frontend local, IP de rede, domínio, etc)
+        configuration.setAllowedOriginPatterns(List.of("*"));
 
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        // Libera todos os métodos HTTP
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"));
+
+        // Libera todos os cabeçalhos (Inclusive Authorization e Content-Type)
         configuration.setAllowedHeaders(List.of("*"));
+
+        // Permite envio de credenciais (Tokens/Cookies)
         configuration.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

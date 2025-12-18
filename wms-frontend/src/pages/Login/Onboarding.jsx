@@ -23,9 +23,7 @@ const Onboarding = () => {
         formData.append('senha', senha);
 
         try {
-            await api.post('/onboarding/upload-certificado', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-            });
+            await api.post('/onboarding/upload-certificado', formData);
             alert("Ambiente criado com sucesso! Faça login novamente.");
             navigate('/login');
         } catch (err) {

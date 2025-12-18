@@ -27,38 +27,50 @@ public class SecurityFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
 
+        // Ignora requisições OPTIONS (Preflight) no filtro
+        if (request.getMethod().equals("OPTIONS")) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         var token = this.recoverToken(request);
 
         if (token != null) {
             var login = tokenService.validateToken(token);
 
             if (!login.isEmpty()) {
-                // 1. Identifica o Usuário
-                Usuario usuario = usuarioRepository.findByLogin(login)
-                        .orElseThrow(() -> new RuntimeException("Usuário não encontrado no token"));
+                try {
+                    Usuario usuario = usuarioRepository.findByLogin(login)
+                            .orElseThrow(() -> new RuntimeException("Usuário não encontrado: " + login));
 
-                // 2. Identifica o Tenant (Empresa) no Token
-                String tenantId = tokenService.getTenantFromToken(token);
+                    String tenantId = tokenService.getTenantFromToken(token);
 
-                if (tenantId != null) {
-                    // A MÁGICA ACONTECE AQUI: Define o banco de dados da requisição
-                    TenantContext.setTenant(tenantId);
-                } else {
-                    // Se não tem tenant no token (Login inicial), usa o Master
-                    TenantContext.setTenant(TenantContext.DEFAULT_TENANT_ID);
+                    if (tenantId != null) {
+                        TenantContext.setTenant(tenantId);
+                    } else {
+                        TenantContext.setTenant(TenantContext.DEFAULT_TENANT_ID);
+                    }
+
+                    var authentication = new UsernamePasswordAuthenticationToken(usuario, null,
+                            usuario.getAuthorities());
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
+
+                } catch (Exception e) {
+                    System.out.println(">>> ERRO DE AUTENTICAÇÃO: " + e.getMessage());
+                    // Não lançamos erro aqui para deixar o Spring Security retornar 403 padrão se
+                    // falhar
                 }
-
-                // 3. Autentica no Spring Security
-                var authentication = new UsernamePasswordAuthenticationToken(usuario, null, usuario.getAuthorities());
-                SecurityContextHolder.getContext().setAuthentication(authentication);
+            } else {
+                System.out.println(">>> TOKEN INVÁLIDO OU EXPIRADO");
             }
+        } else {
+            System.out.println(">>> TOKEN NÃO ENCONTRADO NO HEADER"); // Descomente para
+            // debug severo
         }
 
-        // Segue o fluxo -> Vai para o Controller -> Vai para o Banco definido acima
         try {
             filterChain.doFilter(request, response);
         } finally {
-            // Limpeza obrigatória para não vazar dados entre requisições (ThreadLocal)
             TenantContext.clear();
         }
     }
