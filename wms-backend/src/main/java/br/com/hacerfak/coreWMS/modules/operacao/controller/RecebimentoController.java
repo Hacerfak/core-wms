@@ -126,4 +126,24 @@ public class RecebimentoController {
 
         return ResponseEntity.ok(volumes);
     }
+
+    // NOVO ENDPOINT: Verifica regras de conferência para este recebimento
+    // específico
+    @GetMapping("/{id}/config-conferencia")
+    @PreAuthorize("hasAuthority('RECEBIMENTO_CONFERIR') or hasRole('ADMIN')")
+    public ResponseEntity<Boolean> deveExibirQtd(@PathVariable Long id) {
+        return recebimentoRepository.findById(id)
+                .map(rec -> {
+                    // Se tiver parceiro vinculado, usa a regra dele.
+                    // Se o parceiro tiver 'recebimentoCego = true', então ExibirQtd = false
+                    if (rec.getParceiro() != null) {
+                        return !rec.getParceiro().isRecebimentoCego();
+                    }
+                    // Fallback: Se não tiver parceiro (notas antigas), exibe a quantidade (true) ou
+                    // busca regra global
+                    return true;
+                })
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
 }

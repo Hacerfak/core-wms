@@ -1,7 +1,9 @@
 package br.com.hacerfak.coreWMS.modules.cadastro.controller;
 
 import br.com.hacerfak.coreWMS.modules.cadastro.domain.Parceiro;
+import br.com.hacerfak.coreWMS.modules.cadastro.dto.ParceiroRequest; // Import do DTO
 import br.com.hacerfak.coreWMS.modules.cadastro.repository.ParceiroRepository;
+import jakarta.validation.Valid; // Import para validação
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -30,19 +32,64 @@ public class ParceiroController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    // --- CREATE COM DTO ---
     @PostMapping
     @PreAuthorize("hasAuthority('PARCEIRO_CRIAR') or hasRole('ADMIN')")
-    public ResponseEntity<Parceiro> criar(@RequestBody Parceiro parceiro) {
+    public ResponseEntity<Parceiro> criar(@RequestBody @Valid ParceiroRequest dto) {
+        Parceiro parceiro = Parceiro.builder()
+                .nome(dto.nome())
+                .documento(dto.documento())
+                .ie(dto.ie())
+                .nomeFantasia(dto.nomeFantasia())
+                .ativo(dto.ativo() != null ? dto.ativo() : true)
+                .recebimentoCego(dto.recebimentoCego() != null ? dto.recebimentoCego() : false)
+                // Endereço
+                .cep(dto.cep())
+                .logradouro(dto.logradouro())
+                .numero(dto.numero())
+                .bairro(dto.bairro())
+                .cidade(dto.cidade())
+                .uf(dto.uf())
+                // Contato
+                .telefone(dto.telefone())
+                .email(dto.email())
+                .crt(dto.crt())
+                .tipo(dto.tipo() != null ? dto.tipo() : "AMBOS") // Default seguro se vier nulo da API
+                .build();
+
         return ResponseEntity.ok(repository.save(parceiro));
     }
 
+    // --- UPDATE COM DTO ---
     @PutMapping("/{id}")
     @PreAuthorize("hasAuthority('PARCEIRO_EDITAR') or hasRole('ADMIN')")
-    public ResponseEntity<Parceiro> atualizar(@PathVariable Long id, @RequestBody Parceiro dados) {
+    public ResponseEntity<Parceiro> atualizar(@PathVariable Long id, @RequestBody @Valid ParceiroRequest dto) {
         return repository.findById(id).map(parceiro -> {
-            parceiro.setNome(dados.getNome());
-            parceiro.setIe(dados.getIe());
-            // Documento (CNPJ) geralmente não se muda
+            parceiro.setNome(dto.nome());
+            parceiro.setDocumento(dto.documento());
+            parceiro.setIe(dto.ie());
+            parceiro.setNomeFantasia(dto.nomeFantasia());
+
+            // Configurações
+            if (dto.ativo() != null)
+                parceiro.setAtivo(dto.ativo());
+            if (dto.recebimentoCego() != null)
+                parceiro.setRecebimentoCego(dto.recebimentoCego());
+
+            // Endereço
+            parceiro.setCep(dto.cep());
+            parceiro.setLogradouro(dto.logradouro());
+            parceiro.setNumero(dto.numero());
+            parceiro.setBairro(dto.bairro());
+            parceiro.setCidade(dto.cidade());
+            parceiro.setUf(dto.uf());
+
+            // Contato
+            parceiro.setTelefone(dto.telefone());
+            parceiro.setEmail(dto.email());
+            parceiro.setCrt(dto.crt());
+            parceiro.setTipo(dto.tipo());
+
             return ResponseEntity.ok(repository.save(parceiro));
         }).orElse(ResponseEntity.notFound().build());
     }
@@ -56,7 +103,6 @@ public class ParceiroController {
             repository.deleteById(id);
             return ResponseEntity.noContent().build();
         } catch (Exception e) {
-            // Se tiver produtos vinculados, dá erro 400
             return ResponseEntity.badRequest().build();
         }
     }

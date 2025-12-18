@@ -16,16 +16,28 @@ import br.com.hacerfak.coreWMS.core.domain.BaseEntity;
 @EqualsAndHashCode(callSuper = true)
 public class Parceiro extends BaseEntity {
 
-    @Column(nullable = false, length = 20) // CNPJ ou CPF (apenas números)
-    private String documento;
+    @Column(nullable = false, length = 20)
+    private String documento; // CNPJ/CPF
 
     @Column(nullable = false)
-    private String nome; // Razão Social
+    private String nome;
 
     @Column(length = 20)
-    private String ie; // Inscrição Estadual (Importante para Fiscal)
+    private String ie;
 
     private String nomeFantasia;
+
+    @Column(length = 5)
+    private String crt;
+
+    // --- NOVOS CAMPOS ---
+
+    @Builder.Default
+    private boolean ativo = true;
+
+    // Configurações / Parâmetros
+    @Builder.Default
+    private boolean recebimentoCego = false; // Se true, esconde a quantidade na conferência
 
     // Endereço
     private String cep;
@@ -35,4 +47,8 @@ public class Parceiro extends BaseEntity {
     private String cidade;
     private String uf;
     private String telefone;
+    private String email; // Adicionado para contato
+
+    // Tipo (Fornecedor, Cliente, Ambos) - Opcional, mas bom para filtro
+    private String tipo;
 }

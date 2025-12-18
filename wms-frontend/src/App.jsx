@@ -11,6 +11,7 @@ import Login from './pages/Login/Login';
 import Onboarding from './pages/Login/Onboarding';
 import SelecaoEmpresa from './pages/Login/SelecaoEmpresa';
 import Dashboard from './pages/Dashboard/Dashboard';
+import ParceiroList from './pages/Cadastros/ParceiroList';
 import RecebimentoList from './pages/Recebimento/RecebimentoList';
 import Recebimento from './pages/Recebimento/Recebimento';
 import Conferencia from './pages/Recebimento/Conferencia';
@@ -55,6 +56,9 @@ function App() {
               </PrivateRoute>
             }>
               <Route path="/dashboard" element={<Dashboard />} />
+
+              {/* Cadastros Básicos */}
+              <Route path="/cadastros/parceiros" element={<ParceiroList />} />
 
               {/* Módulo Recebimento */}
               <Route path="/recebimento" element={<RecebimentoList />} />

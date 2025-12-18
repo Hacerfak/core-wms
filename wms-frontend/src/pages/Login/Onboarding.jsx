@@ -26,19 +26,27 @@ const Onboarding = () => {
         formData.append('senha', senha);
 
         try {
-            // 1. Envia para o Backend criar a empresa
             await api.post('/onboarding/upload-certificado', formData);
-
-            // 2. Atualiza a lista de empresas no contexto do usuário (Sem deslogar)
             await refreshUserCompanies();
-
-            // 3. Feedback visual e Redirecionamento
             toast.success("Ambiente criado com sucesso!");
             navigate('/selecao-empresa');
 
         } catch (err) {
-            console.error(err);
-            setError(err.response?.data || "Erro ao processar certificado.");
+            console.error("Erro Onboarding:", err);
+
+            // --- CORREÇÃO AQUI ---
+            // Extrai a mensagem de forma segura, seja string ou objeto StandardError
+            let msg = "Erro ao processar certificado.";
+
+            if (err.response?.data) {
+                if (typeof err.response.data === 'string') {
+                    msg = err.response.data;
+                } else if (err.response.data.message) {
+                    msg = err.response.data.message; // Pega o campo 'message' do JSON de erro
+                }
+            }
+
+            setError(msg);
         } finally {
             setLoading(false);
         }
@@ -56,6 +64,7 @@ const Onboarding = () => {
                     </Typography>
                 </Box>
 
+                {/* Exibe o erro tratado */}
                 {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
 
                 <form onSubmit={handleSubmit}>

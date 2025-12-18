@@ -36,41 +36,38 @@ public class NfeImportService {
         try {
             InputStream is = file.getInputStream();
             DocumentBuilderFactory dbFactory = DocumentBuilderFactory.newInstance();
-            dbFactory.setNamespaceAware(true);
+
+            // --- CORREÇÃO CRÍTICA: Desligar namespace awareness facilita encontrar tags
+            // simples ---
+            dbFactory.setNamespaceAware(false);
+
             DocumentBuilder dBuilder = dbFactory.newDocumentBuilder();
             Document doc = dBuilder.parse(is);
             doc.getDocumentElement().normalize();
 
-            // --- 1. PROCESSAR EMITENTE (Parceiro Completo) ---
-            Element emit = (Element) doc.getElementsByTagName("emit").item(0);
+            // --- 1. PROCESSAR EMITENTE (Salva TODOS os dados) ---
+            NodeList emitList = doc.getElementsByTagName("emit");
+            if (emitList == null || emitList.getLength() == 0) {
+                throw new IllegalArgumentException("Tag <emit> não encontrada no XML.");
+            }
+            Element emit = (Element) emitList.item(0);
             Parceiro depositante = processarEmitente(emit);
 
             // --- 2. DADOS DA NOTA ---
             String nNF = getTagValue("nNF", doc.getDocumentElement());
             String chaveAcesso = extractChaveAcesso(doc);
 
-            if (recebimentoRepository.existsByChaveAcesso(chaveAcesso)) {
+            if (chaveAcesso != null && recebimentoRepository.existsByChaveAcesso(chaveAcesso)) {
                 throw new IllegalArgumentException("Nota Fiscal já importada: " + nNF);
             }
 
-            // Validação de Duplicidade
-            if (chaveAcesso != null && recebimentoRepository.existsByChaveAcesso(chaveAcesso)) {
-                // Opcional: throw new IllegalArgumentException("Nota já importada.");
-                System.out.println("Aviso: Nota já importada, chave: " + chaveAcesso);
-            }
-
-            // LER A DATA DE EMISSÃO
-            String dataEmissaoStr = getTagValue("dhEmi", doc.getDocumentElement()); // Formato:
-                                                                                    // 2023-10-25T14:30:00-03:00
+            String dataEmissaoStr = getTagValue("dhEmi", doc.getDocumentElement());
             LocalDateTime dataEmissao = null;
             if (dataEmissaoStr != null && !dataEmissaoStr.isEmpty()) {
-                // Remove o timezone para simplificar e converte para LocalDateTime
-                // (Para produção robusta, ideal seria usar OffsetDateTime, mas isso funciona
-                // para 99% dos casos locais)
                 try {
                     dataEmissao = LocalDateTime.parse(dataEmissaoStr.substring(0, 19));
                 } catch (Exception e) {
-                    System.out.println("Erro ao converter data emissão: " + e.getMessage());
+                    System.out.println("Erro data: " + e.getMessage());
                 }
             }
 
@@ -78,20 +75,19 @@ public class NfeImportService {
                     .numNotaFiscal(nNF)
                     .chaveAcesso(chaveAcesso)
                     .fornecedor(depositante.getNome())
+                    .parceiro(depositante) // Vínculo Forte
                     .status(StatusRecebimento.AGUARDANDO)
                     .dataEmissao(dataEmissao)
                     .build();
 
-            // --- 3. PROCESSAR ITENS (Produtos Completos) ---
+            // --- 3. PROCESSAR ITENS ---
             NodeList listaItens = doc.getElementsByTagName("det");
 
             for (int i = 0; i < listaItens.getLength(); i++) {
                 Element det = (Element) listaItens.item(i);
                 Element prod = (Element) det.getElementsByTagName("prod").item(0);
 
-                // Cadastra ou Atualiza o Produto com dados completos
                 Produto produto = processarProduto(prod, depositante);
-
                 String qCom = getTagValue("qCom", prod);
 
                 ItemRecebimento item = ItemRecebimento.builder()
@@ -113,43 +109,53 @@ public class NfeImportService {
     }
 
     private Parceiro processarEmitente(Element emit) {
+        // Extração Robusta de Documento
         String cnpj = getTagValue("CNPJ", emit);
-        if (cnpj == null)
+        if (cnpj == null || cnpj.isEmpty()) {
             cnpj = getTagValue("CPF", emit);
+        }
+
+        if (cnpj == null)
+            throw new IllegalArgumentException("Emitente sem CNPJ/CPF no XML");
 
         String nome = getTagValue("xNome", emit);
         String fantasia = getTagValue("xFant", emit);
         String ie = getTagValue("IE", emit);
+        String crt = getTagValue("CRT", emit);
 
-        // Endereço (Tag enderEmit)
-        Element ender = (Element) emit.getElementsByTagName("enderEmit").item(0);
-        String logradouro = getTagValue("xLgr", ender);
-        String numero = getTagValue("nro", ender);
-        String bairro = getTagValue("xBairro", ender);
-        String cidade = getTagValue("xMun", ender);
-        String uf = getTagValue("UF", ender);
-        String cep = getTagValue("CEP", ender);
-        String fone = getTagValue("fone", ender);
-
-        // Busca existente ou cria novo (Pattern: Upsert)
+        // Busca ou Cria (Upsert)
         Optional<Parceiro> existente = parceiroRepository.findByDocumento(cnpj);
         Parceiro parceiro = existente.orElse(new Parceiro());
 
-        // Atualiza os dados (garante que o cadastro esteja sempre fresco com o último
-        // XML)
+        // Se for novo, define defaults importantes
+        if (parceiro.getId() == null) {
+            parceiro.setTipo("AMBOS"); // <--- Padrão solicitado
+            parceiro.setAtivo(true);
+            parceiro.setRecebimentoCego(false);
+        }
+
+        // Atualiza SEMPRE os dados cadastrais
         parceiro.setDocumento(cnpj);
         parceiro.setNome(nome);
         parceiro.setNomeFantasia(fantasia);
         parceiro.setIe(ie);
+        parceiro.setCrt(crt);
 
-        // Dados de Endereço
-        parceiro.setLogradouro(logradouro);
-        parceiro.setNumero(numero);
-        parceiro.setBairro(bairro);
-        parceiro.setCidade(cidade);
-        parceiro.setUf(uf);
-        parceiro.setCep(cep);
-        parceiro.setTelefone(fone);
+        // Endereço Completo (Proteção contra null)
+        NodeList enderList = emit.getElementsByTagName("enderEmit");
+        if (enderList != null && enderList.getLength() > 0) {
+            Element ender = (Element) enderList.item(0);
+
+            parceiro.setLogradouro(getTagValue("xLgr", ender));
+            parceiro.setNumero(getTagValue("nro", ender));
+            parceiro.setBairro(getTagValue("xBairro", ender));
+            parceiro.setCidade(getTagValue("xMun", ender));
+            parceiro.setUf(getTagValue("UF", ender));
+            parceiro.setCep(getTagValue("CEP", ender));
+
+            String fone = getTagValue("fone", ender);
+            parceiro.setTelefone(fone);
+        }
 
         return parceiroRepository.save(parceiro);
     }
@@ -159,23 +165,20 @@ public class NfeImportService {
         String nome = getTagValue("xProd", prod);
         String ean = getTagValue("cEAN", prod);
         String ncm = getTagValue("NCM", prod);
-        String cest = getTagValue("CEST", prod); // Novo
+        String cest = getTagValue("CEST", prod);
         String uCom = getTagValue("uCom", prod);
-
-        String vUnComStr = getTagValue("vUnCom", prod); // Valor Unitário
+        String vUnComStr = getTagValue("vUnCom", prod);
         BigDecimal valorUnitario = (vUnComStr != null) ? new BigDecimal(vUnComStr) : BigDecimal.ZERO;
 
         Optional<Produto> existente = produtoRepository.findBySkuAndDepositante(sku, depositante);
         Produto produto = existente.orElse(new Produto());
 
-        // Se for novo, seta o SKu e Depositante (que são imutáveis na chave lógica)
         if (produto.getId() == null) {
             produto.setSku(sku);
             produto.setDepositante(depositante);
             produto.setAtivo(true);
         }
 
-        // Atualiza dados cadastrais
         produto.setNome(nome);
         produto.setEan13((ean != null && !ean.equals("SEM GTIN")) ? ean : null);
         produto.setUnidadeMedida(uCom);
@@ -200,7 +203,6 @@ public class NfeImportService {
         NodeList infNFe = doc.getElementsByTagName("infNFe");
         if (infNFe.getLength() > 0) {
             Element el = (Element) infNFe.item(0);
-            // O ID da NFe fica no atributo "Id" da tag infNFe e tem o prefixo "NFe"
             if (el.hasAttribute("Id")) {
                 return el.getAttribute("Id").replace("NFe", "");
             }

@@ -27,32 +27,30 @@ public class OnboardingController {
     private final UsuarioPerfilRepository usuarioPerfilRepository;
 
     @PostMapping("/upload-certificado")
-    // @Transactional <--- REMOVA ESTA LINHA (Causa do erro)
     public ResponseEntity<?> uploadCertificado(
             @RequestParam("file") MultipartFile file,
             @RequestParam("senha") String senha) {
 
-        // 1. Extrair dados do certificado
-        var dados = certificadoService.extrairDados(file, senha);
-
-        // 2. Valida se já existe
-        if (empresaRepository.existsByCnpj(dados.getCnpj())) {
-            return ResponseEntity.badRequest().body("Empresa com CNPJ " + dados.getCnpj() + " já cadastrada.");
-        }
-
-        // 3. Gera ID do Tenant
-        String cnpjLimpo = dados.getCnpj().replaceAll("\\D", "");
-        String tenantId = "tenant_" + cnpjLimpo;
-
-        // 4. Cria o Banco de Dados Físico (AGORA VAI FUNCIONAR)
-        // Isso precisa rodar fora de transação
-        provisioningService.criarBancoDeDados(tenantId);
-
-        // --- NOVO: Inicializa a tabela de configuração interna do tenant ---
-        provisioningService.inicializarConfiguracao(tenantId, dados.getRazaoSocial(), dados.getCnpj());
-
         try {
-            // 5. Salva a Empresa no Banco Master
+            // 1. Extrair dados do certificado
+            var dados = certificadoService.extrairDados(file, senha);
+
+            // 2. Valida se já existe
+            if (empresaRepository.existsByCnpj(dados.getCnpj())) {
+                return ResponseEntity.badRequest().body("Empresa com CNPJ " + dados.getCnpj() + " já cadastrada.");
+            }
+
+            // 3. Gera ID do Tenant
+            String cnpjLimpo = dados.getCnpj().replaceAll("\\D", "");
+            String tenantId = "tenant_" + cnpjLimpo;
+
+            // 4. Cria o Banco de Dados Físico e Roda Migrations
+            provisioningService.criarBancoDeDados(tenantId);
+
+            // 5. Inicializa a tabela de configuração interna do tenant
+            provisioningService.inicializarConfiguracao(tenantId, dados.getRazaoSocial(), dados.getCnpj());
+
+            // 6. Salva a Empresa no Banco Master
             Empresa novaEmpresa = Empresa.builder()
                     .razaoSocial(dados.getRazaoSocial())
                     .cnpj(cnpjLimpo)
@@ -64,34 +62,28 @@ public class OnboardingController {
 
             empresaRepository.save(novaEmpresa);
 
-            // 6. Vincula o Usuário Logado (que é o Master Admin criando a empresa) ou cria
-            // o primeiro user
-            // OBS: Se quem está criando a empresa é o ADMIN do sistema, ele já tem God
-            // Mode.
-            // Mas se for um auto-cadastro, precisamos dar o perfil de ADMIN LOCAL.
-
+            // 7. Vincula o Usuário Logado
             String loginUsuario = SecurityContextHolder.getContext().getAuthentication().getName();
             Usuario usuario = usuarioRepository.findByLogin(loginUsuario).orElseThrow();
 
-            // Vínculo Global (Genérico)
             UsuarioEmpresa vinculo = UsuarioEmpresa.builder()
                     .usuario(usuario)
                     .empresa(novaEmpresa)
-                    .role(UserRole.USER) // <--- É apenas um usuário dessa empresa
+                    .role(UserRole.USER)
                     .build();
             usuarioEmpresaRepository.save(vinculo);
 
-            // 7. CRÍTICO: Entrar no Tenant e dar o perfil de Administrador
+            // 8. CRÍTICO: Entrar no Tenant e dar o perfil de Administrador
             try {
-                TenantContext.setTenant(tenantId); // Muda para o banco novo
+                TenantContext.setTenant(tenantId);
 
-                // Busca o perfil que a migration V17 criou
+                // Busca o perfil que a migration deve ter criado
                 Perfil perfilAdmin = perfilRepository.findAll().stream()
                         .filter(p -> p.getNome().equalsIgnoreCase("Administrador Local")
                                 || p.getNome().equalsIgnoreCase("Administrador"))
                         .findFirst()
                         .orElseThrow(() -> new RuntimeException(
-                                "Perfil de Administrador não encontrado no template do tenant."));
+                                "Perfil de Administrador não encontrado no novo banco. Verifique as migrations V17+."));
 
                 UsuarioPerfil up = UsuarioPerfil.builder()
                         .usuarioId(usuario.getId())
@@ -101,17 +93,15 @@ public class OnboardingController {
                 usuarioPerfilRepository.save(up);
 
             } finally {
-                TenantContext.clear(); // Limpa o contexto
+                TenantContext.clear();
             }
 
             return ResponseEntity.ok("Empresa criada e usuário vinculado como Administrador!");
 
         } catch (Exception e) {
-            // Se der erro ao salvar no banco, idealmente deveríamos desfazer a criação do
-            // DB,
-            // mas para o MVP, apenas logamos o erro.
             e.printStackTrace();
-            return ResponseEntity.internalServerError().body("Erro ao salvar dados da empresa: " + e.getMessage());
+            // Retorna o erro detalhado para o frontend mostrar no Alert
+            return ResponseEntity.internalServerError().body("Erro no Onboarding: " + e.getMessage());
         }
     }
 }

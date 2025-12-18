@@ -19,8 +19,10 @@ const RecebimentoDetalhesModal = ({ open, onClose, data }) => {
 
     const carregarConfig = async () => {
         try {
-            const deveExibir = await checkExibirQtdRecebimento();
-            setExibirQtdEsperada(deveExibir === true);
+            if (data?.id) {
+                const deveExibir = await checkExibirQtdRecebimento(data.id);
+                setExibirQtdEsperada(deveExibir === true);
+            }
         } catch (error) {
             console.error("Erro ao carregar config", error);
         }

@@ -30,7 +30,7 @@ const Conferencia = () => {
 
     const carregarTudo = async () => {
         try {
-            const deveExibir = await checkExibirQtdRecebimento();
+            const deveExibir = await checkExibirQtdRecebimento(id);
             setExibirQtdEsperada(deveExibir === true);
             await carregarDados();
         } catch (e) { console.error("Erro inicialização", e); }

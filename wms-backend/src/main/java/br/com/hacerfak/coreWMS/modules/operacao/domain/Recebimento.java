@@ -1,5 +1,6 @@
 package br.com.hacerfak.coreWMS.modules.operacao.domain;
 
+import br.com.hacerfak.coreWMS.modules.cadastro.domain.Parceiro; // Importar
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
@@ -23,7 +24,13 @@ public class Recebimento extends BaseEntity {
     @Column(name = "chave_acesso", length = 44)
     private String chaveAcesso;
 
-    private String fornecedor;
+    private String fornecedor; // Mantemos o texto histórico do XML
+
+    // --- NOVO VÍNCULO ---
+    @ManyToOne
+    @JoinColumn(name = "parceiro_id")
+    private Parceiro parceiro;
+    // --------------------
 
     @Enumerated(EnumType.STRING)
     private StatusRecebimento status;
@@ -33,7 +40,6 @@ public class Recebimento extends BaseEntity {
 
     private LocalDateTime dataFinalizacao;
 
-    // Cascade: Se salvar o Recebimento, salva os itens automaticamente
     @Builder.Default
     @OneToMany(mappedBy = "recebimento", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<ItemRecebimento> itens = new ArrayList<>();

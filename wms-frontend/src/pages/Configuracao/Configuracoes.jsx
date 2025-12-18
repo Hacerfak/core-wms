@@ -3,7 +3,7 @@ import { Box, Typography, Paper, Switch, List, ListItem, ListItemText, ListItemS
 import { toast } from 'react-toastify';
 import { getConfiguracoes, updateConfiguracao } from '../../services/configService';
 import { AuthContext } from '../../contexts/AuthContext';
-import { Building2, Plus, ServerCog, Bell } from 'lucide-react';
+import { Building2, Plus, ServerCog, Bell, Settings } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Can from '../../components/Can';
 

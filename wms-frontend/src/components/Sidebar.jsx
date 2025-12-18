@@ -1,5 +1,5 @@
 import { Box, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Typography } from '@mui/material';
-import { Home, PackagePlus, Box as BoxIcon, Truck, Settings, Users } from 'lucide-react';
+import { Home, PackagePlus, Box as BoxIcon, Truck, Settings, Users, Contact } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import theme from '../theme/theme';
 import { useContext } from 'react';
@@ -12,6 +12,7 @@ const Sidebar = () => {
 
     const menuItems = [
         { text: 'Dashboard', icon: <Home size={20} />, path: '/dashboard', permission: null },
+        { text: 'Parceiros', icon: <Contact size={20} />, path: '/cadastros/parceiros', permission: 'PARCEIRO_VISUALIZAR' },
         { text: 'Recebimento', icon: <PackagePlus size={20} />, path: '/recebimento', permission: 'RECEBIMENTO_VISUALIZAR' },
         { text: 'Estoque', icon: <BoxIcon size={20} />, path: '/estoque', permission: 'ESTOQUE_VISUALIZAR' },
         { text: 'Expedição', icon: <Truck size={20} />, path: '/expedicao', permission: 'PEDIDO_VISUALIZAR' },
