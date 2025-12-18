@@ -4,6 +4,7 @@ import { Plus, Trash2, Edit, Shield } from 'lucide-react';
 import { getPerfis, excluirPerfil } from '../../services/usuarioService';
 import PerfilForm from './PerfilForm';
 import { toast } from 'react-toastify';
+import Can from '../../components/Can';
 
 const PerfisList = () => {
     const [perfis, setPerfis] = useState([]);
@@ -47,9 +48,11 @@ const PerfisList = () => {
         <Box>
             <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
                 <Typography variant="h5" fontWeight="bold">Perfis de Acesso</Typography>
-                <Button variant="contained" startIcon={<Plus size={20} />} onClick={handleNew}>
-                    Novo Perfil
-                </Button>
+                <Can I="PERFIL_GERENCIAR">
+                    <Button variant="contained" startIcon={<Plus size={20} />} onClick={handleNew}>
+                        Novo Perfil
+                    </Button>
+                </Can>
             </Box>
 
             <Paper sx={{ width: '100%', borderRadius: 2, overflow: 'hidden' }}>
@@ -77,12 +80,14 @@ const PerfisList = () => {
                                         <Chip label={`${p.permissoes.length} Ações`} size="small" variant="outlined" />
                                     </TableCell>
                                     <TableCell align="center">
-                                        <IconButton size="small" onClick={() => handleEdit(p)} color="primary">
-                                            <Edit size={18} />
-                                        </IconButton>
-                                        <IconButton size="small" onClick={() => handleDelete(p.id)} color="error">
-                                            <Trash2 size={18} />
-                                        </IconButton>
+                                        <Can I="PERFIL_GERENCIAR">
+                                            <IconButton size="small" onClick={() => handleEdit(p)} color="primary">
+                                                <Edit size={18} />
+                                            </IconButton>
+                                            <IconButton size="small" onClick={() => handleDelete(p.id)} color="error">
+                                                <Trash2 size={18} />
+                                            </IconButton>
+                                        </Can>
                                     </TableCell>
                                 </TableRow>
                             ))}

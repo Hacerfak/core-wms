@@ -2,7 +2,8 @@ import { Box, AppBar, Toolbar, Typography, IconButton, Avatar, Menu, MenuItem, D
 import { LogOut, User, Building2, ChevronDown, Check } from 'lucide-react';
 import { useContext, useState, useMemo } from 'react';
 import { AuthContext } from '../contexts/AuthContext'; // Ajuste o caminho se necessário
-import Sidebar from '../components/Sidebar'; // Ajuste o caminho se necessário
+import Sidebar from '../components/Sidebar';
+import Can from '../components/Can';
 import { useNavigate } from 'react-router-dom';
 import { jwtDecode } from 'jwt-decode';
 
@@ -119,10 +120,12 @@ const MainLayout = ({ children }) => {
 
                                 <Divider sx={{ my: 1 }} />
 
-                                <MenuItem onClick={() => { handleClose(); navigate('/config'); }}>
-                                    <ListItemIcon><Building2 size={18} /></ListItemIcon>
-                                    Gerenciar Empresas
-                                </MenuItem>
+                                <Can I="CONFIG_GERENCIAR">
+                                    <MenuItem onClick={() => { handleClose(); navigate('/config'); }}>
+                                        <ListItemIcon><Building2 size={18} /></ListItemIcon>
+                                        Gerenciar Empresas
+                                    </MenuItem>
+                                </Can>
 
                                 <MenuItem onClick={handleLogout} sx={{ color: 'error.main' }}>
                                     <ListItemIcon><LogOut size={18} color="#ef4444" /></ListItemIcon>

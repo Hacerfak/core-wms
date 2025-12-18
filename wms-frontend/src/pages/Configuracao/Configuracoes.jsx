@@ -3,8 +3,9 @@ import { Box, Typography, Paper, Switch, List, ListItem, ListItemText, ListItemS
 import { toast } from 'react-toastify';
 import { getConfiguracoes, updateConfiguracao } from '../../services/configService';
 import { AuthContext } from '../../contexts/AuthContext';
-import { Building2, Plus, ServerCog } from 'lucide-react';
+import { Building2, Plus, ServerCog, Bell } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import Can from '../../components/Can';
 
 const Configuracoes = () => {
     const { user } = useContext(AuthContext); // Pegamos as empresas do contexto
@@ -23,7 +24,7 @@ const Configuracoes = () => {
             const data = await getConfiguracoes();
             setConfigs(data);
         } catch (error) {
-            // toast.error("Erro ao carregar configurações");
+            toast.error("Erro ao carregar configurações");
         }
     };
 
@@ -51,25 +52,39 @@ const Configuracoes = () => {
 
             {/* ABA 0: CONFIGURAÇÕES GERAIS */}
             {tabIndex === 0 && (
-                <Paper sx={{ maxWidth: 800 }}>
+                <Paper sx={{ borderRadius: 2, overflow: 'hidden' }}>
                     <List>
-                        {configs.length === 0 && <Typography sx={{ p: 3 }}>Nenhuma configuração disponível.</Typography>}
                         {configs.map((conf, index) => (
                             <Box key={conf.chave}>
-                                <ListItem>
+                                <ListItem sx={{ py: 2 }}>
+                                    <Box mr={2} color="primary.main">
+                                        {conf.chave.includes('RECEBIMENTO') ? <Bell size={24} /> : <Settings size={24} />}
+                                    </Box>
                                     <ListItemText
-                                        primary={conf.descricao}
-                                        secondary={`Chave: ${conf.chave}`}
+                                        primary={<Typography fontWeight={600}>{conf.descricao || conf.chave}</Typography>}
+                                        secondary={conf.chave}
                                     />
                                     <ListItemSecondaryAction>
-                                        <Switch
-                                            edge="end"
-                                            checked={conf.valor === 'true'}
-                                            onChange={() => handleToggle(conf)}
-                                        />
+                                        {/* LÓGICA DE PERMISSÃO APLICADA AQUI */}
+                                        <Can
+                                            I="CONFIG_GERENCIAR"
+                                            elseShow={
+                                                <Switch
+                                                    edge="end"
+                                                    checked={conf.valor === 'true'}
+                                                    disabled={true}
+                                                />
+                                            }
+                                        >
+                                            <Switch
+                                                edge="end"
+                                                checked={conf.valor === 'true'}
+                                                onChange={() => handleToggle(conf)}
+                                            />
+                                        </Can>
                                     </ListItemSecondaryAction>
                                 </ListItem>
-                                {index < configs.length - 1 && <Divider />}
+                                {index < configs.length - 1 && <Divider component="li" />}
                             </Box>
                         ))}
                     </List>

@@ -1,13 +1,13 @@
-import { useState, useContext } from 'react'; // Adicione useContext
+import { useState, useContext } from 'react';
 import api from '../../services/api';
 import { useNavigate } from 'react-router-dom';
-import { AuthContext } from '../../contexts/AuthContext'; // Importe o Contexto
+import { AuthContext } from '../../contexts/AuthContext';
 import { Box, Button, Card, Typography, TextField, CircularProgress, Alert } from '@mui/material';
 import { Upload, Lock } from 'lucide-react';
-import { toast } from 'react-toastify'; // Recomendo usar toast se tiver instalado, senão mantenha alert
+import { toast } from 'react-toastify';
 
 const Onboarding = () => {
-    const { refreshUserCompanies } = useContext(AuthContext); // Pegue a função
+    const { refreshUserCompanies } = useContext(AuthContext);
     const [file, setFile] = useState(null);
     const [senha, setSenha] = useState('');
     const [loading, setLoading] = useState(false);
@@ -26,20 +26,18 @@ const Onboarding = () => {
         formData.append('senha', senha);
 
         try {
-            // 1. Cria a empresa
+            // 1. Envia para o Backend criar a empresa
             await api.post('/onboarding/upload-certificado', formData);
 
-            // 2. Recarrega a lista de empresas do usuário logado (Admin)
+            // 2. Atualiza a lista de empresas no contexto do usuário (Sem deslogar)
             await refreshUserCompanies();
 
-            // 3. Feedback e Redirecionamento suave
-            // Se tiver toast: toast.success("Ambiente criado com sucesso!");
-            alert("Ambiente criado com sucesso!");
-
-            // Volta para a seleção de empresas para ver a nova opção
+            // 3. Feedback visual e Redirecionamento
+            toast.success("Ambiente criado com sucesso!");
             navigate('/selecao-empresa');
 
         } catch (err) {
+            console.error(err);
             setError(err.response?.data || "Erro ao processar certificado.");
         } finally {
             setLoading(false);
@@ -47,7 +45,6 @@ const Onboarding = () => {
     };
 
     return (
-        // ... (O restante do JSX (renderização) continua IDÊNTICO) ...
         <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'background.default', p: 2 }}>
             <Card sx={{ maxWidth: 450, width: '100%', p: 4, borderRadius: 2 }}>
                 <Box sx={{ textAlign: 'center', mb: 4 }}>
