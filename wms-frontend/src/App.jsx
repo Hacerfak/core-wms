@@ -17,6 +17,7 @@ import Recebimento from './pages/Recebimento/Recebimento';
 import Conferencia from './pages/Recebimento/Conferencia';
 import Configuracoes from './pages/Configuracao/Configuracoes';
 import UsuariosList from './pages/Usuarios/UsuariosList';
+import PerfisList from './pages/Usuarios/PerfisList';
 import MainLayout from './layout/MainLayout';
 
 // Wrapper para rotas protegidas (Dashboard e internas)
@@ -64,6 +65,9 @@ function App() {
             <Route path="/recebimento/:id/conferencia" element={<PrivateRoute><Conferencia /></PrivateRoute>} />
             <Route path="/config" element={<PrivateRoute><Configuracoes /></PrivateRoute>} />
             <Route path="/usuarios" element={<PrivateRoute><UsuariosList /></PrivateRoute>} />
+            <Route path="/perfis" element={<PrivateRoute><PerfisList /></PrivateRoute>} />
+
+            {/* Redirecionamentos */}
 
             <Route path="/" element={<Navigate to="/dashboard" />} />
             <Route path="*" element={<Navigate to="/login" />} />

@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.util.List;
 
@@ -23,6 +24,7 @@ public class EstoqueController {
 
     // --- 1. OPERAÇÃO: ARMAZENAGEM DE LPN (Putaway) ---
     @PostMapping("/armazenar")
+    @PreAuthorize("hasAuthority('ESTOQUE_ARMAZENAR') or hasRole('ADMIN')")
     public ResponseEntity<Void> armazenarLpn(
             @RequestBody @Valid ArmazenagemRequest dto,
             Authentication authentication) { // <--- O Spring injeta o usuário logado aqui
@@ -37,6 +39,7 @@ public class EstoqueController {
 
     // --- 2. OPERAÇÃO: AJUSTES E MOVIMENTAÇÕES MANUAIS ---
     @PostMapping("/movimentar")
+    @PreAuthorize("hasAuthority('ESTOQUE_MOVIMENTAR') or hasRole('ADMIN')")
     public ResponseEntity<Void> movimentar(
             @RequestBody @Valid MovimentacaoRequest dto,
             Authentication authentication) { // <--- Injeção de Segurança
@@ -61,12 +64,14 @@ public class EstoqueController {
 
     // Visão Geral (Soma simples por produto)
     @GetMapping("/produto/{produtoId}/total")
+    @PreAuthorize("hasAuthority('ESTOQUE_VISUALIZAR') or hasRole('ADMIN')")
     public ResponseEntity<Double> saldoTotal(@PathVariable Long produtoId) {
         return ResponseEntity.ok(saldoRepository.somarEstoqueDoProduto(produtoId));
     }
 
     // Visão Detalhada (Lotes, LPNs, Locais)
     @GetMapping("/detalhado")
+    @PreAuthorize("hasAuthority('ESTOQUE_VISUALIZAR') or hasRole('ADMIN')")
     public ResponseEntity<List<EstoqueSaldo>> saldoDetalhado() {
         return ResponseEntity.ok(saldoRepository.findAll());
     }

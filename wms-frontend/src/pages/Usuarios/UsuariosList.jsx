@@ -1,14 +1,17 @@
 import { useState, useEffect } from 'react';
 import { Box, Typography, Button, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Chip, LinearProgress } from '@mui/material';
-import { Plus, User, UserPlus } from 'lucide-react';
+import { Plus, User, UserPlus, Shield } from 'lucide-react'; // Ícone Shield adicionado
 import { toast } from 'react-toastify';
 import { getUsuarios } from '../../services/usuarioService';
 import UsuarioForm from './UsuarioForm';
+import { useNavigate } from 'react-router-dom'; // Import useNavigate
+import Can from '../../components/Can'; // Import Can para proteção
 
 const UsuariosList = () => {
     const [usuarios, setUsuarios] = useState([]);
     const [loading, setLoading] = useState(true);
     const [modalOpen, setModalOpen] = useState(false);
+    const navigate = useNavigate(); // Hook de navegação
 
     const loadData = async () => {
         try {
@@ -28,9 +31,30 @@ const UsuariosList = () => {
         <Box>
             <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
                 <Typography variant="h5" fontWeight="bold">Gestão de Usuários</Typography>
-                <Button variant="contained" startIcon={<UserPlus size={20} />} onClick={() => setModalOpen(true)}>
-                    Novo Usuário
-                </Button>
+
+                <Box display="flex" gap={2}>
+                    {/* BOTÃO NOVO: Gerenciar Perfis */}
+                    <Can I="PERFIL_GERENCIAR">
+                        <Button
+                            variant="outlined"
+                            startIcon={<Shield size={20} />}
+                            onClick={() => navigate('/perfis')}
+                        >
+                            Gerenciar Perfis
+                        </Button>
+                    </Can>
+
+                    {/* Botão Novo Usuário */}
+                    <Can I="USUARIO_CRIAR">
+                        <Button
+                            variant="contained"
+                            startIcon={<UserPlus size={20} />}
+                            onClick={() => setModalOpen(true)}
+                        >
+                            Novo Usuário
+                        </Button>
+                    </Can>
+                </Box>
             </Box>
 
             <Paper sx={{ width: '100%', overflow: 'hidden', borderRadius: 2 }}>

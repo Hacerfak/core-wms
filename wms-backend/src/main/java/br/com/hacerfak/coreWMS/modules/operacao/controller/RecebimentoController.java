@@ -17,6 +17,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.security.core.Authentication; // Importação para autenticação
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.util.List;
 
@@ -33,12 +34,14 @@ public class RecebimentoController {
 
     // --- 1. VISÃO GERAL (Dashboard) ---
     @GetMapping
+    @PreAuthorize("hasAuthority('RECEBIMENTO_VISUALIZAR') or hasRole('ADMIN')")
     public ResponseEntity<List<RecebimentoResumoDTO>> listar() { // <--- Mudou o tipo de retorno
         // Usa a busca otimizada que não carrega itens nem produtos profundos
         return ResponseEntity.ok(recebimentoRepository.findAllResumo());
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAuthority('RECEBIMENTO_VISUALIZAR') or hasRole('ADMIN')")
     public ResponseEntity<Recebimento> buscarPorId(@PathVariable Long id) {
         // Usa o método novo que carrega os itens
         return recebimentoRepository.findByIdComItens(id)
@@ -48,6 +51,7 @@ public class RecebimentoController {
 
     // --- 2. IMPORTAÇÃO XML (Passo Inicial) ---
     @PostMapping(value = "/importar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAuthority('RECEBIMENTO_IMPORTAR_XML') or hasRole('ADMIN')")
     public ResponseEntity<Recebimento> importarNfe(@RequestParam("file") MultipartFile file) {
         // Processa o XML, cria o Recebimento e os Itens previstos
         Recebimento recebimento = nfeImportService.importarXml(file);
@@ -58,6 +62,7 @@ public class RecebimentoController {
     // O operador conta e o sistema gera uma etiqueta (LPN) para colar no
     // pallet/caixa
     @PostMapping("/{id}/volume")
+    @PreAuthorize("hasAuthority('RECEBIMENTO_CONFERIR') or hasRole('ADMIN')")
     public ResponseEntity<String> gerarVolume(
             @PathVariable Long id,
             @RequestBody @Valid ConferenciaRequest dto,
@@ -74,6 +79,7 @@ public class RecebimentoController {
     // --- 4. FINALIZAÇÃO (Confronto) ---
     // Valida se a soma dos volumes bate com a Nota Fiscal
     @PostMapping("/{id}/finalizar")
+    @PreAuthorize("hasAuthority('RECEBIMENTO_FINALIZAR') or hasRole('ADMIN')")
     public ResponseEntity<String> finalizar(@PathVariable Long id) {
         try {
             recebimentoService.finalizarConferencia(id);
@@ -88,6 +94,7 @@ public class RecebimentoController {
 
     // --- 5. GESTÃO ---
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAuthority('RECEBIMENTO_CANCELAR') or hasRole('ADMIN')")
     public ResponseEntity<?> cancelarRecebimento(@PathVariable Long id) {
         return recebimentoRepository.findById(id).map(recebimento -> {
             // Regra de proteção: Não apaga se já virou estoque oficial
@@ -101,6 +108,7 @@ public class RecebimentoController {
     }
 
     @PostMapping("/{id}/cancelar")
+    @PreAuthorize("hasAuthority('RECEBIMENTO_CANCELAR') or hasRole('ADMIN')")
     public ResponseEntity<Void> cancelar(@PathVariable Long id) {
         recebimentoService.cancelarConferencia(id);
         return ResponseEntity.noContent().build();
@@ -108,6 +116,7 @@ public class RecebimentoController {
 
     // NOVO: Lista os LPNs de um item específico
     @GetMapping("/{id}/produtos/{produtoId}/volumes")
+    @PreAuthorize("hasAuthority('RECEBIMENTO_VISUALIZAR') or hasRole('ADMIN')")
     public ResponseEntity<List<VolumeResumoDTO>> listarVolumesDoItem(
             @PathVariable Long id,
             @PathVariable Long produtoId) {

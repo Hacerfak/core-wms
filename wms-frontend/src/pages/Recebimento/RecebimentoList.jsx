@@ -12,6 +12,7 @@ import { toast } from 'react-toastify';
 import { getRecebimentos, deleteRecebimento } from '../../services/recebimentoService';
 import api from '../../services/api'; // Import api para buscar detalhes
 import RecebimentoDetalhesModal from './RecebimentoDetalhesModal'; // Import do Modal
+import Can from '../../components/Can';
 
 // Mapa de cores para os Status
 const statusConfig = {
@@ -90,14 +91,17 @@ const RecebimentoList = () => {
                         Gerencie a entrada de notas fiscais e conferências
                     </Typography>
                 </Box>
-                <Button
-                    variant="contained"
-                    startIcon={<Plus size={20} />}
-                    onClick={() => navigate('/recebimento/novo')} // Vai para a tela de Upload que já criamos
-                    sx={{ color: 'white' }}
-                >
-                    Nova Importação
-                </Button>
+                {/* SÓ MOSTRA SE TIVER PERMISSÃO */}
+                <Can I="RECEBIMENTO_IMPORTAR_XML">
+                    <Button
+                        variant="contained"
+                        startIcon={<Plus size={20} />}
+                        onClick={() => navigate('/recebimento/novo')} // Vai para a tela de Upload que já criamos
+                        sx={{ color: 'white' }}
+                    >
+                        Nova Importação
+                    </Button>
+                </Can>
             </Box>
 
             {/* Tabela de Dados */}
@@ -180,15 +184,17 @@ const RecebimentoList = () => {
                                                     </Tooltip>
 
                                                     {/* Botão de Excluir */}
-                                                    <Tooltip title="Excluir">
-                                                        <IconButton
-                                                            color="error"
-                                                            size="small"
-                                                            onClick={() => handleDelete(row.id, row.status)}
-                                                        >
-                                                            <Trash2 size={18} />
-                                                        </IconButton>
-                                                    </Tooltip>
+                                                    <Can I="RECEBIMENTO_CANCELAR">
+                                                        <Tooltip title="Excluir">
+                                                            <IconButton
+                                                                color="error"
+                                                                size="small"
+                                                                onClick={() => handleDelete(row.id, row.status)}
+                                                            >
+                                                                <Trash2 size={18} />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                    </Can>
                                                 </Box>
                                             </TableCell>
                                         </TableRow>

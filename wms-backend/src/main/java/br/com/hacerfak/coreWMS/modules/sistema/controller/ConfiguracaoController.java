@@ -5,6 +5,7 @@ import br.com.hacerfak.coreWMS.modules.sistema.repository.ConfiguracaoRepository
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.util.List;
 import java.util.Map;
@@ -17,12 +18,14 @@ public class ConfiguracaoController {
     private final ConfiguracaoRepository repository;
 
     @GetMapping
+    @PreAuthorize("hasAuthority('CONFIG_GERENCIAR') or hasRole('ADMIN')")
     public List<Configuracao> listar() {
         return repository.findAll();
     }
 
     // Endpoint rápido para pegar o valor booleano
     @GetMapping("/recebimento-exibir-qtd")
+    @PreAuthorize("hasAuthority('RECEBIMENTO_CONFERIR') or hasRole('ADMIN')")
     public ResponseEntity<Boolean> deveExibirQtd() {
         return repository.findById("RECEBIMENTO_EXIBIR_QTD_ESPERADA")
                 .map(conf -> ResponseEntity.ok(Boolean.parseBoolean(conf.getValor())))
@@ -30,6 +33,7 @@ public class ConfiguracaoController {
     }
 
     @PutMapping("/{chave}")
+    @PreAuthorize("hasAuthority('CONFIG_GERENCIAR') or hasRole('ADMIN')")
     public ResponseEntity<Void> atualizar(@PathVariable String chave, @RequestBody Map<String, String> body) {
         return repository.findById(chave)
                 .map(conf -> {

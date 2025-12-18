@@ -5,6 +5,7 @@ import br.com.hacerfak.coreWMS.modules.expedicao.domain.StatusPedido;
 import br.com.hacerfak.coreWMS.modules.expedicao.repository.PedidoSaidaRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -16,6 +17,7 @@ public class ExpedicaoController {
 
     // Simula o caminhão saindo (Sem NFe por enquanto)
     @PostMapping("/despachar/{pedidoId}")
+    @PreAuthorize("hasAuthority('EXPEDICAO_DESPACHAR') or hasRole('ADMIN')")
     public ResponseEntity<Void> despacharPedido(@PathVariable Long pedidoId) {
         PedidoSaida pedido = pedidoRepository.findById(pedidoId)
                 .orElseThrow(() -> new RuntimeException("Pedido não encontrado"));

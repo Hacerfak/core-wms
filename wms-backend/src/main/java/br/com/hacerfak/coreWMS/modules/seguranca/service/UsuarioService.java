@@ -66,8 +66,8 @@ public class UsuarioService {
         // Busca perfis locais
         for (int i = 0; i < resultado.size(); i++) {
             UsuarioDTO u = resultado.get(i);
-            if (u.login().equalsIgnoreCase("admin")) {
-                resultado.set(i, new UsuarioDTO(u.id(), u.login(), "SUPER ADMIN", true));
+            if (u.login().equalsIgnoreCase("master")) {
+                resultado.set(i, new UsuarioDTO(u.id(), u.login(), "MASTER", true));
                 continue;
             }
             var perfis = usuarioPerfilRepository.findByUsuarioId(u.id());

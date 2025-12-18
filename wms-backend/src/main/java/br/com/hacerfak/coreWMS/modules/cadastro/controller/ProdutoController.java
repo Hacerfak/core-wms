@@ -10,6 +10,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 @RestController
 @RequestMapping("/api/produtos")
@@ -21,6 +22,7 @@ public class ProdutoController {
 
     // --- READ (Listar Todos) ---
     @GetMapping
+    @PreAuthorize("hasAuthority('PRODUTO_VISUALIZAR') or hasRole('ADMIN')")
     public ResponseEntity<Page<Produto>> listarTodos(
             @PageableDefault(page = 0, size = 10, sort = "nome") Pageable pageable) {
         return ResponseEntity.ok(repository.findAll(pageable));
@@ -28,6 +30,7 @@ public class ProdutoController {
 
     // --- READ (Buscar por ID) ---
     @GetMapping("/{id}")
+    @PreAuthorize("hasAuthority('PRODUTO_VISUALIZAR') or hasRole('ADMIN')")
     public ResponseEntity<Produto> buscarPorId(@PathVariable Long id) {
         return repository.findById(id)
                 .map(ResponseEntity::ok)
@@ -36,6 +39,7 @@ public class ProdutoController {
 
     // --- CREATE ---
     @PostMapping
+    @PreAuthorize("hasAuthority('PRODUTO_CRIAR') or hasRole('ADMIN')")
     public ResponseEntity<Produto> criar(@RequestBody ProdutoRequest dto) {
         // Validação (Simplificada)
         // Em prod, buscaríamos o Parceiro pelo ID vindo do DTO (se houver)
@@ -63,6 +67,7 @@ public class ProdutoController {
 
     // --- UPDATE ---
     @PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('PRODUTO_EDITAR') or hasRole('ADMIN')")
     public ResponseEntity<Produto> atualizar(@PathVariable Long id, @RequestBody Produto produtoAtualizado) {
         return repository.findById(id).map(produto -> {
             produto.setNome(produtoAtualizado.getNome());
@@ -77,6 +82,7 @@ public class ProdutoController {
 
     // --- DELETE (Físico ou Lógico) ---
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAuthority('PRODUTO_EXCLUIR') or hasRole('ADMIN')")
     public ResponseEntity<Void> deletar(@PathVariable Long id) {
         if (!repository.existsById(id))
             return ResponseEntity.notFound().build();

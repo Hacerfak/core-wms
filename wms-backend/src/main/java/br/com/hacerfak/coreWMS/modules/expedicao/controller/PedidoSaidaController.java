@@ -14,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -31,6 +32,7 @@ public class PedidoSaidaController {
     // 1. Criar Pedido (Integração ERP)
     @PostMapping
     @Transactional
+    @PreAuthorize("hasAuthority('PEDIDO_CRIAR') or hasRole('ADMIN')")
     public ResponseEntity<PedidoSaida> criarPedido(@RequestBody PedidoRequest dto) {
         Parceiro cliente = parceiroRepository.findById(dto.clienteId())
                 .orElseThrow(() -> new RuntimeException("Cliente não encontrado"));
@@ -63,6 +65,7 @@ public class PedidoSaidaController {
     // 2. Disparar Alocação (Processamento de Reserva)
     // Isso roda o algoritmo FEFO e gera tarefas para o coletor
     @PostMapping("/{id}/alocar")
+    @PreAuthorize("hasAuthority('PEDIDO_ALOCAR') or hasRole('ADMIN')")
     public ResponseEntity<String> alocarPedido(@PathVariable Long id) {
         try {
             alocacaoService.alocarPedido(id);
@@ -74,11 +77,13 @@ public class PedidoSaidaController {
 
     // 3. Listar Pedidos
     @GetMapping
+    @PreAuthorize("hasAuthority('PEDIDO_VISUALIZAR') or hasRole('ADMIN')")
     public ResponseEntity<List<PedidoSaida>> listar() {
         return ResponseEntity.ok(pedidoRepository.findAll());
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAuthority('PEDIDO_VISUALIZAR') or hasRole('ADMIN')")
     public ResponseEntity<PedidoSaida> buscarPorId(@PathVariable Long id) {
         return pedidoRepository.findById(id)
                 .map(ResponseEntity::ok)
@@ -86,6 +91,7 @@ public class PedidoSaidaController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAuthority('PEDIDO_CANCELAR') or hasRole('ADMIN')")
     public ResponseEntity<?> cancelarPedido(@PathVariable Long id) {
         return pedidoRepository.findById(id).map(pedido -> {
             if ("DESPACHADO".equals(pedido.getStatus().toString())) {

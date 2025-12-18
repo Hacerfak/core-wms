@@ -12,7 +12,7 @@ CREATE TABLE tb_usuario (
 -- Mantém o insert do admin
 INSERT INTO tb_usuario (login, senha, role, ativo, data_criacao)
 VALUES (
-        'admin',
+        'master',
         '$2a$10$9lJ7gK5L0SZjQRP15SbKcummYMhAl2AwH3tCIV5N4VyMgYZMce9Mq',
         -- senha: "123456"
         'ADMIN',
