@@ -43,6 +43,10 @@ public class SecurityConfig {
                         // Swagger
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
 
+                        // Onboarding precisa estar logado, mas qualquer usuário autenticado pode tentar
+                        // (A lógica de validação fica dentro do Controller)
+                        .requestMatchers("/onboarding/**").authenticated()
+
                         // Todo o resto precisa de autenticação (incluindo selecionar-empresa)
                         .anyRequest().authenticated())
 
@@ -69,7 +73,9 @@ public class SecurityConfig {
                 "http://localhost:5173", // Vite (Dev local)
                 "http://localhost:3000", // React Padrão
                 "http://localhost", // Docker/Nginx (Porta 80)
-                "http://127.0.0.1" // IP Local
+                "http://127.0.0.1", // IP Local
+                "http://127.0.0.1:5173", // Vite via IP
+                "http://127.0.0.1:3000" // React Padrão via IP
         ));
 
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));

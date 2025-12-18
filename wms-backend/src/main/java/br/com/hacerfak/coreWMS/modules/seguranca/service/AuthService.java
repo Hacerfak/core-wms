@@ -1,17 +1,16 @@
 package br.com.hacerfak.coreWMS.modules.seguranca.service;
 
-import br.com.hacerfak.coreWMS.core.multitenant.TenantContext; // <--- IMPORTANTE
-import br.com.hacerfak.coreWMS.modules.seguranca.domain.Usuario;
-import br.com.hacerfak.coreWMS.modules.seguranca.dto.AuthenticationDTO;
-import br.com.hacerfak.coreWMS.modules.seguranca.dto.EmpresaResumoDTO;
-import br.com.hacerfak.coreWMS.modules.seguranca.dto.LoginResponseDTO;
-import br.com.hacerfak.coreWMS.modules.seguranca.repository.UsuarioRepository;
+import br.com.hacerfak.coreWMS.core.multitenant.TenantContext;
+import br.com.hacerfak.coreWMS.modules.seguranca.domain.*;
+import br.com.hacerfak.coreWMS.modules.seguranca.dto.*;
+import br.com.hacerfak.coreWMS.modules.seguranca.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -19,18 +18,16 @@ import java.util.List;
 public class AuthService {
 
     private final UsuarioRepository usuarioRepository;
+    private final UsuarioPerfilRepository usuarioPerfilRepository;
     private final TokenService tokenService;
     private final AuthenticationManager authenticationManager;
 
-    // --- LOGICA DE LOGIN ---
     public LoginResponseDTO login(AuthenticationDTO data) {
-        // ... (Mantenha o código de login igual, ele já funciona pois o token inicial
-        // não tem tenant) ...
         var usernamePassword = new UsernamePasswordAuthenticationToken(data.login(), data.password());
         var auth = authenticationManager.authenticate(usernamePassword);
-
         Usuario usuario = (Usuario) auth.getPrincipal();
 
+        // Lista de empresas (Apenas leitura do Master)
         List<EmpresaResumoDTO> acessos = usuario.getAcessos().stream()
                 .filter(acesso -> acesso.getEmpresa().isAtivo())
                 .map(acesso -> new EmpresaResumoDTO(
@@ -40,46 +37,56 @@ public class AuthService {
                         acesso.getRole().name()))
                 .toList();
 
-        var token = tokenService.generateToken(usuario, null);
+        // Token inicial sem tenant e sem permissões específicas
+        var token = tokenService.generateToken(usuario, null, List.of());
 
         return new LoginResponseDTO(token, usuario.getLogin(), acessos);
     }
 
-    // --- LÓGICA DE SELEÇÃO DE EMPRESA (CORRIGIDA) ---
     public LoginResponseDTO selecionarEmpresa(String tenantId) {
-        // 1. Salva o contexto atual (só por precaução)
         String tenantAtual = TenantContext.getTenant();
-
-        // 2. FORÇA O CONTEXTO PARA O MASTER
-        // Precisamos acessar a tabela 'tb_usuario' e 'tb_empresa' que só existem no
-        // Master
         TenantContext.setTenant(TenantContext.DEFAULT_TENANT_ID);
 
+        Usuario usuario;
         try {
-            // Agora a busca vai rodar no banco correto (Master)
             String login = SecurityContextHolder.getContext().getAuthentication().getName();
+            usuario = usuarioRepository.findByLogin(login).orElseThrow();
 
-            Usuario usuario = usuarioRepository.findByLogin(login)
-                    .orElseThrow(() -> new RuntimeException("Usuário não encontrado"));
-
-            // Valida se ele realmente tem acesso à empresa solicitada
             boolean temAcesso = usuario.getAcessos().stream()
                     .anyMatch(a -> a.getEmpresa().getTenantId().equals(tenantId) && a.getEmpresa().isAtivo());
 
-            if (!temAcesso) {
-                throw new RuntimeException("Acesso negado a esta empresa");
-            }
-
-            // Gera NOVO Token (COM Tenant)
-            var tokenComTenant = tokenService.generateToken(usuario, tenantId);
-
-            return new LoginResponseDTO(tokenComTenant, usuario.getLogin(), List.of());
+            if (!temAcesso)
+                throw new RuntimeException("Acesso negado");
 
         } finally {
-            // 3. (Opcional) Restaura o contexto anterior para não afetar o resto da
-            // requisição
-            // Embora neste caso a requisição acabe aqui.
             TenantContext.setTenant(tenantAtual);
         }
+
+        // --- CALCULA PERMISSÕES NO BANCO DO TENANT ---
+        TenantContext.setTenant(tenantId);
+        List<String> authorities = new ArrayList<>();
+
+        try {
+            // GOD MODE: Se for ADMIN global, libera tudo
+            if (usuario.getRole() == UserRole.ADMIN) {
+                authorities.add("ROLE_ADMIN");
+                for (PermissaoEnum p : PermissaoEnum.values()) {
+                    authorities.add(p.name());
+                }
+            } else {
+                // Usuário comum: Busca permissões do perfil
+                var perfis = usuarioPerfilRepository.findByUsuarioId(usuario.getId());
+                for (UsuarioPerfil up : perfis) {
+                    if (up.getPerfil().isAtivo()) {
+                        up.getPerfil().getPermissoes().forEach(p -> authorities.add(p.name()));
+                    }
+                }
+            }
+        } finally {
+            TenantContext.clear();
+        }
+
+        var tokenComTenant = tokenService.generateToken(usuario, tenantId, authorities);
+        return new LoginResponseDTO(tokenComTenant, usuario.getLogin(), List.of());
     }
 }

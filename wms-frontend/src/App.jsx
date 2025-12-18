@@ -9,13 +9,14 @@ import { useContext } from 'react';
 
 // Páginas
 import Login from './pages/Login/Login';
-import SelecaoEmpresa from './pages/Login/SelecaoEmpresa'; // <--- Importe
-import Onboarding from './pages/Login/Onboarding';         // <--- Importe
+import SelecaoEmpresa from './pages/Login/SelecaoEmpresa';
+import Onboarding from './pages/Login/Onboarding';
 import Dashboard from './pages/Dashboard/Dashboard';
 import RecebimentoList from './pages/Recebimento/RecebimentoList';
 import Recebimento from './pages/Recebimento/Recebimento';
 import Conferencia from './pages/Recebimento/Conferencia';
 import Configuracoes from './pages/Configuracao/Configuracoes';
+import UsuariosList from './pages/Usuarios/UsuariosList';
 import MainLayout from './layout/MainLayout';
 
 // Wrapper para rotas protegidas (Dashboard e internas)
@@ -62,6 +63,7 @@ function App() {
             <Route path="/recebimento/novo" element={<PrivateRoute><Recebimento /></PrivateRoute>} />
             <Route path="/recebimento/:id/conferencia" element={<PrivateRoute><Conferencia /></PrivateRoute>} />
             <Route path="/config" element={<PrivateRoute><Configuracoes /></PrivateRoute>} />
+            <Route path="/usuarios" element={<PrivateRoute><UsuariosList /></PrivateRoute>} />
 
             <Route path="/" element={<Navigate to="/dashboard" />} />
             <Route path="*" element={<Navigate to="/login" />} />
