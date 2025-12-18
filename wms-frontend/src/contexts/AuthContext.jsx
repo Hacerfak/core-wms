@@ -33,20 +33,17 @@ export const AuthProvider = ({ children }) => {
         try {
             const response = await api.post('/auth/login', { login: username, password });
 
-            // O Backend agora retorna: { token, usuario, empresas: [...] }
-            const { token, empresas, usuario } = response.data;
+            // Captura a ROLE vinda do backend
+            const { token, empresas, usuario, role } = response.data;
 
-            // Salva Token Inicial (Global)
             localStorage.setItem('wms_token', token);
             api.defaults.headers.Authorization = `Bearer ${token}`;
 
-            // Monta objeto do usuário
-            const userData = { login: usuario, empresas };
+            // Salva a role no objeto do usuário
+            const userData = { login: usuario, role, empresas };
             localStorage.setItem('wms_user', JSON.stringify(userData));
 
             setUser(userData);
-
-            // Retorna os dados para a tela de Login decidir o redirecionamento
             return userData;
         } catch (error) {
             console.error("Erro login", error);

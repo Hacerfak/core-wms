@@ -23,24 +23,63 @@ public class AuthService {
     private final AuthenticationManager authenticationManager;
 
     public LoginResponseDTO login(AuthenticationDTO data) {
+        // 1. Autentica no Spring Security (Banco Master)
         var usernamePassword = new UsernamePasswordAuthenticationToken(data.login(), data.password());
         var auth = authenticationManager.authenticate(usernamePassword);
         Usuario usuario = (Usuario) auth.getPrincipal();
 
-        // Lista de empresas (Apenas leitura do Master)
-        List<EmpresaResumoDTO> acessos = usuario.getAcessos().stream()
-                .filter(acesso -> acesso.getEmpresa().isAtivo())
-                .map(acesso -> new EmpresaResumoDTO(
-                        acesso.getEmpresa().getId(),
-                        acesso.getEmpresa().getRazaoSocial(),
-                        acesso.getEmpresa().getTenantId(),
-                        acesso.getRole().name()))
-                .toList();
+        List<EmpresaResumoDTO> acessos = new ArrayList<>();
 
-        // Token inicial sem tenant e sem permissões específicas
+        // 2. Itera sobre as empresas para buscar o Perfil Específico em cada banco
+        // (Isso resolve o bug de mostrar o mesmo perfil em todas)
+        for (UsuarioEmpresa acesso : usuario.getAcessos()) {
+            if (!acesso.getEmpresa().isAtivo())
+                continue;
+
+            String tenantId = acesso.getEmpresa().getTenantId();
+            String nomePerfilExibicao = "Carregando...";
+
+            // Guarda o contexto atual (Master)
+            String contextoOriginal = TenantContext.getTenant();
+
+            try {
+                // A. Troca para o banco da empresa específica
+                TenantContext.setTenant(tenantId);
+
+                // B. Se for o ADMIN Global (God Mode), o nome é fixo
+                if (usuario.getRole() == UserRole.ADMIN) {
+                    nomePerfilExibicao = "MASTER";
+                } else {
+                    // C. Busca o perfil configurado neste banco
+                    List<UsuarioPerfil> perfisLocais = usuarioPerfilRepository.findByUsuarioId(usuario.getId());
+
+                    if (!perfisLocais.isEmpty()) {
+                        nomePerfilExibicao = perfisLocais.get(0).getPerfil().getNome();
+                    } else {
+                        // Caso raro: tem acesso a empresa mas não tem perfil local criado ainda
+                        nomePerfilExibicao = "Sem Perfil Definido";
+                    }
+                }
+            } catch (Exception e) {
+                nomePerfilExibicao = "Erro ao carregar perfil";
+                System.err.println("Erro ao buscar perfil no tenant " + tenantId + ": " + e.getMessage());
+            } finally {
+                // D. IMPORTANTE: Volta para o banco Master para continuar o loop
+                TenantContext.setTenant(contextoOriginal);
+            }
+
+            acessos.add(new EmpresaResumoDTO(
+                    acesso.getEmpresa().getId(),
+                    acesso.getEmpresa().getRazaoSocial(),
+                    tenantId,
+                    nomePerfilExibicao // Agora enviamos o nome real (ex: "Conferente Senior")
+            ));
+        }
+
+        // Gera o token inicial
         var token = tokenService.generateToken(usuario, null, List.of());
 
-        return new LoginResponseDTO(token, usuario.getLogin(), acessos);
+        return new LoginResponseDTO(token, usuario.getLogin(), usuario.getRole().name(), acessos);
     }
 
     public LoginResponseDTO selecionarEmpresa(String tenantId) {
@@ -87,6 +126,6 @@ public class AuthService {
         }
 
         var tokenComTenant = tokenService.generateToken(usuario, tenantId, authorities);
-        return new LoginResponseDTO(tokenComTenant, usuario.getLogin(), List.of());
+        return new LoginResponseDTO(tokenComTenant, usuario.getLogin(), usuario.getRole().name(), List.of());
     }
 }

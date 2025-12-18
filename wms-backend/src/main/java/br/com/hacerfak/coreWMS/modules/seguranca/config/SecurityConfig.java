@@ -49,7 +49,7 @@ public class SecurityConfig {
 
                         // Onboarding precisa estar logado, mas qualquer usuário autenticado pode tentar
                         // (A lógica de validação fica dentro do Controller)
-                        .requestMatchers("/onboarding/**").authenticated()
+                        .requestMatchers("/onboarding/**").hasRole("ADMIN")
 
                         // Todo o resto precisa de autenticação (incluindo selecionar-empresa)
                         .anyRequest().authenticated())

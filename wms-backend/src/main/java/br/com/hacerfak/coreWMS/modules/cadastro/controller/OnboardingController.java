@@ -4,16 +4,14 @@ import br.com.hacerfak.coreWMS.modules.cadastro.domain.Empresa;
 import br.com.hacerfak.coreWMS.modules.cadastro.repository.EmpresaRepository;
 import br.com.hacerfak.coreWMS.modules.cadastro.service.CertificadoService;
 import br.com.hacerfak.coreWMS.modules.cadastro.service.TenantProvisioningService;
-import br.com.hacerfak.coreWMS.modules.seguranca.domain.UserRole;
-import br.com.hacerfak.coreWMS.modules.seguranca.domain.Usuario;
-import br.com.hacerfak.coreWMS.modules.seguranca.domain.UsuarioEmpresa;
-import br.com.hacerfak.coreWMS.modules.seguranca.repository.UsuarioEmpresaRepository;
-import br.com.hacerfak.coreWMS.modules.seguranca.repository.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import br.com.hacerfak.coreWMS.core.multitenant.TenantContext;
+import br.com.hacerfak.coreWMS.modules.seguranca.domain.*;
+import br.com.hacerfak.coreWMS.modules.seguranca.repository.*;
 
 @RestController
 @RequestMapping("/onboarding")
@@ -25,6 +23,8 @@ public class OnboardingController {
     private final EmpresaRepository empresaRepository;
     private final UsuarioRepository usuarioRepository;
     private final UsuarioEmpresaRepository usuarioEmpresaRepository;
+    private final PerfilRepository perfilRepository;
+    private final UsuarioPerfilRepository usuarioPerfilRepository;
 
     @PostMapping("/upload-certificado")
     // @Transactional <--- REMOVA ESTA LINHA (Causa do erro)
@@ -64,23 +64,47 @@ public class OnboardingController {
 
             empresaRepository.save(novaEmpresa);
 
-            // 6. Vincula o Usuário Logado como ADMIN
+            // 6. Vincula o Usuário Logado (que é o Master Admin criando a empresa) ou cria
+            // o primeiro user
+            // OBS: Se quem está criando a empresa é o ADMIN do sistema, ele já tem God
+            // Mode.
+            // Mas se for um auto-cadastro, precisamos dar o perfil de ADMIN LOCAL.
+
             String loginUsuario = SecurityContextHolder.getContext().getAuthentication().getName();
+            Usuario usuario = usuarioRepository.findByLogin(loginUsuario).orElseThrow();
 
-            // Usamos orElseThrow porque o usuário TEM que estar logado para chegar aqui
-            Usuario usuario = usuarioRepository.findByLogin(loginUsuario)
-                    .orElseThrow(() -> new RuntimeException("Usuário logado não encontrado"));
-
+            // Vínculo Global (Genérico)
             UsuarioEmpresa vinculo = UsuarioEmpresa.builder()
                     .usuario(usuario)
                     .empresa(novaEmpresa)
-                    .role(UserRole.ADMIN)
+                    .role(UserRole.USER) // <--- É apenas um usuário dessa empresa
                     .build();
-
             usuarioEmpresaRepository.save(vinculo);
 
-            return ResponseEntity
-                    .ok("Empresa " + dados.getRazaoSocial() + " criada com sucesso! Faça login novamente.");
+            // 7. CRÍTICO: Entrar no Tenant e dar o perfil de Administrador
+            try {
+                TenantContext.setTenant(tenantId); // Muda para o banco novo
+
+                // Busca o perfil que a migration V17 criou
+                Perfil perfilAdmin = perfilRepository.findAll().stream()
+                        .filter(p -> p.getNome().equalsIgnoreCase("Administrador Local")
+                                || p.getNome().equalsIgnoreCase("Administrador"))
+                        .findFirst()
+                        .orElseThrow(() -> new RuntimeException(
+                                "Perfil de Administrador não encontrado no template do tenant."));
+
+                UsuarioPerfil up = UsuarioPerfil.builder()
+                        .usuarioId(usuario.getId())
+                        .perfil(perfilAdmin)
+                        .build();
+
+                usuarioPerfilRepository.save(up);
+
+            } finally {
+                TenantContext.clear(); // Limpa o contexto
+            }
+
+            return ResponseEntity.ok("Empresa criada e usuário vinculado como Administrador!");
 
         } catch (Exception e) {
             // Se der erro ao salvar no banco, idealmente deveríamos desfazer a criação do

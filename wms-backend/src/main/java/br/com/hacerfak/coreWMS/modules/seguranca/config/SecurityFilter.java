@@ -64,7 +64,7 @@ public class SecurityFilter extends OncePerRequestFilter {
                 System.out.println(">>> TOKEN INVÁLIDO OU EXPIRADO");
             }
         } else {
-            System.out.println(">>> TOKEN NÃO ENCONTRADO NO HEADER"); // Descomente para
+            // System.out.println(">>> TOKEN NÃO ENCONTRADO NO HEADER"); // Descomente para
             // debug severo
         }
 

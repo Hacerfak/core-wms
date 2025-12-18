@@ -1,11 +1,12 @@
 package br.com.hacerfak.coreWMS.modules.seguranca.service;
 
+import br.com.hacerfak.coreWMS.core.exception.EntityNotFoundException;
 import br.com.hacerfak.coreWMS.core.multitenant.TenantContext;
 import br.com.hacerfak.coreWMS.modules.cadastro.domain.Empresa;
 import br.com.hacerfak.coreWMS.modules.cadastro.repository.EmpresaRepository;
 import br.com.hacerfak.coreWMS.modules.seguranca.domain.*;
-import br.com.hacerfak.coreWMS.modules.seguranca.repository.*;
 import br.com.hacerfak.coreWMS.modules.seguranca.dto.*;
+import br.com.hacerfak.coreWMS.modules.seguranca.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -25,14 +26,30 @@ public class UsuarioService {
     private final UsuarioPerfilRepository usuarioPerfilRepository;
     private final PasswordEncoder passwordEncoder;
 
+    // --- 1. VERIFICAÇÃO PRÉVIA ---
+    public VerificarUsuarioDTO verificarExistencia(String login) {
+        String tenantOriginal = TenantContext.getTenant();
+        TenantContext.setTenant(TenantContext.DEFAULT_TENANT_ID); // Busca no Master
+        try {
+            return usuarioRepository.findByLogin(login)
+                    .map(u -> new VerificarUsuarioDTO(true, u.getId(), u.getLogin()))
+                    .orElse(new VerificarUsuarioDTO(false, null, login));
+        } finally {
+            TenantContext.setTenant(tenantOriginal);
+        }
+    }
+
+    // --- 2. LISTAGEM (Mantida) ---
     public List<UsuarioDTO> listarPorTenantAtual() {
         String tenantId = TenantContext.getTenant();
         List<UsuarioDTO> resultado = new ArrayList<>();
 
-        // 1. Busca usuários vinculados à empresa no Master
         TenantContext.setTenant(TenantContext.DEFAULT_TENANT_ID);
         try {
-            Empresa empresa = empresaRepository.findByTenantId(tenantId).orElseThrow();
+            Empresa empresa = empresaRepository.findByTenantId(tenantId)
+                    .orElseThrow(() -> new EntityNotFoundException("Empresa não encontrada"));
+
+            // JOIN FETCH para performance
             List<UsuarioEmpresa> vinculos = usuarioEmpresaRepository.findByEmpresaId(empresa.getId());
 
             for (UsuarioEmpresa vinculo : vinculos) {
@@ -46,70 +63,100 @@ public class UsuarioService {
             TenantContext.setTenant(tenantId);
         }
 
-        // 2. Busca os perfis locais para enriquecer a lista
-        for (UsuarioDTO u : resultado) {
-            // O Admin Global não tem perfil local, tratamos isso
-            if (u.login().equals("admin")) {
-                resultado.set(resultado.indexOf(u), new UsuarioDTO(u.id(), u.login(), "SUPER ADMIN", true));
+        // Busca perfis locais
+        for (int i = 0; i < resultado.size(); i++) {
+            UsuarioDTO u = resultado.get(i);
+            if (u.login().equalsIgnoreCase("admin")) {
+                resultado.set(i, new UsuarioDTO(u.id(), u.login(), "SUPER ADMIN", true));
                 continue;
             }
-
             var perfis = usuarioPerfilRepository.findByUsuarioId(u.id());
             if (!perfis.isEmpty()) {
-                String nomePerfil = perfis.get(0).getPerfil().getNome();
-                // Atualiza o DTO com o nome do perfil correto
-                resultado.set(resultado.indexOf(u), new UsuarioDTO(u.id(), u.login(), nomePerfil, u.ativo()));
+                resultado.set(i, new UsuarioDTO(u.id(), u.login(), perfis.get(0).getPerfil().getNome(), u.ativo()));
+            } else {
+                resultado.set(i, new UsuarioDTO(u.id(), u.login(), "Sem Perfil", u.ativo()));
             }
         }
-
         return resultado;
     }
 
-    public void criarUsuarioParaEmpresa(CriarUsuarioRequest request) {
+    // --- 3. CRIAÇÃO OU VÍNCULO (O Coração da mudança) ---
+    public void salvarUsuarioParaEmpresa(CriarUsuarioRequest request) {
         String tenantId = TenantContext.getTenant();
 
-        // --- MASTER DB ---
+        if (tenantId == null || tenantId.equals("wms_master")) {
+            throw new IllegalArgumentException("Selecione uma empresa para adicionar usuários.");
+        }
+
+        Usuario usuarioGlobal;
+
+        // --- PASSO A: MASTER DB (Identidade) ---
         TenantContext.setTenant(TenantContext.DEFAULT_TENANT_ID);
-        Usuario usuario;
         try {
-            Empresa empresa = empresaRepository.findByTenantId(tenantId).orElseThrow();
+            Empresa empresa = empresaRepository.findByTenantId(tenantId)
+                    .orElseThrow(() -> new EntityNotFoundException("Empresa não encontrada"));
+
             Optional<Usuario> existente = usuarioRepository.findByLogin(request.login());
 
             if (existente.isPresent()) {
-                usuario = existente.get();
-                if (usuarioEmpresaRepository.existsByUsuarioIdAndEmpresaId(usuario.getId(), empresa.getId())) {
-                    throw new IllegalArgumentException("Usuário já existe nesta empresa.");
+                // CENÁRIO 1: Usuário já existe -> Apenas vincula
+                usuarioGlobal = existente.get();
+
+                // Verifica se já está nesta empresa
+                if (usuarioEmpresaRepository.existsByUsuarioIdAndEmpresaId(usuarioGlobal.getId(), empresa.getId())) {
+                    // Se já existe, não é erro, apenas seguimos para atualizar o perfil (opcional)
+                    // ou lançamos erro. Vamos permitir para atualizar perfil.
+                } else {
+                    // Cria vínculo com a empresa
+                    UsuarioEmpresa vinculo = UsuarioEmpresa.builder()
+                            .usuario(usuarioGlobal)
+                            .empresa(empresa)
+                            .role(UserRole.USER)
+                            .build();
+                    usuarioEmpresaRepository.save(vinculo);
                 }
             } else {
-                usuario = Usuario.builder()
+                // CENÁRIO 2: Usuário NOVO -> Cria e vincula
+                if (request.senha() == null || request.senha().isBlank()) {
+                    throw new IllegalArgumentException("Senha obrigatória para novos usuários.");
+                }
+
+                usuarioGlobal = Usuario.builder()
                         .login(request.login())
                         .senha(passwordEncoder.encode(request.senha()))
-                        .role(UserRole.OPERADOR)
+                        .role(UserRole.USER) // <--- MUDANÇA: Sempre nasce como USER comum
                         .ativo(true)
                         .build();
-                usuarioRepository.save(usuario);
+                usuarioRepository.save(usuarioGlobal);
+
+                // O vínculo global também é genérico
+                UsuarioEmpresa vinculo = UsuarioEmpresa.builder()
+                        .usuario(usuarioGlobal)
+                        .empresa(empresa)
+                        .role(UserRole.USER) // <--- MUDANÇA: A role aqui é irrelevante agora
+                        .build();
+                usuarioEmpresaRepository.save(vinculo);
             }
-
-            UsuarioEmpresa vinculo = UsuarioEmpresa.builder()
-                    .usuario(usuario)
-                    .empresa(empresa)
-                    .role(UserRole.OPERADOR)
-                    .build();
-            usuarioEmpresaRepository.save(vinculo);
-
         } finally {
             TenantContext.setTenant(tenantId);
         }
 
-        // --- TENANT DB ---
+        // --- PASSO B: TENANT DB (Perfil) ---
+        // Agora, no banco da empresa, definimos o papel dele (Gerente, Operador, etc)
         Perfil perfil = perfilRepository.findById(request.perfilId())
-                .orElseThrow(() -> new RuntimeException("Perfil não encontrado"));
+                .orElseThrow(() -> new EntityNotFoundException("Perfil não encontrado"));
 
-        UsuarioPerfil usuarioPerfil = UsuarioPerfil.builder()
-                .usuarioId(usuario.getId())
+        // Remove perfil anterior se houver (para permitir troca de perfil)
+        var perfilAnterior = usuarioPerfilRepository.findByUsuarioId(usuarioGlobal.getId());
+        if (!perfilAnterior.isEmpty()) {
+            usuarioPerfilRepository.deleteAll(perfilAnterior);
+        }
+
+        UsuarioPerfil novoPerfil = UsuarioPerfil.builder()
+                .usuarioId(usuarioGlobal.getId())
                 .perfil(perfil)
                 .build();
 
-        usuarioPerfilRepository.save(usuarioPerfil);
+        usuarioPerfilRepository.save(novoPerfil);
     }
 }

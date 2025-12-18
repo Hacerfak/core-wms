@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 
 const Configuracoes = () => {
     const { user } = useContext(AuthContext); // Pegamos as empresas do contexto
+    const isAdmin = user?.role === 'ADMIN'; // Checa permissão
     const navigate = useNavigate();
 
     const [tabIndex, setTabIndex] = useState(0);
@@ -78,15 +79,18 @@ const Configuracoes = () => {
             {/* ABA 1: GERENCIAR EMPRESAS */}
             {tabIndex === 1 && (
                 <Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
-                        <Button
-                            variant="contained"
-                            startIcon={<Plus size={18} />}
-                            onClick={() => navigate('/onboarding')}
-                        >
-                            Nova Empresa
-                        </Button>
-                    </Box>
+                    {/* Só mostra botão se for ADMIN */}
+                    {isAdmin && (
+                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+                            <Button
+                                variant="contained"
+                                startIcon={<Plus size={18} />}
+                                onClick={() => navigate('/onboarding')}
+                            >
+                                Nova Empresa
+                            </Button>
+                        </Box>
+                    )}
 
                     <Grid container spacing={2}>
                         {user?.empresas?.map((empresa) => (

@@ -2,11 +2,14 @@ import { useContext } from 'react';
 import { AuthContext } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Box, Typography, Card, CardContent, Grid, Button, Container } from '@mui/material';
-import { Building2, PlusCircle } from 'lucide-react';
+import { Building2, PlusCircle, Lock } from 'lucide-react';
 
 const SelecaoEmpresa = () => {
     const { user, selecionarEmpresa } = useContext(AuthContext);
     const navigate = useNavigate();
+
+    // Verifica se é ADMIN Global
+    const isAdmin = user?.role === 'ADMIN';
 
     const handleSelect = async (tenantId) => {
         const success = await selecionarEmpresa(tenantId);
@@ -22,27 +25,24 @@ const SelecaoEmpresa = () => {
             </Typography>
 
             <Grid container spacing={3}>
-                {/* Botão para Nova Empresa (Onboarding) */}
-                <Grid item xs={12} sm={6} md={4}>
-                    <Card
-                        sx={{
-                            height: '100%',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            cursor: 'pointer',
-                            border: '2px dashed #cbd5e1',
-                            boxShadow: 'none',
-                            '&:hover': { bgcolor: '#f1f5f9', borderColor: '#94a3b8' }
-                        }}
-                        onClick={() => navigate('/onboarding')}
-                    >
-                        <CardContent sx={{ textAlign: 'center' }}>
-                            <PlusCircle size={48} color="#64748b" style={{ marginBottom: 8 }} />
-                            <Typography variant="h6" color="text.secondary">Nova Empresa</Typography>
-                        </CardContent>
-                    </Card>
-                </Grid>
+                {/* Botão Nova Empresa: SÓ APARECE SE FOR ADMIN */}
+                {isAdmin && (
+                    <Grid item xs={12} sm={6} md={4}>
+                        <Card
+                            sx={{
+                                height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                cursor: 'pointer', border: '2px dashed #cbd5e1', boxShadow: 'none',
+                                '&:hover': { bgcolor: '#f1f5f9', borderColor: '#94a3b8' }
+                            }}
+                            onClick={() => navigate('/onboarding')}
+                        >
+                            <CardContent sx={{ textAlign: 'center' }}>
+                                <PlusCircle size={48} color="#64748b" style={{ marginBottom: 8 }} />
+                                <Typography variant="h6" color="text.secondary">Nova Empresa</Typography>
+                            </CardContent>
+                        </Card>
+                    </Grid>
+                )}
 
                 {/* Lista de Empresas */}
                 {user?.empresas?.map((empresa) => (
