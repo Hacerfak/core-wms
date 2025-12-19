@@ -28,13 +28,10 @@ public class SefazService {
 
     private final EmpresaConfigRepository empresaConfigRepository;
 
-    // Mapa de URLs atualizado conforme seu POSTMAN
+    // Mapa de URLs de Consulta Cadastro (Produção)
     private static final Map<String, String> URLS_SEFAZ = new HashMap<>();
     static {
-        // SVRS (Atende AC, AL, AP, CE, DF, ES, PA, PB, PI, RJ, RN, RO, RR, RS, SC, SE,
-        // TO)
         String svrs = "https://cad.svrs.rs.gov.br/ws/cadconsultacadastro/cadconsultacadastro4.asmx";
-
         URLS_SEFAZ.put("RS", svrs);
         URLS_SEFAZ.put("SC", svrs);
         URLS_SEFAZ.put("RJ", svrs);
@@ -63,6 +60,59 @@ public class SefazService {
         URLS_SEFAZ.put("MT", "https://nfe.sefaz.mt.gov.br/nfews/v2/services/CadConsultaCadastro4");
         URLS_SEFAZ.put("MS", "https://nfe.sefaz.ms.gov.br/ws/CadConsultaCadastro4");
         URLS_SEFAZ.put("AM", "https://nfe.sefaz.am.gov.br/services2/services/CadConsultaCadastro4");
+    }
+
+    // MAPA DE DE-PARA DO TEXTO DA SEFAZ PARA CÓDIGO CRT
+    // Baseado no CSV fornecido
+    private static final Map<String, String> MAPEAMENTO_CRT = new HashMap<>();
+    static {
+        // --- CRT 1: SIMPLES NACIONAL ---
+        MAPEAMENTO_CRT.put("SIMPLES NACIONAL", "1");
+        MAPEAMENTO_CRT.put("EMPRESA OPTANTE PELO SIMPLES NACIONAL", "1");
+        MAPEAMENTO_CRT.put("MICRO EPP/SIMPLES NACIONAL", "1");
+        MAPEAMENTO_CRT.put("SIMPLES NACIONAL - SIMPLES NACIONAL", "1");
+        MAPEAMENTO_CRT.put("SIMPLES NACIONAL - SUBSTITUTO TRIBUTARIO", "1");
+        MAPEAMENTO_CRT.put("MICROEMPRESA - MICROEMPRESA SEM FAIXA", "1");
+        MAPEAMENTO_CRT.put("MICROEMPRESA - ESTABELECIMENTO UNICO CENTRALIZADOR", "1");
+
+        // --- CRT 2: SIMPLES NACIONAL (EXCESSO DE SUBLIMITE) ---
+        // Conforme seu CSV, Faixa A e B estão mapeadas como 2
+        MAPEAMENTO_CRT.put("MICROEMPRESA - SIMPLES FAIXA A", "2");
+        MAPEAMENTO_CRT.put("MICROEMPRESA - SIMPLES FAIXA B", "2");
+        MAPEAMENTO_CRT.put("MICROEMPRESA - SIMPLES FAIXA B COM ISS", "2");
+        MAPEAMENTO_CRT.put("MICROEMPRESA - SIMPLES FAIXA C COM ISS", "2");
+
+        // --- CRT 4: MEI ---
+        MAPEAMENTO_CRT.put("SIMPLES NACIONAL - MEI", "4");
+        MAPEAMENTO_CRT.put("SIMEI", "4");
+        MAPEAMENTO_CRT.put("EMPRESA OPTANTE SIMEI", "4"); // Variação comum
+        MAPEAMENTO_CRT.put("EMPRESA OPTANTE SIMEI (NORMALMENTE UTILIZADO PELAS EMPRESAS MEI)", "4");
+        MAPEAMENTO_CRT.put("SIMPLES NACIONAL/SIMEI", "4");
+
+        // --- CRT 3: REGIME NORMAL (E OUTROS PADRÕES) ---
+        // Muitos textos variados caem aqui
+        MAPEAMENTO_CRT.put("NORMAL", "3");
+        MAPEAMENTO_CRT.put("NORMAL - NORMAL", "3");
+        MAPEAMENTO_CRT.put("REGIME DE TRIBUTACAO NORMAL", "3");
+        MAPEAMENTO_CRT.put("NORMAL - REGIME PERIÓDICO DE APURAÇÃO", "3");
+        MAPEAMENTO_CRT.put("REGIME DE TRIBUTACAO NORMAL", "3");
+        MAPEAMENTO_CRT.put("NORMAL - CENTRALIZADO", "3");
+        MAPEAMENTO_CRT.put("NORMAL - CENTRALIZADOR", "3");
+        MAPEAMENTO_CRT.put("NORMAL - DILACAO DE PRAZO SEM RETORNO R.S.", "3");
+
+        // Regimes Diferenciados geralmente são Normal para fins de NFe (destacam
+        // imposto)
+        MAPEAMENTO_CRT.put("REGIME DIFERENCIADO - SUBSTITUTO TRIBUTARIO", "3");
+        MAPEAMENTO_CRT.put("REGIME DIFERENCIADO - FORNECIMENTO DE ALIMENTACAO", "3");
+        MAPEAMENTO_CRT.put("REGIME DIFERENCIADO - BOM EMPREGO", "3");
+        MAPEAMENTO_CRT.put("REGIME DIFERENCIADO - MAIS EMPREGO", "3");
+        MAPEAMENTO_CRT.put("REGIME DIFERENCIADO - PARANA COMPETITIVO", "3");
+
+        // Recuperação Judicial
+        MAPEAMENTO_CRT.put("RECUPERACAO JUDICIAL - NORMAL", "3");
+        MAPEAMENTO_CRT.put("RECUPERACAO JUDICIAL - CENTRALIZADOR", "3");
+        MAPEAMENTO_CRT.put("RECUPERACAO JUDICIAL - CENTRALIZADO", "3");
+        MAPEAMENTO_CRT.put("RECUPERACAO JUDICIAL - SUBSTITUTO TRIBUTARIO", "3");
     }
 
     public CnpjResponse consultarCadastro(String uf, String cnpj, String ie) {
@@ -210,13 +260,32 @@ public class SefazService {
             dto.setIe(getTagValue(infCad, "IE"));
             dto.setCnaePrincipal(getTagValue(infCad, "CNAE"));
 
-            // --- MAPEAMENTO INTELIGENTE DO CRT (Texto -> Código) ---
-            // A tag geralmente é CRT ou xReg
-            String crtRaw = getTagValue(infCad, "CRT");
-            if (crtRaw.isEmpty())
-                crtRaw = getTagValue(infCad, "xReg"); // Alguns estados retornam em xReg
+            // --- MAPEAMENTO AVANÇADO DO CRT ---
+            // Tenta obter o CRT (código) ou o xReg (texto descritivo)
+            // A prioridade é xReg porque nele temos a descrição completa para o mapeamento
+            // do CSV
+            String crtTexto = getTagValue(infCad, "xRegApur");
 
-            dto.setRegimeTributario(mapRegimeTributario(crtRaw));
+            // Se xReg vier vazio, tenta CRT numérico
+            if (crtTexto.isEmpty()) {
+                crtTexto = getTagValue(infCad, "xReg");
+            }
+
+            if (crtTexto.isEmpty()) {
+                crtTexto = getTagValue(infCad, "xRegTrib");
+            }
+
+            if (crtTexto.isEmpty()) {
+                crtTexto = getTagValue(infCad, "xCRT");
+            }
+
+            if (crtTexto.isEmpty()) {
+                crtTexto = getTagValue(infCad, "CRT");
+            }
+
+            System.out.println("SEFAZ REGIME RETORNADO: [" + crtTexto + "]"); // Log para debug
+
+            dto.setRegimeTributario(mapRegimeTributario(crtTexto));
 
             Element ender = (Element) infCad.getElementsByTagNameNS("*", "ender").item(0);
             if (ender != null) {
@@ -250,47 +319,42 @@ public class SefazService {
     }
 
     /**
-     * Mapeia o texto retornado pela SEFAZ para os códigos internos.
-     * 1 = Simples Nacional
-     * 2 = Simples Nacional - Excesso
-     * 3 = Regime Normal
-     * 4 = MEI
+     * Mapeia o texto ou código retornado pela SEFAZ para os códigos internos.
      */
     private String mapRegimeTributario(String crtRaw) {
         if (crtRaw == null || crtRaw.trim().isEmpty()) {
             return "3"; // Padrão: Regime Normal se não vier nada
         }
 
-        String texto = crtRaw.trim().toUpperCase();
+        String textoNormalizado = crtRaw.trim().toUpperCase();
 
-        // 1. Tenta correspondência direta numérica
-        if (texto.equals("1") || texto.equals("2") || texto.equals("3") || texto.equals("4")) {
-            return texto;
+        // 1. Tenta encontrar no Mapa Exato (vindo do CSV)
+        if (MAPEAMENTO_CRT.containsKey(textoNormalizado)) {
+            return MAPEAMENTO_CRT.get(textoNormalizado);
         }
 
-        // 2. Busca por palavras-chave (Ordem importa!)
-
-        // Excesso de Sublimite (Prioridade sobre "Simples")
-        if (texto.contains("EXCESSO")) {
-            return "2";
+        // 2. Se não achou exato, tenta correspondência direta numérica (caso venha "1",
+        // "2"...)
+        if (textoNormalizado.equals("1") || textoNormalizado.equals("2") || textoNormalizado.equals("3")
+                || textoNormalizado.equals("4")) {
+            return textoNormalizado;
         }
 
-        // MEI
-        if (texto.contains("MEI") || texto.contains("MICROEMPREENDEDOR")) {
+        // 3. Fallback inteligente por palavras-chave (para textos novos não mapeados)
+        if (textoNormalizado.contains("MEI") || textoNormalizado.contains("SIMEI"))
             return "4";
-        }
+        if (textoNormalizado.contains("EXCESSO"))
+            return "2"; // Excesso de sublimite
+        if (textoNormalizado.contains("SIMPLES"))
+            return "1"; // Simples Nacional
 
-        // Simples Nacional
-        if (texto.contains("SIMPLES")) {
-            return "1";
-        }
-
-        // Regime Normal
-        if (texto.contains("NORMAL") || texto.contains("LUCRO")) {
+        // Se contiver "NORMAL", "LUCRO", "REAL", "PRESUMIDO" -> 3
+        if (textoNormalizado.contains("NORMAL") || textoNormalizado.contains("LUCRO")
+                || textoNormalizado.contains("REAL") || textoNormalizado.contains("PRESUMIDO")) {
             return "3";
         }
 
-        // Fallback
+        // Fallback final
         return "3";
     }
 }

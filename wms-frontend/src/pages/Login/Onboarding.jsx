@@ -2,51 +2,65 @@ import { useState, useContext } from 'react';
 import api from '../../services/api';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../contexts/AuthContext';
-import { Box, Button, Card, Typography, TextField, CircularProgress, Alert } from '@mui/material';
-import { Upload, Lock } from 'lucide-react';
+import {
+    Box, Button, Card, Typography, TextField, CircularProgress,
+    Alert, MenuItem, Grid
+} from '@mui/material';
+import { Upload, Lock, MapPin } from 'lucide-react';
 import { toast } from 'react-toastify';
+
+// Lista de UFs para o usuário selecionar a origem
+const ESTADOS_BR = [
+    'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS',
+    'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'
+];
 
 const Onboarding = () => {
     const { refreshUserCompanies } = useContext(AuthContext);
     const [file, setFile] = useState(null);
     const [senha, setSenha] = useState('');
+    const [uf, setUf] = useState('SP'); // UF Padrão
     const [loading, setLoading] = useState(false);
+    const [statusMsg, setStatusMsg] = useState(''); // Feedback do progresso
     const [error, setError] = useState('');
+
     const navigate = useNavigate();
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!file || !senha) return;
+        if (!file || !senha || !uf) return;
 
         setLoading(true);
         setError('');
+        setStatusMsg('Criando banco de dados e ambiente...');
 
         const formData = new FormData();
         formData.append('file', file);
         formData.append('senha', senha);
+        formData.append('uf', uf); // <--- Envia a UF escolhida
 
         try {
+            // O backend agora vai demorar um pouco mais pois fará a consulta SEFAZ
             await api.post('/onboarding/upload-certificado', formData);
+
+            setStatusMsg('Finalizando configurações...');
             await refreshUserCompanies();
-            toast.success("Ambiente criado com sucesso!");
+
+            toast.success("Ambiente criado e dados da empresa importados da SEFAZ!");
             navigate('/selecao-empresa');
 
         } catch (err) {
             console.error("Erro Onboarding:", err);
-
-            // --- CORREÇÃO AQUI ---
-            // Extrai a mensagem de forma segura, seja string ou objeto StandardError
             let msg = "Erro ao processar certificado.";
-
             if (err.response?.data) {
                 if (typeof err.response.data === 'string') {
                     msg = err.response.data;
                 } else if (err.response.data.message) {
-                    msg = err.response.data.message; // Pega o campo 'message' do JSON de erro
+                    msg = err.response.data.message;
                 }
             }
-
             setError(msg);
+            setStatusMsg('');
         } finally {
             setLoading(false);
         }
@@ -57,17 +71,38 @@ const Onboarding = () => {
             <Card sx={{ maxWidth: 450, width: '100%', p: 4, borderRadius: 2 }}>
                 <Box sx={{ textAlign: 'center', mb: 4 }}>
                     <Typography variant="h4" fontWeight="bold" color="primary.main" gutterBottom>
-                        Bem-vindo!
+                        Novo Ambiente
                     </Typography>
-                    <Typography variant="body1" color="text.secondary">
-                        Para começar, configure sua primeira empresa enviando o Certificado Digital A1.
+                    <Typography variant="body2" color="text.secondary">
+                        Envie o certificado A1. O sistema irá consultar a SEFAZ para preencher os dados da empresa automaticamente.
                     </Typography>
                 </Box>
 
-                {/* Exibe o erro tratado */}
                 {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
+                {loading && statusMsg && <Alert severity="info" icon={<CircularProgress size={20} />} sx={{ mb: 3 }}>{statusMsg}</Alert>}
 
                 <form onSubmit={handleSubmit}>
+
+                    {/* SELEÇÃO DE UF */}
+                    <Box display="flex" alignItems="center" gap={2} mb={3}>
+                        <MapPin size={24} color="#64748b" />
+                        <TextField
+                            select
+                            label="Estado (UF) da Empresa"
+                            fullWidth
+                            value={uf}
+                            onChange={(e) => setUf(e.target.value)}
+                            helperText="Necessário para consulta na SEFAZ correta."
+                        >
+                            {ESTADOS_BR.map((estado) => (
+                                <MenuItem key={estado} value={estado}>
+                                    {estado}
+                                </MenuItem>
+                            ))}
+                        </TextField>
+                    </Box>
+
+                    {/* UPLOAD */}
                     <Box sx={{
                         border: '2px dashed #cbd5e1', borderRadius: 2, p: 4, textAlign: 'center', mb: 3, cursor: 'pointer',
                         bgcolor: '#f8fafc', '&:hover': { bgcolor: '#f1f5f9', borderColor: 'primary.main' }
@@ -87,6 +122,7 @@ const Onboarding = () => {
                         </label>
                     </Box>
 
+                    {/* SENHA */}
                     <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
                         <Lock size={20} color="#64748b" style={{ marginRight: 10 }} />
                         <TextField
@@ -103,10 +139,10 @@ const Onboarding = () => {
                         variant="contained"
                         size="large"
                         type="submit"
-                        disabled={loading || !file || !senha}
+                        disabled={loading || !file || !senha || !uf}
                         sx={{ py: 1.5 }}
                     >
-                        {loading ? <CircularProgress size={24} color="inherit" /> : 'Criar Ambiente'}
+                        {loading ? 'Processando...' : 'Criar Ambiente'}
                     </Button>
                 </form>
             </Card>

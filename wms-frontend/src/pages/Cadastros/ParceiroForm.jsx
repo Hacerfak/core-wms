@@ -4,12 +4,11 @@ import {
     Grid, Typography, Divider, MenuItem, InputAdornment, IconButton,
     CircularProgress, Paper, Switch, FormControlLabel
 } from '@mui/material';
-import { Save, X, Search, MapPin, Briefcase, Phone, Settings, AlertTriangle } from 'lucide-react';
+import { Save, X, Search, MapPin, Briefcase, Settings } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { salvarParceiro } from '../../services/parceiroService';
 import { consultarCnpjSefaz } from '../../services/integracaoService';
 
-// Lista Completa de UFs
 const ESTADOS_BR = [
     'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS',
     'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'
@@ -19,35 +18,21 @@ const ParceiroForm = ({ open, onClose, onSuccess, initialData }) => {
     const [loading, setLoading] = useState(false);
     const [buscandoCnpj, setBuscandoCnpj] = useState(false);
 
-    // Estado Plano (Flat) para facilitar o envio para o Java
+    // Estado Plano (Flat)
     const [form, setForm] = useState({
         id: '', documento: '', nome: '', nomeFantasia: '', ie: '', tipo: 'AMBOS', crt: '3',
         cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', uf: 'SP',
         telefone: '', email: '',
-        recebimentoCego: false,
-        padraoControlaLote: false,
-        padraoControlaValidade: false,
-        padraoControlaSerie: false,
-        ativo: true
+        recebimentoCego: false, padraoControlaLote: false, padraoControlaValidade: false, padraoControlaSerie: false, ativo: true
     });
 
     useEffect(() => {
         if (open) {
             if (initialData) {
-                // Se o initialData vier com endereco aninhado (do grid antigo), converte.
-                // Se vier plano (do backend novo), usa direto.
-                const dados = { ...initialData };
-                if (initialData.endereco && typeof initialData.endereco === 'object') {
-                    dados.cep = initialData.endereco.cep;
-                    dados.logradouro = initialData.endereco.logradouro;
-                    dados.numero = initialData.endereco.numero;
-                    dados.bairro = initialData.endereco.bairro;
-                    dados.cidade = initialData.endereco.cidade;
-                    dados.uf = initialData.endereco.uf;
-                    dados.complemento = initialData.endereco.complemento;
-                }
-                setForm(dados);
+                // Se vier do banco (lista), preenche o form
+                setForm(initialData);
             } else {
+                // Reset para novo cadastro
                 setForm({
                     id: '', documento: '', nome: '', nomeFantasia: '', ie: '', tipo: 'AMBOS', crt: '3',
                     cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', uf: 'SP',
@@ -63,67 +48,67 @@ const ParceiroForm = ({ open, onClose, onSuccess, initialData }) => {
 
     const handleBuscarSefaz = async () => {
         const docLimpo = form.documento.replace(/\D/g, '');
-        if (docLimpo.length !== 14) return toast.warning("CNPJ deve ter 14 dígitos.");
-
-        // Regra do Maranhão
-        if (form.uf === 'MA') return toast.warning("O estado do MA não permite consulta automática.");
+        if (docLimpo.length !== 14) return toast.warning("CNPJ inválido.");
+        if (form.uf === 'MA') return toast.warning("Consulta indisponível para MA.");
 
         setBuscandoCnpj(true);
         try {
             const dados = await consultarCnpjSefaz(form.uf, docLimpo);
+
+            // CORREÇÃO: Não sobrescrever se vier vazio da SEFAZ
             setForm(prev => ({
                 ...prev,
-                nome: dados.razaoSocial,
-                nomeFantasia: dados.nomeFantasia,
-                ie: dados.ie && dados.ie !== 'ISENTO' ? dados.ie : prev.ie,
+                nome: dados.razaoSocial || prev.nome,
+                nomeFantasia: dados.nomeFantasia || prev.nomeFantasia,
+                ie: (dados.ie && dados.ie !== 'ISENTO') ? dados.ie : prev.ie,
                 crt: dados.regimeTributario || prev.crt,
 
-                // Endereço (Mantém a UF original se a Sefaz não retornar ou retornar vazia)
-                cep: dados.cep,
-                logradouro: dados.logradouro,
-                numero: dados.numero,
-                complemento: dados.complemento,
-                bairro: dados.bairro,
-                cidade: dados.cidade,
+                cep: dados.cep || prev.cep,
+                logradouro: dados.logradouro || prev.logradouro,
+                numero: dados.numero || prev.numero,
+                complemento: dados.complemento || prev.complemento,
+                bairro: dados.bairro || prev.bairro,
+                cidade: dados.cidade || prev.cidade,
+
+                // Se a SEFAZ retornar UF diferente (ex: matriz em outro estado), atualiza.
                 uf: dados.uf || prev.uf
             }));
-            toast.success("Dados da SEFAZ aplicados!");
+
+            toast.success("Dados preenchidos via SEFAZ!");
         } catch (error) {
-            toast.error("Erro na consulta SEFAZ.");
-        } finally { setBuscandoCnpj(false); }
+            toast.error("Erro na consulta.");
+        } finally {
+            setBuscandoCnpj(false);
+        }
     };
 
     const handleSubmit = async () => {
         setLoading(true);
         try {
-            // Envia o form plano, que bate com a Entidade Java 'Parceiro'
             await salvarParceiro(form);
             toast.success("Parceiro salvo com sucesso!");
             onSuccess();
             onClose();
         } catch (error) {
-            console.error(error);
-            toast.error("Erro ao salvar parceiro.");
+            toast.error(error.response?.data?.message || "Erro ao salvar.");
         } finally { setLoading(false); }
     };
 
-    const isMa = form.uf === 'MA';
-
     return (
         <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-            <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pb: 1 }}>
+            <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Typography variant="h6" fontWeight="bold">
                     {form.id ? 'Editar Parceiro' : 'Novo Parceiro'}
                 </Typography>
-                <IconButton onClick={onClose} size="small"><X size={20} /></IconButton>
+                <IconButton onClick={onClose}><X size={20} /></IconButton>
             </DialogTitle>
             <Divider />
 
             <DialogContent sx={{ bgcolor: '#f8fafc', p: 3 }}>
 
-                {/* DADOS PRINCIPAIS */}
+                {/* DADOS FISCAIS */}
                 <Paper elevation={0} sx={{ p: 2, mb: 2, border: '1px solid #e2e8f0' }}>
-                    <Typography variant="subtitle2" color="primary" sx={{ mb: 2, display: 'flex', gap: 1, alignItems: 'center', fontWeight: 'bold' }}>
+                    <Typography variant="subtitle2" color="primary" fontWeight="bold" mb={2} display="flex" gap={1}>
                         <Briefcase size={18} /> Dados Fiscais
                     </Typography>
                     <Grid container spacing={2}>
@@ -136,7 +121,6 @@ const ParceiroForm = ({ open, onClose, onSuccess, initialData }) => {
                             </TextField>
                         </Grid>
 
-                        {/* UF PRINCIPAL (Controla a Busca) */}
                         <Grid item xs={12} sm={2}>
                             <TextField select label="UF" fullWidth size="small" value={form.uf} onChange={e => handleChange('uf', e.target.value)}>
                                 {ESTADOS_BR.map(u => <MenuItem key={u} value={u}>{u}</MenuItem>)}
@@ -148,18 +132,12 @@ const ParceiroForm = ({ open, onClose, onSuccess, initialData }) => {
                                 InputProps={{
                                     endAdornment: (
                                         <InputAdornment position="end">
-                                            <IconButton
-                                                onClick={handleBuscarSefaz}
-                                                disabled={buscandoCnpj || isMa}
-                                                edge="end"
-                                                title={isMa ? "Consulta indisponível para MA" : "Buscar na SEFAZ"}
-                                            >
-                                                {buscandoCnpj ? <CircularProgress size={16} /> : <Search size={18} color={isMa ? '#ccc' : '#1976d2'} />}
+                                            <IconButton onClick={handleBuscarSefaz} disabled={buscandoCnpj} edge="end">
+                                                {buscandoCnpj ? <CircularProgress size={16} /> : <Search size={18} color="#1976d2" />}
                                             </IconButton>
                                         </InputAdornment>
                                     )
                                 }}
-                                helperText={isMa ? "Consulta SEFAZ indisponível para MA" : ""}
                             />
                         </Grid>
                         <Grid item xs={12} sm={3}>
@@ -172,40 +150,60 @@ const ParceiroForm = ({ open, onClose, onSuccess, initialData }) => {
                         </Grid>
 
                         <Grid item xs={12} sm={6}>
-                            <TextField label="Razão Social" fullWidth size="small" required value={form.nome} onChange={e => handleChange('nome', e.target.value)} />
+                            <TextField label="Razão Social" fullWidth size="small" required value={form.nome} onChange={e => handleChange('nome', e.target.value)} InputLabelProps={{ shrink: true }} />
                         </Grid>
                         <Grid item xs={12} sm={3}>
-                            <TextField label="Nome Fantasia" fullWidth size="small" value={form.nomeFantasia} onChange={e => handleChange('nomeFantasia', e.target.value)} />
+                            <TextField label="Nome Fantasia" fullWidth size="small" value={form.nomeFantasia} onChange={e => handleChange('nomeFantasia', e.target.value)} InputLabelProps={{ shrink: true }} />
                         </Grid>
                         <Grid item xs={12} sm={3}>
-                            <TextField label="Insc. Estadual" fullWidth size="small" value={form.ie} onChange={e => handleChange('ie', e.target.value)} />
+                            <TextField label="Insc. Estadual" fullWidth size="small" value={form.ie} onChange={e => handleChange('ie', e.target.value)} InputLabelProps={{ shrink: true }} />
                         </Grid>
                     </Grid>
                 </Paper>
 
-                {/* ENDEREÇO E CONTATO */}
+                {/* ENDEREÇO */}
                 <Paper elevation={0} sx={{ p: 2, mb: 2, border: '1px solid #e2e8f0' }}>
-                    <Typography variant="subtitle2" color="primary" sx={{ mb: 2, display: 'flex', gap: 1, alignItems: 'center', fontWeight: 'bold' }}>
+                    <Typography variant="subtitle2" color="primary" fontWeight="bold" mb={2} display="flex" gap={1}>
                         <MapPin size={18} /> Endereço e Contato
                     </Typography>
                     <Grid container spacing={2}>
                         <Grid item xs={12} sm={3}>
-                            <TextField label="CEP" fullWidth size="small" value={form.cep} onChange={e => handleChange('cep', e.target.value)} />
+                            <TextField
+                                label="CEP" fullWidth size="small"
+                                value={form.cep} onChange={e => handleChange('cep', e.target.value)}
+                                InputLabelProps={{ shrink: true }} // <--- EVITA SOBREPOSIÇÃO
+                            />
                         </Grid>
                         <Grid item xs={12} sm={7}>
-                            <TextField label="Logradouro" fullWidth size="small" value={form.logradouro} onChange={e => handleChange('logradouro', e.target.value)} />
+                            <TextField
+                                label="Logradouro" fullWidth size="small"
+                                value={form.logradouro} onChange={e => handleChange('logradouro', e.target.value)}
+                                InputLabelProps={{ shrink: true }}
+                            />
                         </Grid>
                         <Grid item xs={12} sm={2}>
-                            <TextField label="Número" fullWidth size="small" value={form.numero} onChange={e => handleChange('numero', e.target.value)} />
+                            <TextField
+                                label="Número" fullWidth size="small"
+                                value={form.numero} onChange={e => handleChange('numero', e.target.value)}
+                                InputLabelProps={{ shrink: true }}
+                            />
                         </Grid>
                         <Grid item xs={12} sm={5}>
-                            <TextField label="Bairro" fullWidth size="small" value={form.bairro} onChange={e => handleChange('bairro', e.target.value)} />
+                            <TextField
+                                label="Bairro" fullWidth size="small"
+                                value={form.bairro} onChange={e => handleChange('bairro', e.target.value)}
+                                InputLabelProps={{ shrink: true }}
+                            />
                         </Grid>
                         <Grid item xs={12} sm={5}>
-                            <TextField label="Cidade" fullWidth size="small" value={form.cidade} onChange={e => handleChange('cidade', e.target.value)} />
+                            <TextField
+                                label="Cidade" fullWidth size="small"
+                                value={form.cidade} onChange={e => handleChange('cidade', e.target.value)}
+                                InputLabelProps={{ shrink: true }}
+                            />
                         </Grid>
                         <Grid item xs={12} sm={2}>
-                            <TextField disabled label="UF" fullWidth size="small" value={form.uf} />
+                            <TextField disabled label="UF" fullWidth size="small" value={form.uf} InputLabelProps={{ shrink: true }} />
                         </Grid>
 
                         <Grid item xs={12}><Divider sx={{ borderStyle: 'dashed' }} /></Grid>
@@ -221,8 +219,8 @@ const ParceiroForm = ({ open, onClose, onSuccess, initialData }) => {
 
                 {/* PARÂMETROS */}
                 <Paper elevation={0} sx={{ p: 2, border: '1px solid #e2e8f0', bgcolor: '#fff' }}>
-                    <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1, display: 'flex', gap: 1, alignItems: 'center', fontWeight: 'bold' }}>
-                        <Settings size={16} /> Configurações de Operação
+                    <Typography variant="subtitle2" color="text.secondary" fontWeight="bold" mb={2} display="flex" gap={1}>
+                        <Settings size={16} /> Configurações
                     </Typography>
                     <Grid container spacing={2}>
                         <Grid item xs={12} sm={6}>
