@@ -1,13 +1,12 @@
 import { Box, AppBar, Toolbar, Typography, IconButton, Avatar, Menu, MenuItem, Divider, ListItemIcon, Tooltip, Chip } from '@mui/material';
-import { LogOut, Building2, Check } from 'lucide-react';
+import { LogOut, Building2, Check, Settings } from 'lucide-react';
 import { useContext, useState, useMemo } from 'react';
 import { AuthContext } from '../contexts/AuthContext';
 import Sidebar from '../components/Sidebar';
 import Can from '../components/Can';
-import { useNavigate, Outlet } from 'react-router-dom'; // <--- ADICIONADO Outlet
+import { useNavigate, Outlet } from 'react-router-dom';
 import { jwtDecode } from 'jwt-decode';
 
-// REMOVIDO: { children } das props
 const MainLayout = () => {
     const { logout, user, selecionarEmpresa } = useContext(AuthContext);
     const navigate = useNavigate();
@@ -22,52 +21,34 @@ const MainLayout = () => {
         navigate('/login');
     };
 
-    // Descobre qual é a empresa atual baseada no Token
     const empresaAtual = useMemo(() => {
         const token = localStorage.getItem('wms_token');
         if (!token || !user?.empresas) return null;
         try {
             const decoded = jwtDecode(token);
             return user.empresas.find(e => e.tenantId === decoded.tenant);
-        } catch (e) {
-            return null;
-        }
+        } catch (e) { return null; }
     }, [user]);
 
     const handleTrocarEmpresa = async (tenantId) => {
         handleClose();
         if (empresaAtual?.tenantId === tenantId) return;
-
         const success = await selecionarEmpresa(tenantId);
-        if (success) {
-            navigate(0); // Reload para limpar estados
-        }
+        if (success) navigate(0);
     };
 
     return (
         <Box sx={{ display: 'flex', height: '100vh', bgcolor: 'background.default' }}>
-            {/* 1. Menu Lateral Fixo */}
             <Sidebar />
-
-            {/* 2. Área Principal */}
             <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-
-                {/* Barra de Topo (Header) - MANTIDA IGUAL */}
                 <AppBar position="static" color="transparent" elevation={0} sx={{ borderBottom: '1px solid #e2e8f0', bgcolor: 'white', px: 2 }}>
                     <Toolbar>
                         <Box sx={{ flexGrow: 1, display: 'flex', alignItems: 'center', gap: 2 }}>
                             <Typography variant="h6" sx={{ color: 'text.secondary', fontSize: '1rem', fontWeight: 500 }}>
                                 Visão Geral
                             </Typography>
-
                             {empresaAtual && (
-                                <Chip
-                                    icon={<Building2 size={16} />}
-                                    label={empresaAtual.razaoSocial}
-                                    color="primary"
-                                    variant="outlined"
-                                    size="small"
-                                />
+                                <Chip icon={<Building2 size={16} />} label={empresaAtual.razaoSocial} color="primary" variant="outlined" size="small" />
                             )}
                         </Box>
 
@@ -76,7 +57,7 @@ const MainLayout = () => {
                                 {user?.login || 'Usuário'}
                             </Typography>
 
-                            <Tooltip title="Conta e Empresas">
+                            <Tooltip title="Menu do Usuário">
                                 <IconButton onClick={handleMenu} size="small" sx={{ ml: 1 }}>
                                     <Avatar sx={{ width: 36, height: 36, bgcolor: 'primary.main', fontSize: '0.9rem' }}>
                                         {user?.login?.substring(0, 2).toUpperCase()}
@@ -88,17 +69,12 @@ const MainLayout = () => {
                                 anchorEl={anchorEl}
                                 open={Boolean(anchorEl)}
                                 onClose={handleClose}
-                                PaperProps={{
-                                    elevation: 2,
-                                    sx: { mt: 1.5, minWidth: 220, borderRadius: 2 }
-                                }}
+                                PaperProps={{ elevation: 2, sx: { mt: 1.5, minWidth: 240, borderRadius: 2 } }}
                                 transformOrigin={{ horizontal: 'right', vertical: 'top' }}
                                 anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
                             >
                                 <Box sx={{ px: 2, py: 1.5 }}>
-                                    <Typography variant="subtitle2" color="text.secondary">
-                                        Meus Ambientes
-                                    </Typography>
+                                    <Typography variant="subtitle2" color="text.secondary">Meus Ambientes</Typography>
                                 </Box>
 
                                 {user?.empresas?.map((empresa) => (
@@ -110,7 +86,7 @@ const MainLayout = () => {
                                         <ListItemIcon>
                                             {empresaAtual?.tenantId === empresa.tenantId ? <Check size={18} color="green" /> : <Building2 size={18} />}
                                         </ListItemIcon>
-                                        <Typography variant="body2" noWrap sx={{ maxWidth: 150 }}>
+                                        <Typography variant="body2" noWrap sx={{ maxWidth: 160 }}>
                                             {empresa.razaoSocial}
                                         </Typography>
                                     </MenuItem>
@@ -118,12 +94,13 @@ const MainLayout = () => {
 
                                 <Divider sx={{ my: 1 }} />
 
-                                <Can I="CONFIG_GERENCIAR">
-                                    <MenuItem onClick={() => { handleClose(); navigate('/config'); }}>
-                                        <ListItemIcon><Building2 size={18} /></ListItemIcon>
-                                        Gerenciar Empresas
+                                {/* Acesso Master para Gerenciar Empresas */}
+                                {user?.role === 'ADMIN' && (
+                                    <MenuItem onClick={() => { handleClose(); navigate('/admin/empresas'); }}>
+                                        <ListItemIcon><Settings size={18} /></ListItemIcon>
+                                        Gerenciar Ambientes
                                     </MenuItem>
-                                </Can>
+                                )}
 
                                 <MenuItem onClick={handleLogout} sx={{ color: 'error.main' }}>
                                     <ListItemIcon><LogOut size={18} color="#ef4444" /></ListItemIcon>
@@ -133,10 +110,7 @@ const MainLayout = () => {
                         </Box>
                     </Toolbar>
                 </AppBar>
-
-                {/* Conteúdo da Página */}
                 <Box sx={{ flexGrow: 1, overflow: 'auto', p: 3 }}>
-                    {/* AQUI ESTÁ A MUDANÇA: Outlet no lugar de children */}
                     <Outlet />
                 </Box>
             </Box>
