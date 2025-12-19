@@ -13,7 +13,7 @@ import SelecaoEmpresa from './pages/Login/SelecaoEmpresa';
 import Dashboard from './pages/Dashboard/Dashboard';
 import ParceiroList from './pages/Cadastros/ParceiroList';
 import ProdutoList from './pages/Cadastros/ProdutoList';
-import LocalizacaoList from './pages/Cadastros/LocalizacaoList';
+import MapeamentoView from './pages/Cadastros/Mapeamento/MapeamentoView';
 import RecebimentoList from './pages/Recebimento/RecebimentoList';
 import Recebimento from './pages/Recebimento/Recebimento';
 import Conferencia from './pages/Recebimento/Conferencia';
@@ -62,7 +62,7 @@ function App() {
               {/* Cadastros Básicos */}
               <Route path="/cadastros/parceiros" element={<ParceiroList />} />
               <Route path="/cadastros/produtos" element={<ProdutoList />} />
-              <Route path="/cadastros/locais" element={<LocalizacaoList />} />
+              <Route path="/cadastros/locais" element={<MapeamentoView />} />
 
               {/* Módulo Recebimento */}
               <Route path="/recebimento" element={<RecebimentoList />} />

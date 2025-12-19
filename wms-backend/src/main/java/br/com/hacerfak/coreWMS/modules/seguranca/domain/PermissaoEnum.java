@@ -17,6 +17,7 @@ public enum PermissaoEnum {
     // Localização (Ruas, Prédios, Docas)
     LOCALIZACAO_VISUALIZAR,
     LOCALIZACAO_GERENCIAR, // Criar/Editar/Bloquear
+    LOCALIZACAO_EXCLUIR,
 
     // --- OPERAÇÃO: RECEBIMENTO (Inbound) ---
     RECEBIMENTO_VISUALIZAR, // Ver lista e detalhes

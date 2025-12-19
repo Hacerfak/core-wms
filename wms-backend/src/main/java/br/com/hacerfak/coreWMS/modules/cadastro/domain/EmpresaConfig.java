@@ -1,8 +1,6 @@
 package br.com.hacerfak.coreWMS.modules.cadastro.domain;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 import lombok.*;
 
 @Entity
@@ -13,14 +11,23 @@ import lombok.*;
 @AllArgsConstructor
 @Builder
 public class EmpresaConfig {
+
     @Id
-    private Long id; // Sempre 1
+    private Long id;
 
     private String razaoSocial;
     private String cnpj;
+    private String uf;
     private String enderecoCompleto;
-    private String logoUrl;
 
+    // Armazenamos o PFX como array de bytes
+    @Column(name = "certificado_arquivo")
+    private byte[] certificadoArquivo;
+
+    @Column(name = "certificado_senha")
+    private String certificadoSenha;
+
+    // Configs
     private boolean permiteEstoqueNegativo;
     private boolean recebimentoCegoObrigatorio;
 }

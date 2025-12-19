@@ -7,5 +7,7 @@ public enum TipoLocalizacao {
     STAGE, // Área de conferência no chão
     AVARIA, // Quarentena para produtos quebrados
     PERDA, // Local virtual para baixar estoque sumido
-    QUARENTENA // Local para produtos em observação
+    QUARENTENA, // Local para produtos em observação
+    ARMAZENAGEM, // Estoque Geral (Blocado ou Porta-Pallet Geral)
+    SEGREGACAO // Local para separar produtos específicos (ex: lotes especiais)
 }
