@@ -44,7 +44,7 @@ public class CertificadoService {
             }
 
             if (alias == null) {
-                throw new RuntimeException("Nenhum certificado válido encontrado no arquivo.");
+                throw new IllegalArgumentException("Nenhum certificado válido encontrado dentro do arquivo.");
             }
 
             // 3. Extrai o X509Certificate
@@ -60,13 +60,30 @@ public class CertificadoService {
                     .build();
 
         } catch (Exception e) {
-            throw new RuntimeException("Erro ao ler certificado: " + e.getMessage());
+            // --- TRADUÇÃO DE ERROS TÉCNICOS ---
+            String msg = e.getMessage() != null ? e.getMessage().toLowerCase() : "";
+
+            // Erro clássico de senha errada no Java (PKCS12)
+            if (msg.contains("integrity check failed") || msg.contains("password was incorrect")
+                    || msg.contains("keystore password was incorrect")) {
+                throw new IllegalArgumentException("A senha do certificado está incorreta.");
+            }
+
+            // Erro de arquivo corrompido ou formato inválido (ex: enviou um PDF ou TXT)
+            if (msg.contains("der input") || msg.contains("stream does not represent a pkcs12")) {
+                throw new IllegalArgumentException(
+                        "O arquivo enviado não parece ser um certificado digital válido (.pfx).");
+            }
+
+            // Repassa outros erros (ex: IO) com mensagem genérica, mas mantendo o detalhe
+            // técnico pro log
+            e.printStackTrace();
+            throw new RuntimeException("Falha ao ler o certificado: " + e.getMessage());
         }
     }
 
     // Extrai o nome (Geralmente no CN=NOME:CNPJ ou apenas CN=NOME)
     private String extrairRazaoSocial(String subject) {
-        // Padrão comum: CN=RAZAO SOCIAL:00000000000000
         String cn = extrairValor(subject, "CN");
         if (cn.contains(":")) {
             return cn.split(":")[0];
@@ -74,16 +91,13 @@ public class CertificadoService {
         return cn;
     }
 
-    // Extrai o CNPJ (Geralmente vem colado no nome ou em OID específico)
-    // Implementação simplificada buscando sequência de 14 dígitos
+    // Extrai o CNPJ
     private String extrairCnpj(String subject) {
-        // Tenta achar 14 digitos seguidos no CN ou na string inteira
         Pattern pattern = Pattern.compile("\\b\\d{14}\\b");
         Matcher matcher = pattern.matcher(subject);
         if (matcher.find()) {
             return matcher.group();
         }
-        // Se falhar, tenta pegar do final do CN (Padrão ICP-Brasil antigo)
         String cn = extrairValor(subject, "CN");
         String[] parts = cn.split(":");
         if (parts.length > 1) {
@@ -91,11 +105,10 @@ public class CertificadoService {
             if (possivelCnpj.length() == 14)
                 return possivelCnpj;
         }
-        throw new RuntimeException("Não foi possível identificar o CNPJ no certificado.");
+        throw new IllegalArgumentException("Não foi possível identificar o CNPJ nos dados do certificado.");
     }
 
     private String extrairValor(String text, String key) {
-        // Lógica simples de parse de X500 Name (ex: CN=Valor, O=Outro)
         String[] tokens = text.split(",");
         for (String token : tokens) {
             String[] pair = token.trim().split("=");

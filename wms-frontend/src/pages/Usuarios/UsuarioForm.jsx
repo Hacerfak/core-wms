@@ -121,6 +121,10 @@ const UsuarioForm = ({ open, onClose, onSuccess, usuario }) => {
                             </Alert>
                         )}
 
+                        {!usuario && statusUsuario === 'novo' && (
+                            <Alert severity="success" icon={<CheckCircle />}>Usuário disponível. Clique em Salvar para criar.</Alert>
+                        )}
+
                         {!usuario && statusUsuario === 'existente' && (
                             <Alert severity="info" icon={<CheckCircle />}>Usuário já existe. Clique em Salvar para vincular.</Alert>
                         )}

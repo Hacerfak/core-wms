@@ -31,26 +31,29 @@ public class OnboardingController {
             @RequestParam("file") MultipartFile file,
             @RequestParam("senha") String senha) {
 
+        String tenantOriginal = TenantContext.getTenant();
+
         try {
             // 1. Extrair dados do certificado
             var dados = certificadoService.extrairDados(file, senha);
 
+            // --- FORÇA O CONTEXTO MASTER PARA VALIDAR/SALVAR EMPRESA ---
+            TenantContext.setTenant(TenantContext.DEFAULT_TENANT_ID);
+
             // 2. Valida se já existe
             if (empresaRepository.existsByCnpj(dados.getCnpj())) {
-                return ResponseEntity.badRequest().body("Empresa com CNPJ " + dados.getCnpj() + " já cadastrada.");
+                throw new IllegalArgumentException("Empresa com CNPJ " + dados.getCnpj() + " já está cadastrada.");
             }
 
             // 3. Gera ID do Tenant
             String cnpjLimpo = dados.getCnpj().replaceAll("\\D", "");
             String tenantId = "tenant_" + cnpjLimpo;
 
-            // 4. Cria o Banco de Dados Físico e Roda Migrations
+            // 4. Cria Infra (Banco e Config)
             provisioningService.criarBancoDeDados(tenantId);
-
-            // 5. Inicializa a tabela de configuração interna do tenant
             provisioningService.inicializarConfiguracao(tenantId, dados.getRazaoSocial(), dados.getCnpj());
 
-            // 6. Salva a Empresa no Banco Master
+            // 5. Salva a Empresa no Banco Master
             Empresa novaEmpresa = Empresa.builder()
                     .razaoSocial(dados.getRazaoSocial())
                     .cnpj(cnpjLimpo)
@@ -62,7 +65,7 @@ public class OnboardingController {
 
             empresaRepository.save(novaEmpresa);
 
-            // 7. Vincula o Usuário Logado
+            // 6. Vincula o Usuário Logado
             String loginUsuario = SecurityContextHolder.getContext().getAuthentication().getName();
             Usuario usuario = usuarioRepository.findByLogin(loginUsuario).orElseThrow();
 
@@ -73,17 +76,16 @@ public class OnboardingController {
                     .build();
             usuarioEmpresaRepository.save(vinculo);
 
-            // 8. CRÍTICO: Entrar no Tenant e dar o perfil de Administrador
+            // 7. Perfil Administrador no Tenant
             try {
                 TenantContext.setTenant(tenantId);
 
-                // Busca o perfil que a migration deve ter criado
                 Perfil perfilAdmin = perfilRepository.findAll().stream()
                         .filter(p -> p.getNome().equalsIgnoreCase("Administrador Local")
                                 || p.getNome().equalsIgnoreCase("Administrador"))
                         .findFirst()
                         .orElseThrow(() -> new RuntimeException(
-                                "Perfil de Administrador não encontrado no novo banco. Verifique as migrations V17+."));
+                                "Perfil de Administrador não encontrado no novo banco."));
 
                 UsuarioPerfil up = UsuarioPerfil.builder()
                         .usuarioId(usuario.getId())
@@ -93,15 +95,29 @@ public class OnboardingController {
                 usuarioPerfilRepository.save(up);
 
             } finally {
-                TenantContext.clear();
+                if (tenantOriginal != null) {
+                    TenantContext.setTenant(tenantOriginal);
+                } else {
+                    TenantContext.clear();
+                }
             }
 
-            return ResponseEntity.ok("Empresa criada e usuário vinculado como Administrador!");
+            return ResponseEntity.ok("Ambiente criado com sucesso!");
+
+        } catch (IllegalArgumentException e) {
+            // Erros de validação (Senha errada, CNPJ duplicado) -> 400 Bad Request
+            // O front vai receber apenas a mensagem limpa
+            return ResponseEntity.badRequest().body(e.getMessage());
 
         } catch (Exception e) {
+            // Erros técnicos inesperados -> 500 Internal Server Error
             e.printStackTrace();
-            // Retorna o erro detalhado para o frontend mostrar no Alert
-            return ResponseEntity.internalServerError().body("Erro no Onboarding: " + e.getMessage());
+            if (tenantOriginal != null) {
+                TenantContext.setTenant(tenantOriginal);
+            } else {
+                TenantContext.clear();
+            }
+            return ResponseEntity.internalServerError().body("Erro interno no Onboarding: " + e.getMessage());
         }
     }
 }
