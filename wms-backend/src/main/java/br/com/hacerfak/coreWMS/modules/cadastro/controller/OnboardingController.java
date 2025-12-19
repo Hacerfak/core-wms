@@ -1,6 +1,8 @@
 package br.com.hacerfak.coreWMS.modules.cadastro.controller;
 
 import br.com.hacerfak.coreWMS.modules.cadastro.domain.Empresa;
+import br.com.hacerfak.coreWMS.modules.cadastro.domain.EmpresaConfig;
+import br.com.hacerfak.coreWMS.modules.cadastro.repository.EmpresaConfigRepository;
 import br.com.hacerfak.coreWMS.modules.cadastro.repository.EmpresaRepository;
 import br.com.hacerfak.coreWMS.modules.cadastro.service.CertificadoService;
 import br.com.hacerfak.coreWMS.modules.cadastro.service.TenantProvisioningService;
@@ -26,6 +28,9 @@ public class OnboardingController {
     private final PerfilRepository perfilRepository;
     private final UsuarioPerfilRepository usuarioPerfilRepository;
 
+    // Repositório do Tenant (EmpresaConfig) para salvar o certificado
+    private final EmpresaConfigRepository empresaConfigRepository;
+
     @PostMapping("/upload-certificado")
     public ResponseEntity<?> uploadCertificado(
             @RequestParam("file") MultipartFile file,
@@ -45,15 +50,14 @@ public class OnboardingController {
                 throw new IllegalArgumentException("Empresa com CNPJ " + dados.getCnpj() + " já está cadastrada.");
             }
 
-            // 3. Gera ID do Tenant
+            // 3. Gera ID do Tenant e Cria Infra
             String cnpjLimpo = dados.getCnpj().replaceAll("\\D", "");
             String tenantId = "tenant_" + cnpjLimpo;
 
-            // 4. Cria Infra (Banco e Config)
             provisioningService.criarBancoDeDados(tenantId);
             provisioningService.inicializarConfiguracao(tenantId, dados.getRazaoSocial(), dados.getCnpj());
 
-            // 5. Salva a Empresa no Banco Master
+            // 4. Salva a Empresa no Banco Master
             Empresa novaEmpresa = Empresa.builder()
                     .razaoSocial(dados.getRazaoSocial())
                     .cnpj(cnpjLimpo)
@@ -65,7 +69,7 @@ public class OnboardingController {
 
             empresaRepository.save(novaEmpresa);
 
-            // 6. Vincula o Usuário Logado
+            // 5. Vincula o Usuário Logado
             String loginUsuario = SecurityContextHolder.getContext().getAuthentication().getName();
             Usuario usuario = usuarioRepository.findByLogin(loginUsuario).orElseThrow();
 
@@ -76,23 +80,37 @@ public class OnboardingController {
                     .build();
             usuarioEmpresaRepository.save(vinculo);
 
-            // 7. Perfil Administrador no Tenant
+            // 6. ENTRA NO TENANT PARA CONFIGURAR: PERFIL + CERTIFICADO
             try {
                 TenantContext.setTenant(tenantId);
 
+                // A. Vincula Perfil Admin ao Usuário
                 Perfil perfilAdmin = perfilRepository.findAll().stream()
                         .filter(p -> p.getNome().equalsIgnoreCase("Administrador Local")
                                 || p.getNome().equalsIgnoreCase("Administrador"))
                         .findFirst()
-                        .orElseThrow(() -> new RuntimeException(
-                                "Perfil de Administrador não encontrado no novo banco."));
+                        .orElseThrow(() -> new RuntimeException("Perfil Admin não encontrado."));
 
                 UsuarioPerfil up = UsuarioPerfil.builder()
                         .usuarioId(usuario.getId())
                         .perfil(perfilAdmin)
                         .build();
-
                 usuarioPerfilRepository.save(up);
+
+                // B. SALVA O CERTIFICADO NO BANCO DO TENANT (tb_empresa_config)
+                // O registro ID 1 já foi criado pelo
+                // provisioningService.inicializarConfiguracao
+                EmpresaConfig config = empresaConfigRepository.findById(1L).orElseThrow();
+
+                config.setCertificadoArquivo(file.getBytes()); // Salva o binário
+                config.setCertificadoSenha(senha); // Salva a senha
+
+                // Tenta extrair UF do certificado se possível, ou deixa SP padrão
+                // (Geralmente certificado A1 não tem UF explícita fácil no Subject, mas o CNPJ
+                // diz a origem)
+                // Vamos manter o padrão que veio do SQL e o usuário ajusta depois se precisar.
+
+                empresaConfigRepository.save(config);
 
             } finally {
                 if (tenantOriginal != null) {
@@ -102,22 +120,18 @@ public class OnboardingController {
                 }
             }
 
-            return ResponseEntity.ok("Ambiente criado com sucesso!");
+            return ResponseEntity.ok("Ambiente criado com sucesso! Certificado configurado.");
 
         } catch (IllegalArgumentException e) {
-            // Erros de validação (Senha errada, CNPJ duplicado) -> 400 Bad Request
-            // O front vai receber apenas a mensagem limpa
             return ResponseEntity.badRequest().body(e.getMessage());
-
         } catch (Exception e) {
-            // Erros técnicos inesperados -> 500 Internal Server Error
             e.printStackTrace();
             if (tenantOriginal != null) {
                 TenantContext.setTenant(tenantOriginal);
             } else {
                 TenantContext.clear();
             }
-            return ResponseEntity.internalServerError().body("Erro interno no Onboarding: " + e.getMessage());
+            return ResponseEntity.internalServerError().body("Erro no Onboarding: " + e.getMessage());
         }
     }
 }

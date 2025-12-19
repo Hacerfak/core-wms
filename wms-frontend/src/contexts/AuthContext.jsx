@@ -1,11 +1,11 @@
 import { createContext, useState, useEffect, useCallback } from 'react';
 import api from '../services/api';
 import { jwtDecode } from 'jwt-decode';
-import { useNavigate, useLocation } from 'react-router-dom'; // IMPORTANTE
+import { useNavigate, useLocation } from 'react-router-dom';
 
 export const AuthContext = createContext();
 
-// Mapa de rotas principais e suas permissões (sincronizado com Sidebar)
+// Mapa de rotas principais e suas permissões
 const ROUTE_PERMISSIONS = {
     '/recebimento': 'RECEBIMENTO_VISUALIZAR',
     '/estoque': 'ESTOQUE_VISUALIZAR',
@@ -20,8 +20,8 @@ export const AuthProvider = ({ children }) => {
     const [permissions, setPermissions] = useState([]);
     const [loading, setLoading] = useState(true);
 
-    const navigate = useNavigate(); // Hook de navegação
-    const location = useLocation(); // Hook para saber onde estou
+    const navigate = useNavigate();
+    const location = useLocation();
 
     const processToken = useCallback((token) => {
         if (!token) return null;
@@ -29,7 +29,7 @@ export const AuthProvider = ({ children }) => {
             const decoded = jwtDecode(token);
             const userPermissions = decoded.roles || [];
             setPermissions(userPermissions);
-            return { decoded, userPermissions }; // Retorna permissões também
+            return { decoded, userPermissions };
         } catch (error) {
             console.error("Erro ao decodificar token", error);
             return null;
@@ -39,6 +39,8 @@ export const AuthProvider = ({ children }) => {
     useEffect(() => {
         const recoveredUser = localStorage.getItem('wms_user');
         const token = localStorage.getItem('wms_token');
+        // Recupera também o Tenant salvo, se houver
+        const savedTenant = localStorage.getItem('@App:tenant');
 
         if (token && recoveredUser) {
             try {
@@ -46,7 +48,9 @@ export const AuthProvider = ({ children }) => {
                 if (result && result.decoded.exp * 1000 < Date.now()) {
                     logout();
                 } else {
-                    setUser(JSON.parse(recoveredUser));
+                    const parsedUser = JSON.parse(recoveredUser);
+                    // Mescla o tenant salvo no objeto de usuário para consistência
+                    setUser({ ...parsedUser, tenantId: savedTenant || parsedUser.tenantId });
                     api.defaults.headers.Authorization = `Bearer ${token}`;
                 }
             } catch (error) {
@@ -82,8 +86,16 @@ export const AuthProvider = ({ children }) => {
             const response = await api.post('/auth/selecionar-empresa', { tenantId });
             const newToken = response.data.token;
 
+            // 1. Salva Token
             localStorage.setItem('wms_token', newToken);
+
+            // 2. CORREÇÃO PRINCIPAL: Salva o Tenant ID para o Front saber onde está
+            localStorage.setItem('@App:tenant', tenantId);
+
             api.defaults.headers.Authorization = `Bearer ${newToken}`;
+
+            // 3. Atualiza Estado do Usuário imediatamente (para não precisar de reload)
+            setUser(prev => ({ ...prev, tenantId: tenantId }));
 
             // Processa o novo token e PEGA AS NOVAS PERMISSÕES
             const result = processToken(newToken);
@@ -91,10 +103,8 @@ export const AuthProvider = ({ children }) => {
 
             // --- REDIRECIONAMENTO INTELIGENTE ---
             const currentPath = location.pathname;
-
-            // Verifica se a rota atual exige permissão
             let requiredPermission = null;
-            // Procura se a rota atual começa com alguma das chaves do mapa (ex: /recebimento/novo começa com /recebimento)
+
             for (const route in ROUTE_PERMISSIONS) {
                 if (currentPath.startsWith(route)) {
                     requiredPermission = ROUTE_PERMISSIONS[route];
@@ -102,7 +112,6 @@ export const AuthProvider = ({ children }) => {
                 }
             }
 
-            // Se a rota exige permissão e o usuário NÃO tem (e não é Master Admin)
             if (requiredPermission) {
                 const isMaster = user?.role === 'ADMIN';
                 const hasPermission = newPermissions.includes(requiredPermission) ||
@@ -125,10 +134,11 @@ export const AuthProvider = ({ children }) => {
     const logout = () => {
         localStorage.removeItem('wms_token');
         localStorage.removeItem('wms_user');
+        localStorage.removeItem('@App:tenant'); // Limpa o tenant também
         api.defaults.headers.Authorization = null;
         setUser(null);
         setPermissions([]);
-        navigate('/login'); // Força ida para login ao deslogar
+        navigate('/login');
     };
 
     const userCan = (permission) => {
@@ -178,6 +188,7 @@ export const AuthProvider = ({ children }) => {
             logout,
             loading,
             selecionarEmpresa,
+            switchTenant: selecionarEmpresa,
             refreshUserCompanies,
             forceUpdatePermissions
         }}>

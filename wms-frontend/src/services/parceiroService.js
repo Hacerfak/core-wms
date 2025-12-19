@@ -11,30 +11,17 @@ export const getParceiroById = async (id) => {
 };
 
 export const salvarParceiro = async (form) => {
-    // PREPARA O DTO: O Backend espera tudo plano na raiz da entidade Parceiro
-    // Mas o nosso Form no React usa objetos aninhados (endereco, parametros) para organização.
+    // CORREÇÃO: O formulário agora é "plano" (flat), então não precisamos
+    // desestruturar endereco ou parametros. Enviamos o objeto direto.
+    // O Backend (ParceiroRequest) já espera esses campos na raiz.
 
-    const payload = {
-        id: form.id,
-        nome: form.nome,
-        documento: form.cnpjCpf, // Mapeando para o campo Java 'documento'
-        tipo: form.tipo,
-        email: form.email,
-        telefone: form.telefone,
-        ativo: form.ativo,
+    const payload = { ...form };
 
-        // Achata Endereço
-        cep: form.endereco.cep,
-        logradouro: form.endereco.logradouro,
-        numero: form.endereco.numero,
-        complemento: form.endereco.complemento,
-        bairro: form.endereco.bairro,
-        cidade: form.endereco.cidade,
-        uf: form.endereco.uf,
-
-        // Achata Parâmetros
-        recebimentoCego: form.parametros.recebimentoCego
-    };
+    // Garante que o campo 'documento' esteja preenchido 
+    // (caso o form use nomes legados em algum lugar)
+    if (!payload.documento && payload.cnpjCpf) {
+        payload.documento = payload.cnpjCpf;
+    }
 
     if (form.id) {
         await api.put(`/api/parceiros/${form.id}`, payload);
@@ -48,8 +35,6 @@ export const excluirParceiro = async (id) => {
 };
 
 export const buscarEnderecoPorCep = async (cep) => {
-    // Pode usar uma API pública ou proxy no seu backend
-    // Exemplo direto ViaCEP (Front-only) ou via seu Backend (Recomendado para segurança)
     try {
         const cleanCep = cep.replace(/\D/g, '');
         const response = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);

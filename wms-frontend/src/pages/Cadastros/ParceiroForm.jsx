@@ -1,246 +1,256 @@
 import { useState, useEffect } from 'react';
 import {
-    Dialog, DialogTitle, DialogContent, DialogActions, Button,
-    TextField, Box, Grid, Tabs, Tab, FormControlLabel, Switch,
-    MenuItem, InputAdornment, Typography, Paper, IconButton
+    Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField,
+    Grid, Typography, Divider, MenuItem, InputAdornment, IconButton,
+    CircularProgress, Paper, Switch, FormControlLabel
 } from '@mui/material';
-import { User, MapPin, Settings2, Search, Loader2 } from 'lucide-react';
+import { Save, X, Search, MapPin, Briefcase, Phone, Settings, AlertTriangle } from 'lucide-react';
 import { toast } from 'react-toastify';
-import { salvarParceiro, buscarEnderecoPorCep } from '../../services/parceiroService';
+import { salvarParceiro } from '../../services/parceiroService';
+import { consultarCnpjSefaz } from '../../services/integracaoService';
 
-const ParceiroForm = ({ open, onClose, parceiro, onSuccess }) => {
-    const [tabIndex, setTabIndex] = useState(0);
+// Lista Completa de UFs
+const ESTADOS_BR = [
+    'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS',
+    'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'
+];
+
+const ParceiroForm = ({ open, onClose, onSuccess, initialData }) => {
     const [loading, setLoading] = useState(false);
-    const [loadingCep, setLoadingCep] = useState(false);
+    const [buscandoCnpj, setBuscandoCnpj] = useState(false);
 
+    // Estado Plano (Flat) para facilitar o envio para o Java
     const [form, setForm] = useState({
-        nome: '',
-        cnpjCpf: '',
-        tipo: 'AMBOS',
-        email: '',
-        telefone: '',
-        ativo: true,
-        ie: '',
-        crt: '',
-        endereco: {
-            cep: '', logradouro: '', numero: '', complemento: '',
-            bairro: '', cidade: '', uf: ''
-        },
-        parametros: {
-            recebimentoCego: false
-        }
+        id: '', documento: '', nome: '', nomeFantasia: '', ie: '', tipo: 'AMBOS', crt: '3',
+        cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', uf: 'SP',
+        telefone: '', email: '',
+        recebimentoCego: false,
+        padraoControlaLote: false,
+        padraoControlaValidade: false,
+        padraoControlaSerie: false,
+        ativo: true
     });
 
     useEffect(() => {
         if (open) {
-            setTabIndex(0);
-            if (parceiro) {
-                // --- CORREÇÃO DE MAPEAMENTO (API -> FORM) ---
-                setForm({
-                    id: parceiro.id,
-                    nome: parceiro.nome || '',
-                    cnpjCpf: parceiro.documento || '', // API manda 'documento', Form usa 'cnpjCpf'
-                    tipo: parceiro.tipo || 'AMBOS',
-                    email: parceiro.email || '',
-                    telefone: parceiro.telefone || '',
-                    ativo: parceiro.ativo !== false,
-                    ie: parceiro.ie || '',
-                    crt: parceiro.crt || '',
-
-                    // Reconstrói o objeto endereço a partir dos campos planos da API
-                    endereco: {
-                        cep: parceiro.cep || '',
-                        logradouro: parceiro.logradouro || '',
-                        numero: parceiro.numero || '',
-                        complemento: parceiro.complemento || '', // Se tiver
-                        bairro: parceiro.bairro || '',
-                        cidade: parceiro.cidade || '',
-                        uf: parceiro.uf || ''
-                    },
-
-                    // Reconstrói parâmetros
-                    parametros: {
-                        recebimentoCego: parceiro.recebimentoCego || false
-                    }
-                });
+            if (initialData) {
+                // Se o initialData vier com endereco aninhado (do grid antigo), converte.
+                // Se vier plano (do backend novo), usa direto.
+                const dados = { ...initialData };
+                if (initialData.endereco && typeof initialData.endereco === 'object') {
+                    dados.cep = initialData.endereco.cep;
+                    dados.logradouro = initialData.endereco.logradouro;
+                    dados.numero = initialData.endereco.numero;
+                    dados.bairro = initialData.endereco.bairro;
+                    dados.cidade = initialData.endereco.cidade;
+                    dados.uf = initialData.endereco.uf;
+                    dados.complemento = initialData.endereco.complemento;
+                }
+                setForm(dados);
             } else {
-                // Reset para novo cadastro
                 setForm({
-                    nome: '', cnpjCpf: '', tipo: 'AMBOS', email: '', telefone: '', ativo: true, ie: '', crt: '',
-                    endereco: { cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', uf: '' },
-                    parametros: { recebimentoCego: false }
+                    id: '', documento: '', nome: '', nomeFantasia: '', ie: '', tipo: 'AMBOS', crt: '3',
+                    cep: '', logradouro: '', numero: '', complemento: '', bairro: '', cidade: '', uf: 'SP',
+                    telefone: '', email: '',
+                    recebimentoCego: false, padraoControlaLote: false, padraoControlaValidade: false, padraoControlaSerie: false, ativo: true
                 });
             }
         }
-    }, [open, parceiro]);
+    }, [open, initialData]);
 
-    const handleChange = (field, value) => {
-        setForm(prev => ({ ...prev, [field]: value }));
-    };
+    const handleChange = (field, value) => setForm(prev => ({ ...prev, [field]: value }));
+    const handleSwitchChange = (field) => setForm(prev => ({ ...prev, [field]: !prev[field] }));
 
-    const handleAddressChange = (field, value) => {
-        setForm(prev => ({
-            ...prev,
-            endereco: { ...prev.endereco, [field]: value }
-        }));
-    };
+    const handleBuscarSefaz = async () => {
+        const docLimpo = form.documento.replace(/\D/g, '');
+        if (docLimpo.length !== 14) return toast.warning("CNPJ deve ter 14 dígitos.");
 
-    const handleParamChange = (field, value) => {
-        setForm(prev => ({
-            ...prev,
-            parametros: { ...prev.parametros, [field]: value }
-        }));
-    };
+        // Regra do Maranhão
+        if (form.uf === 'MA') return toast.warning("O estado do MA não permite consulta automática.");
 
-    const handleBuscarCep = async () => {
-        if (!form.endereco.cep || form.endereco.cep.length < 8) return;
-        setLoadingCep(true);
-        const data = await buscarEnderecoPorCep(form.endereco.cep);
-        if (data && !data.erro) {
+        setBuscandoCnpj(true);
+        try {
+            const dados = await consultarCnpjSefaz(form.uf, docLimpo);
             setForm(prev => ({
                 ...prev,
-                endereco: {
-                    ...prev.endereco,
-                    logradouro: data.logradouro,
-                    bairro: data.bairro,
-                    cidade: data.localidade,
-                    uf: data.uf
-                }
+                nome: dados.razaoSocial,
+                nomeFantasia: dados.nomeFantasia,
+                ie: dados.ie && dados.ie !== 'ISENTO' ? dados.ie : prev.ie,
+                crt: dados.regimeTributario || prev.crt,
+
+                // Endereço (Mantém a UF original se a Sefaz não retornar ou retornar vazia)
+                cep: dados.cep,
+                logradouro: dados.logradouro,
+                numero: dados.numero,
+                complemento: dados.complemento,
+                bairro: dados.bairro,
+                cidade: dados.cidade,
+                uf: dados.uf || prev.uf
             }));
-        } else {
-            toast.warning("CEP não encontrado.");
-        }
-        setLoadingCep(false);
+            toast.success("Dados da SEFAZ aplicados!");
+        } catch (error) {
+            toast.error("Erro na consulta SEFAZ.");
+        } finally { setBuscandoCnpj(false); }
     };
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
+    const handleSubmit = async () => {
         setLoading(true);
         try {
+            // Envia o form plano, que bate com a Entidade Java 'Parceiro'
             await salvarParceiro(form);
             toast.success("Parceiro salvo com sucesso!");
             onSuccess();
+            onClose();
         } catch (error) {
             console.error(error);
             toast.error("Erro ao salvar parceiro.");
-        } finally {
-            setLoading(false);
-        }
+        } finally { setLoading(false); }
     };
+
+    const isMa = form.uf === 'MA';
 
     return (
         <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-            <DialogTitle>{parceiro ? "Editar Parceiro" : "Novo Parceiro"}</DialogTitle>
-            <form onSubmit={handleSubmit}>
-                <DialogContent dividers sx={{ p: 0 }}>
-                    <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: '#f8fafc' }}>
-                        <Tabs value={tabIndex} onChange={(e, v) => setTabIndex(v)} sx={{ px: 2 }}>
-                            <Tab icon={<User size={18} />} iconPosition="start" label="Dados Gerais" />
-                            <Tab icon={<MapPin size={18} />} iconPosition="start" label="Endereço" />
-                            <Tab icon={<Settings2 size={18} />} iconPosition="start" label="Regras" />
-                        </Tabs>
-                    </Box>
+            <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pb: 1 }}>
+                <Typography variant="h6" fontWeight="bold">
+                    {form.id ? 'Editar Parceiro' : 'Novo Parceiro'}
+                </Typography>
+                <IconButton onClick={onClose} size="small"><X size={20} /></IconButton>
+            </DialogTitle>
+            <Divider />
 
-                    <Box sx={{ p: 3 }}>
-                        {/* ABA 0: DADOS GERAIS */}
-                        {tabIndex === 0 && (
-                            <Grid container spacing={2}>
-                                <Grid item xs={12} display="flex" justifyContent="flex-end">
-                                    <FormControlLabel control={<Switch checked={form.ativo} onChange={(e) => handleChange('ativo', e.target.checked)} color="success" />} label={form.ativo ? "Ativo" : "Inativo"} />
-                                </Grid>
-                                <Grid item xs={12} sm={8}>
-                                    <TextField label="Razão Social / Nome" fullWidth required value={form.nome} onChange={e => handleChange('nome', e.target.value)} />
-                                </Grid>
-                                <Grid item xs={12} sm={4}>
-                                    <TextField select label="Tipo" fullWidth value={form.tipo} onChange={e => handleChange('tipo', e.target.value)}>
-                                        <MenuItem value="FORNECEDOR">Fornecedor</MenuItem>
-                                        <MenuItem value="CLIENTE">Cliente</MenuItem>
-                                        <MenuItem value="AMBOS">Ambos</MenuItem>
-                                    </TextField>
-                                </Grid>
-                                <Grid item xs={12} sm={4}>
-                                    <TextField label="CNPJ / CPF" fullWidth required value={form.cnpjCpf} onChange={e => handleChange('cnpjCpf', e.target.value)} />
-                                </Grid>
-                                <Grid item xs={12} sm={4}>
-                                    <TextField label="Inscrição Estadual" fullWidth value={form.ie} onChange={e => handleChange('ie', e.target.value)} />
-                                </Grid>
-                                <Grid item xs={12} sm={4}>
-                                    <TextField label="CRT (Regime Trib.)" fullWidth value={form.crt} onChange={e => handleChange('crt', e.target.value)} placeholder="1=Simples, 3=Normal" />
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <TextField label="Telefone" fullWidth value={form.telefone} onChange={e => handleChange('telefone', e.target.value)} />
-                                </Grid>
-                                <Grid item xs={12} sm={6}>
-                                    <TextField label="E-mail" type="email" fullWidth value={form.email} onChange={e => handleChange('email', e.target.value)} />
-                                </Grid>
-                            </Grid>
-                        )}
+            <DialogContent sx={{ bgcolor: '#f8fafc', p: 3 }}>
 
-                        {/* ABA 1: ENDEREÇO */}
-                        {tabIndex === 1 && (
-                            <Grid container spacing={2}>
-                                <Grid item xs={12} sm={4}>
-                                    <TextField
-                                        label="CEP" fullWidth value={form.endereco.cep}
-                                        onChange={e => handleAddressChange('cep', e.target.value)}
-                                        InputProps={{
-                                            endAdornment: (
-                                                <InputAdornment position="end">
-                                                    <IconButton onClick={handleBuscarCep} edge="end" disabled={loadingCep}>
-                                                        {loadingCep ? <Loader2 size={20} className="animate-spin" /> : <Search size={20} />}
-                                                    </IconButton>
-                                                </InputAdornment>
-                                            )
-                                        }}
-                                    />
-                                </Grid>
-                                <Grid item xs={12} sm={8}>
-                                    <TextField label="Logradouro" fullWidth value={form.endereco.logradouro} onChange={e => handleAddressChange('logradouro', e.target.value)} />
-                                </Grid>
-                                <Grid item xs={12} sm={4}>
-                                    <TextField label="Número" fullWidth value={form.endereco.numero} onChange={e => handleAddressChange('numero', e.target.value)} />
-                                </Grid>
-                                <Grid item xs={12} sm={8}>
-                                    <TextField label="Complemento" fullWidth value={form.endereco.complemento} onChange={e => handleAddressChange('complemento', e.target.value)} />
-                                </Grid>
-                                <Grid item xs={12} sm={5}>
-                                    <TextField label="Bairro" fullWidth value={form.endereco.bairro} onChange={e => handleAddressChange('bairro', e.target.value)} />
-                                </Grid>
-                                <Grid item xs={12} sm={5}>
-                                    <TextField label="Cidade" fullWidth value={form.endereco.cidade} onChange={e => handleAddressChange('cidade', e.target.value)} />
-                                </Grid>
-                                <Grid item xs={12} sm={2}>
-                                    <TextField label="UF" fullWidth value={form.endereco.uf} onChange={e => handleAddressChange('uf', e.target.value)} />
-                                </Grid>
-                            </Grid>
-                        )}
+                {/* DADOS PRINCIPAIS */}
+                <Paper elevation={0} sx={{ p: 2, mb: 2, border: '1px solid #e2e8f0' }}>
+                    <Typography variant="subtitle2" color="primary" sx={{ mb: 2, display: 'flex', gap: 1, alignItems: 'center', fontWeight: 'bold' }}>
+                        <Briefcase size={18} /> Dados Fiscais
+                    </Typography>
+                    <Grid container spacing={2}>
+                        <Grid item xs={12} sm={3}>
+                            <TextField select label="Tipo" fullWidth size="small" value={form.tipo} onChange={e => handleChange('tipo', e.target.value)}>
+                                <MenuItem value="CLIENTE">Cliente</MenuItem>
+                                <MenuItem value="FORNECEDOR">Fornecedor</MenuItem>
+                                <MenuItem value="TRANSPORTADORA">Transportadora</MenuItem>
+                                <MenuItem value="AMBOS">Híbrido</MenuItem>
+                            </TextField>
+                        </Grid>
 
-                        {/* ABA 2: PARÂMETROS */}
-                        {tabIndex === 2 && (
-                            <Box>
-                                <Typography variant="subtitle2" color="primary" fontWeight="bold" gutterBottom>Recebimento</Typography>
-                                <Paper variant="outlined" sx={{ p: 2 }}>
-                                    <Grid container alignItems="center" justifyContent="space-between">
-                                        <Grid item xs={9}>
-                                            <Typography fontWeight="bold">Conferência Cega</Typography>
-                                            <Typography variant="body2" color="text.secondary">Oculta as quantidades da Nota Fiscal na conferência.</Typography>
-                                        </Grid>
-                                        <Grid item xs={3} textAlign="right">
-                                            <Switch checked={form.parametros.recebimentoCego} onChange={(e) => handleParamChange('recebimentoCego', e.target.checked)} />
-                                        </Grid>
-                                    </Grid>
-                                </Paper>
-                            </Box>
-                        )}
-                    </Box>
-                </DialogContent>
-                <DialogActions sx={{ p: 2 }}>
-                    <Button onClick={onClose}>Cancelar</Button>
-                    <Button type="submit" variant="contained" disabled={loading}>Salvar</Button>
-                </DialogActions>
-            </form>
+                        {/* UF PRINCIPAL (Controla a Busca) */}
+                        <Grid item xs={12} sm={2}>
+                            <TextField select label="UF" fullWidth size="small" value={form.uf} onChange={e => handleChange('uf', e.target.value)}>
+                                {ESTADOS_BR.map(u => <MenuItem key={u} value={u}>{u}</MenuItem>)}
+                            </TextField>
+                        </Grid>
+
+                        <Grid item xs={12} sm={4}>
+                            <TextField label="CNPJ / CPF" fullWidth size="small" value={form.documento} onChange={e => handleChange('documento', e.target.value)}
+                                InputProps={{
+                                    endAdornment: (
+                                        <InputAdornment position="end">
+                                            <IconButton
+                                                onClick={handleBuscarSefaz}
+                                                disabled={buscandoCnpj || isMa}
+                                                edge="end"
+                                                title={isMa ? "Consulta indisponível para MA" : "Buscar na SEFAZ"}
+                                            >
+                                                {buscandoCnpj ? <CircularProgress size={16} /> : <Search size={18} color={isMa ? '#ccc' : '#1976d2'} />}
+                                            </IconButton>
+                                        </InputAdornment>
+                                    )
+                                }}
+                                helperText={isMa ? "Consulta SEFAZ indisponível para MA" : ""}
+                            />
+                        </Grid>
+                        <Grid item xs={12} sm={3}>
+                            <TextField select label="Regime (CRT)" fullWidth size="small" value={form.crt} onChange={e => handleChange('crt', e.target.value)}>
+                                <MenuItem value="1">1 - Simples Nacional</MenuItem>
+                                <MenuItem value="2">2 - Simples (Excesso)</MenuItem>
+                                <MenuItem value="3">3 - Regime Normal</MenuItem>
+                                <MenuItem value="4">4 - MEI</MenuItem>
+                            </TextField>
+                        </Grid>
+
+                        <Grid item xs={12} sm={6}>
+                            <TextField label="Razão Social" fullWidth size="small" required value={form.nome} onChange={e => handleChange('nome', e.target.value)} />
+                        </Grid>
+                        <Grid item xs={12} sm={3}>
+                            <TextField label="Nome Fantasia" fullWidth size="small" value={form.nomeFantasia} onChange={e => handleChange('nomeFantasia', e.target.value)} />
+                        </Grid>
+                        <Grid item xs={12} sm={3}>
+                            <TextField label="Insc. Estadual" fullWidth size="small" value={form.ie} onChange={e => handleChange('ie', e.target.value)} />
+                        </Grid>
+                    </Grid>
+                </Paper>
+
+                {/* ENDEREÇO E CONTATO */}
+                <Paper elevation={0} sx={{ p: 2, mb: 2, border: '1px solid #e2e8f0' }}>
+                    <Typography variant="subtitle2" color="primary" sx={{ mb: 2, display: 'flex', gap: 1, alignItems: 'center', fontWeight: 'bold' }}>
+                        <MapPin size={18} /> Endereço e Contato
+                    </Typography>
+                    <Grid container spacing={2}>
+                        <Grid item xs={12} sm={3}>
+                            <TextField label="CEP" fullWidth size="small" value={form.cep} onChange={e => handleChange('cep', e.target.value)} />
+                        </Grid>
+                        <Grid item xs={12} sm={7}>
+                            <TextField label="Logradouro" fullWidth size="small" value={form.logradouro} onChange={e => handleChange('logradouro', e.target.value)} />
+                        </Grid>
+                        <Grid item xs={12} sm={2}>
+                            <TextField label="Número" fullWidth size="small" value={form.numero} onChange={e => handleChange('numero', e.target.value)} />
+                        </Grid>
+                        <Grid item xs={12} sm={5}>
+                            <TextField label="Bairro" fullWidth size="small" value={form.bairro} onChange={e => handleChange('bairro', e.target.value)} />
+                        </Grid>
+                        <Grid item xs={12} sm={5}>
+                            <TextField label="Cidade" fullWidth size="small" value={form.cidade} onChange={e => handleChange('cidade', e.target.value)} />
+                        </Grid>
+                        <Grid item xs={12} sm={2}>
+                            <TextField disabled label="UF" fullWidth size="small" value={form.uf} />
+                        </Grid>
+
+                        <Grid item xs={12}><Divider sx={{ borderStyle: 'dashed' }} /></Grid>
+
+                        <Grid item xs={12} sm={6}>
+                            <TextField label="Email" fullWidth size="small" value={form.email} onChange={e => handleChange('email', e.target.value)} />
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <TextField label="Telefone" fullWidth size="small" value={form.telefone} onChange={e => handleChange('telefone', e.target.value)} />
+                        </Grid>
+                    </Grid>
+                </Paper>
+
+                {/* PARÂMETROS */}
+                <Paper elevation={0} sx={{ p: 2, border: '1px solid #e2e8f0', bgcolor: '#fff' }}>
+                    <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1, display: 'flex', gap: 1, alignItems: 'center', fontWeight: 'bold' }}>
+                        <Settings size={16} /> Configurações de Operação
+                    </Typography>
+                    <Grid container spacing={2}>
+                        <Grid item xs={12} sm={6}>
+                            <FormControlLabel control={<Switch size="small" checked={form.recebimentoCego} onChange={() => handleSwitchChange('recebimentoCego')} />} label="Recebimento Cego" />
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <FormControlLabel control={<Switch size="small" checked={form.padraoControlaLote} onChange={() => handleSwitchChange('padraoControlaLote')} />} label="Controla Lote (Padrão)" />
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <FormControlLabel control={<Switch size="small" checked={form.padraoControlaValidade} onChange={() => handleSwitchChange('padraoControlaValidade')} />} label="Controla Validade (Padrão)" />
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <FormControlLabel control={<Switch size="small" checked={form.padraoControlaSerie} onChange={() => handleSwitchChange('padraoControlaSerie')} />} label="Controla Série (Padrão)" />
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                            <FormControlLabel control={<Switch size="small" color="success" checked={form.ativo} onChange={() => handleSwitchChange('ativo')} />} label="Parceiro Ativo" />
+                        </Grid>
+                    </Grid>
+                </Paper>
+            </DialogContent>
+
+            <DialogActions sx={{ p: 2, bgcolor: '#f8fafc', borderTop: '1px solid #e2e8f0' }}>
+                <Button onClick={onClose} color="inherit">Cancelar</Button>
+                <Button variant="contained" onClick={handleSubmit} disabled={loading} startIcon={<Save size={18} />}>
+                    {loading ? "Salvando..." : "Salvar"}
+                </Button>
+            </DialogActions>
         </Dialog>
     );
 };
-
 export default ParceiroForm;

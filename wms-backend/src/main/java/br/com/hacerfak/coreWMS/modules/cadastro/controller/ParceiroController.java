@@ -1,13 +1,13 @@
 package br.com.hacerfak.coreWMS.modules.cadastro.controller;
 
 import br.com.hacerfak.coreWMS.modules.cadastro.domain.Parceiro;
-import br.com.hacerfak.coreWMS.modules.cadastro.dto.ParceiroRequest; // Import do DTO
+import br.com.hacerfak.coreWMS.modules.cadastro.dto.ParceiroRequest;
 import br.com.hacerfak.coreWMS.modules.cadastro.repository.ParceiroRepository;
-import jakarta.validation.Valid; // Import para validação
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
@@ -19,67 +19,82 @@ public class ParceiroController {
     private final ParceiroRepository repository;
 
     @GetMapping
-    @PreAuthorize("hasAuthority('PARCEIRO_VISUALIZAR') or hasRole('ADMIN')")
+    @PreAuthorize("hasAuthority('CADASTRO_VISUALIZAR') or hasRole('ADMIN')")
     public ResponseEntity<List<Parceiro>> listar() {
         return ResponseEntity.ok(repository.findAll());
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('PARCEIRO_VISUALIZAR') or hasRole('ADMIN')")
+    @PreAuthorize("hasAuthority('CADASTRO_VISUALIZAR') or hasRole('ADMIN')")
     public ResponseEntity<Parceiro> buscarPorId(@PathVariable Long id) {
         return repository.findById(id)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    // --- CREATE COM DTO ---
     @PostMapping
-    @PreAuthorize("hasAuthority('PARCEIRO_CRIAR') or hasRole('ADMIN')")
+    @PreAuthorize("hasAuthority('CADASTRO_EDITAR') or hasRole('ADMIN')")
     public ResponseEntity<Parceiro> criar(@RequestBody @Valid ParceiroRequest dto) {
         Parceiro parceiro = Parceiro.builder()
                 .nome(dto.nome())
-                .documento(dto.documento())
+                .documento(dto.documento().replaceAll("\\D", "")) // Limpa CNPJ
                 .ie(dto.ie())
                 .nomeFantasia(dto.nomeFantasia())
+                .crt(dto.crt())
+                .tipo(dto.tipo() != null ? dto.tipo() : "AMBOS")
+
+                // Configs
                 .ativo(dto.ativo() != null ? dto.ativo() : true)
                 .recebimentoCego(dto.recebimentoCego() != null ? dto.recebimentoCego() : false)
+                .padraoControlaLote(dto.padraoControlaLote() != null ? dto.padraoControlaLote() : false)
+                .padraoControlaValidade(dto.padraoControlaValidade() != null ? dto.padraoControlaValidade() : false)
+                .padraoControlaSerie(dto.padraoControlaSerie() != null ? dto.padraoControlaSerie() : false)
+
                 // Endereço
                 .cep(dto.cep())
                 .logradouro(dto.logradouro())
                 .numero(dto.numero())
+                .complemento(dto.complemento()) // <--- Adicionado
                 .bairro(dto.bairro())
                 .cidade(dto.cidade())
                 .uf(dto.uf())
+
                 // Contato
                 .telefone(dto.telefone())
                 .email(dto.email())
-                .crt(dto.crt())
-                .tipo(dto.tipo() != null ? dto.tipo() : "AMBOS") // Default seguro se vier nulo da API
                 .build();
 
         return ResponseEntity.ok(repository.save(parceiro));
     }
 
-    // --- UPDATE COM DTO ---
     @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('PARCEIRO_EDITAR') or hasRole('ADMIN')")
+    @PreAuthorize("hasAuthority('CADASTRO_EDITAR') or hasRole('ADMIN')")
     public ResponseEntity<Parceiro> atualizar(@PathVariable Long id, @RequestBody @Valid ParceiroRequest dto) {
         return repository.findById(id).map(parceiro -> {
             parceiro.setNome(dto.nome());
-            parceiro.setDocumento(dto.documento());
+            parceiro.setDocumento(dto.documento().replaceAll("\\D", ""));
             parceiro.setIe(dto.ie());
             parceiro.setNomeFantasia(dto.nomeFantasia());
+            parceiro.setCrt(dto.crt());
+            parceiro.setTipo(dto.tipo());
 
             // Configurações
             if (dto.ativo() != null)
                 parceiro.setAtivo(dto.ativo());
             if (dto.recebimentoCego() != null)
                 parceiro.setRecebimentoCego(dto.recebimentoCego());
+            if (dto.padraoControlaLote() != null)
+                parceiro.setPadraoControlaLote(dto.padraoControlaLote());
+            if (dto.padraoControlaValidade() != null)
+                parceiro.setPadraoControlaValidade(dto.padraoControlaValidade());
+            if (dto.padraoControlaSerie() != null)
+                parceiro.setPadraoControlaSerie(dto.padraoControlaSerie());
 
             // Endereço
             parceiro.setCep(dto.cep());
             parceiro.setLogradouro(dto.logradouro());
             parceiro.setNumero(dto.numero());
+            parceiro.setComplemento(dto.complemento()); // <--- Adicionado
             parceiro.setBairro(dto.bairro());
             parceiro.setCidade(dto.cidade());
             parceiro.setUf(dto.uf());
@@ -87,23 +102,15 @@ public class ParceiroController {
             // Contato
             parceiro.setTelefone(dto.telefone());
             parceiro.setEmail(dto.email());
-            parceiro.setCrt(dto.crt());
-            parceiro.setTipo(dto.tipo());
 
             return ResponseEntity.ok(repository.save(parceiro));
         }).orElse(ResponseEntity.notFound().build());
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAuthority('PARCEIRO_EXCLUIR') or hasRole('ADMIN')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> deletar(@PathVariable Long id) {
-        if (!repository.existsById(id))
-            return ResponseEntity.notFound().build();
-        try {
-            repository.deleteById(id);
-            return ResponseEntity.noContent().build();
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().build();
-        }
+        repository.deleteById(id);
+        return ResponseEntity.noContent().build();
     }
 }

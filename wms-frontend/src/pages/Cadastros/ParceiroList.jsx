@@ -93,7 +93,6 @@ const ParceiroList = () => {
                                             </Box>
                                         </Box>
                                     </TableCell>
-                                    {/* CORREÇÃO AQUI: Usa p.documento ao invés de p.cnpjCpf */}
                                     <TableCell>{p.documento}</TableCell>
                                     <TableCell>
                                         <Chip
@@ -103,7 +102,6 @@ const ParceiroList = () => {
                                             variant="outlined"
                                         />
                                     </TableCell>
-                                    {/* CORREÇÃO AQUI: Usa p.cidade direto (não tem p.endereco) */}
                                     <TableCell>
                                         <Box display="flex" alignItems="center" gap={0.5} color="text.secondary">
                                             <MapPin size={14} />
@@ -154,7 +152,8 @@ const ParceiroList = () => {
             <ParceiroForm
                 open={modalOpen}
                 onClose={() => setModalOpen(false)}
-                parceiro={parceiroEditando}
+                // CORREÇÃO: Mudado de 'parceiro' para 'initialData' para casar com o Form
+                initialData={parceiroEditando}
                 onSuccess={() => { setModalOpen(false); loadData(); }}
             />
 
