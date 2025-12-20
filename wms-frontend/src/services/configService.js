@@ -1,12 +1,25 @@
 import api from './api';
 
+// Busca todas as configurações globais (Tabela tb_sistema_config)
 export const getConfiguracoes = async () => {
-    const response = await api.get('/api/configuracoes');
+    const response = await api.get('/api/sistema-config');
     return response.data;
 };
 
+// Busca uma configuração específica (Ex: para validações rápidas)
+export const getConfiguracaoValor = async (chave) => {
+    try {
+        const response = await api.get(`/api/sistema-config/valor/${chave}`);
+        return response.data;
+    } catch (error) {
+        return null;
+    }
+};
+
+// Atualiza uma configuração específica
 export const updateConfiguracao = async (chave, valor) => {
-    await api.put(`/api/configuracoes/${chave}`, { valor: String(valor) });
+    const response = await api.put(`/api/sistema-config/${chave}`, { valor });
+    return response.data;
 };
 
 export const checkExibirQtdRecebimento = async (recebimentoId) => {

@@ -4,7 +4,7 @@ import br.com.hacerfak.coreWMS.core.config.MultiTenantConfig;
 import br.com.hacerfak.coreWMS.core.multitenant.MultiTenantDataSource;
 import org.flywaydb.core.Flyway;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Lazy; // Importante para evitar ciclo
+import org.springframework.context.annotation.Lazy;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.stereotype.Service;
@@ -14,8 +14,8 @@ import javax.sql.DataSource;
 @Service
 public class TenantProvisioningService {
 
-    private final JdbcTemplate jdbcTemplate; // Conectado ao Master
-    private final MultiTenantDataSource multiTenantDataSource; // Bean de Roteamento
+    private final JdbcTemplate jdbcTemplate;
+    private final MultiTenantDataSource multiTenantDataSource;
     private final MultiTenantConfig multiTenantConfig;
 
     @Value("${spring.datasource.url}")
@@ -25,8 +25,6 @@ public class TenantProvisioningService {
     @Value("${spring.datasource.password}")
     private String password;
 
-    // Use @Lazy no MultiTenantDataSource para evitar dependência circular na
-    // inicialização
     public TenantProvisioningService(DataSource masterDataSource,
             @Lazy MultiTenantDataSource multiTenantDataSource,
             MultiTenantConfig multiTenantConfig) {
@@ -36,7 +34,6 @@ public class TenantProvisioningService {
     }
 
     public void criarBancoDeDados(String tenantId) {
-        // 1. Verifica e cria (Mantém igual seu código anterior)
         String checkSql = "SELECT count(*) FROM pg_database WHERE datname = ?";
         Integer count = jdbcTemplate.queryForObject(checkSql, Integer.class, tenantId);
 
@@ -45,22 +42,17 @@ public class TenantProvisioningService {
             jdbcTemplate.execute(createSql);
             System.out.println("Banco de dados " + tenantId + " criado com sucesso!");
         }
-
-        // 2. Roda Migrations (Mantém igual)
         rodarMigracoes(tenantId);
     }
 
     private void registrarTenantNoPool(String tenantId) {
-        System.out.println(">>> Adicionando tenant " + tenantId + " ao pool de conexões (Hot Reload)...");
         DataSource novoDs = multiTenantConfig.createTenantDataSource(tenantId);
         multiTenantDataSource.addTenant(tenantId, novoDs);
     }
 
-    // --- NOVO MÉTODO ---
     public void inicializarConfiguracao(String tenantId, String razaoSocial, String cnpj) {
-        System.out.println(">>> Inicializando configurações para: " + tenantId);
+        System.out.println(">>> Inicializando dados e configs para: " + tenantId);
 
-        // 1. Cria uma conexão temporária direta com o banco do NOVO cliente
         String tenantUrl = masterUrl.replace("wms_master", tenantId);
         if (tenantUrl.equals(masterUrl)) {
             tenantUrl = "jdbc:postgresql://wms-db-main:5432/" + tenantId;
@@ -73,37 +65,54 @@ public class TenantProvisioningService {
 
         JdbcTemplate tenantJdbc = new JdbcTemplate(ds);
 
-        // 2. Atualiza a tabela de configuração (ID 1) com os dados reais
-        String sql = """
-                    UPDATE tb_empresa_config
-                    SET razao_social = ?,
-                        cnpj = ?,
-                        recebimento_cego_obrigatorio = ?
+        // 1. Inicializa TB_EMPRESA_DADOS (ID 1)
+        // O Flyway já deve ter criado a tabela com uma linha vazia ou criamos agora
+        // Assumindo que a migration V1 insere um registro vazio com ID 1:
+        String sqlEmpresa = """
+                    UPDATE tb_empresa_dados
+                    SET razao_social = ?, cnpj = ?
                     WHERE id = 1
                 """;
+        // Se a migration não inserir o ID 1, mude para INSERT.
+        // Vou assumir UPDATE pois é o padrão que você tinha.
+        int rows = tenantJdbc.update(sqlEmpresa, razaoSocial, cnpj);
+        if (rows == 0) {
+            tenantJdbc.update("INSERT INTO tb_empresa_dados (id, razao_social, cnpj) VALUES (1, ?, ?)", razaoSocial,
+                    cnpj);
+        }
 
-        // Aqui definimos os defaults. Por exemplo, recebimento cego começa TRUE.
-        tenantJdbc.update(sql, razaoSocial, cnpj, true);
+        // 2. Inicializa TB_SISTEMA_CONFIG (Configurações Padrão)
+        // Aqui definimos os defaults do sistema
+        inserirConfigSeNaoExistir(tenantJdbc, "RECEBIMENTO_CEGO_OBRIGATORIO", "true",
+                "Oculta quantidades na conferência", "BOOLEAN");
+        inserirConfigSeNaoExistir(tenantJdbc, "ESTOQUE_NEGATIVO_PERMITIDO", "false", "Permite expedir sem saldo",
+                "BOOLEAN");
+        inserirConfigSeNaoExistir(tenantJdbc, "IMPRESSAO_AUTOMATICA_ETIQUETA", "true", "Imprime etiqueta ao receber",
+                "BOOLEAN");
 
-        // NOVO: Passo Final - Registra no Spring para uso imediato
         registrarTenantNoPool(tenantId);
+        System.out.println(">>> Tenant " + tenantId + " provisionado!");
+    }
 
-        System.out.println(">>> Configuração do tenant " + tenantId + " atualizada com sucesso!");
+    private void inserirConfigSeNaoExistir(JdbcTemplate jdbc, String chave, String valor, String desc, String tipo) {
+        String check = "SELECT count(*) FROM tb_sistema_config WHERE chave = ?";
+        Integer count = jdbc.queryForObject(check, Integer.class, chave);
+        if (count == null || count == 0) {
+            jdbc.update("INSERT INTO tb_sistema_config (chave, valor, descricao, tipo) VALUES (?, ?, ?, ?)", chave,
+                    valor, desc, tipo);
+        }
     }
 
     private void rodarMigracoes(String tenantId) {
-        // ... (código do flyway mantido igual, apontando para pasta tenant) ...
         String tenantUrl = masterUrl.replace("wms_master", tenantId);
         if (tenantUrl.equals(masterUrl)) {
             tenantUrl = "jdbc:postgresql://wms-db-main:5432/" + tenantId;
         }
-
         Flyway flyway = Flyway.configure()
                 .dataSource(tenantUrl, username, password)
-                .locations("classpath:db/migration/tenant") // Garanta que está apontando para a pasta certa
+                .locations("classpath:db/migration/tenant")
                 .baselineOnMigrate(true)
                 .load();
-
         flyway.migrate();
     }
 }

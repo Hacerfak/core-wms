@@ -1,7 +1,8 @@
 -- ==========================================================
--- 1. CONFIGURAÇÃO DA EMPRESA (Singleton)
+-- 1. DADOS DA EMPRESA (Identidade e Fiscal)
 -- ==========================================================
-CREATE TABLE tb_empresa_config (
+-- Antiga tb_empresa_config (Renomeada e limpa de flags)
+CREATE TABLE tb_empresa_dados (
     id BIGINT PRIMARY KEY,
     -- Dados Básicos
     razao_social VARCHAR(200) NOT NULL,
@@ -25,7 +26,7 @@ CREATE TABLE tb_empresa_config (
     cidade VARCHAR(100),
     uf VARCHAR(2) NOT NULL DEFAULT 'RS',
     endereco_completo VARCHAR(255),
-    -- Mantido para compatibilidade/display
+    -- Mantido para compatibilidade
     logo_url VARCHAR(500),
     -- CERTIFICADO DIGITAL
     certificado_arquivo BYTEA,
@@ -34,45 +35,52 @@ CREATE TABLE tb_empresa_config (
     -- A senha do certificado
     nome_certificado VARCHAR(255),
     -- Nome original do arquivo
-    validade_certificado TIMESTAMP,
-    -- Data de expiração extraída
-    -- Configurações de Regra
-    permite_estoque_negativo BOOLEAN DEFAULT FALSE,
-    recebimento_cego_obrigatorio BOOLEAN DEFAULT TRUE
+    validade_certificado TIMESTAMP -- Data de expiração extraída
 );
 -- Seed Inicial da Empresa (ID 1 Fixo)
-INSERT INTO tb_empresa_config (
-        id,
-        razao_social,
-        cnpj,
-        uf,
-        recebimento_cego_obrigatorio
-    )
-VALUES (
-        1,
-        'A Configurar...',
-        '00000000000000',
-        'RS',
-        true
-    );
+INSERT INTO tb_empresa_dados (id, razao_social, cnpj, uf)
+VALUES (1, 'A Configurar...', '00000000000000', 'RS');
 -- ==========================================================
--- 1.1 CONFIGURAÇÃO DE PARÂMETROS (Chave-Valor)
+-- 1.1 CONFIGURAÇÃO DO SISTEMA (Parâmetros Globais)
 -- ==========================================================
-CREATE TABLE tb_configuracao (
+-- Antiga tb_configuracao (Agora centraliza todas as flags)
+CREATE TABLE tb_sistema_config (
     chave VARCHAR(100) PRIMARY KEY,
     valor VARCHAR(255),
-    descricao VARCHAR(255)
+    descricao VARCHAR(255),
+    tipo VARCHAR(20) -- BOOLEAN, INTEGER, STRING, LIST
 );
-INSERT INTO tb_configuracao (chave, valor, descricao)
+-- Seeds de Configuração (Migrados da empresa + Novos)
+INSERT INTO tb_sistema_config (chave, valor, descricao, tipo)
 VALUES (
         'SISTEMA_MANUTENCAO',
         'false',
-        'Coloca o sistema em modo de manutenção'
+        'Coloca o sistema em modo de manutenção',
+        'BOOLEAN'
     ),
     (
         'AUDITORIA_RETENCAO_DIAS',
         '90',
-        'Dias para manter logs de auditoria (0 = Eterno)'
+        'Dias para manter logs de auditoria (0 = Eterno)',
+        'INTEGER'
+    ),
+    (
+        'RECEBIMENTO_CEGO_OBRIGATORIO',
+        'true',
+        'Oculta quantidades na conferência de entrada',
+        'BOOLEAN'
+    ),
+    (
+        'ESTOQUE_NEGATIVO_PERMITIDO',
+        'false',
+        'Permite expedir produtos sem saldo sistêmico',
+        'BOOLEAN'
+    ),
+    (
+        'IMPRESSAO_AUTOMATICA_ETIQUETA',
+        'true',
+        'Imprime etiquetas automaticamente após conferência',
+        'BOOLEAN'
     );
 -- ==========================================================
 -- 2. ARMAZÉNS (Nível 1)
@@ -98,6 +106,7 @@ CREATE TABLE tb_area (
     codigo VARCHAR(10) NOT NULL,
     nome VARCHAR(100) NOT NULL,
     tipo VARCHAR(20) NOT NULL,
+    -- ARMAZENAGEM, DOCA, SEGREGACAO, PERDA
     -- Flags de automação
     padrao_recebimento BOOLEAN DEFAULT FALSE,
     padrao_expedicao BOOLEAN DEFAULT FALSE,
@@ -120,6 +129,7 @@ CREATE TABLE tb_localizacao (
     endereco_completo VARCHAR(100) NOT NULL,
     descricao VARCHAR(255),
     tipo VARCHAR(20) NOT NULL,
+    -- PALLET, BLOCADO, PICKING, VIRTUAL
     virtual BOOLEAN DEFAULT FALSE,
     permite_multi_lpn BOOLEAN DEFAULT TRUE,
     capacidade_lpn INTEGER DEFAULT 1,
@@ -149,7 +159,6 @@ VALUES (
         'Centro de Distribuição Principal',
         'Endereço da Empresa'
     );
--- ATENÇÃO: Corrige a sequence para o próximo ID ser 2
 SELECT setval(
         'tb_armazem_id_seq',
         (
@@ -198,7 +207,6 @@ VALUES (
         false,
         false
     );
--- ATENÇÃO: Corrige a sequence para o próximo ID ser 4
 SELECT setval(
         'tb_area_id_seq',
         (
@@ -207,7 +215,6 @@ SELECT setval(
         )
     );
 -- 3. LOCALIZAÇÕES DE SISTEMA (IDs 1 a 5 Fixos)
--- Endereços formatados como CD01DOCREC (Sem traços)
 INSERT INTO tb_localizacao (
         id,
         area_id,
@@ -238,23 +245,26 @@ VALUES (1, 1, 'REC', 'CD01DOCREC', 'DOCA', true, true),
         true,
         true
     );
--- (A sequence de localização já começa em 1000, não precisa de ajuste manual aqui)
 -- ==========================================================
 -- 5. PARCEIROS
 -- ==========================================================
 CREATE TABLE tb_parceiro (
     id BIGSERIAL PRIMARY KEY,
     documento VARCHAR(20) NOT NULL,
+    -- CPF/CNPJ limpo
     nome VARCHAR(255) NOT NULL,
     nome_fantasia VARCHAR(255),
     ie VARCHAR(20),
     crt VARCHAR(5),
     tipo VARCHAR(20) DEFAULT 'AMBOS',
+    -- CLIENTE, FORNECEDOR, AMBOS, TRANSPORTADORA
     ativo BOOLEAN NOT NULL DEFAULT TRUE,
+    -- Configurações Específicas por Parceiro
     recebimento_cego BOOLEAN NOT NULL DEFAULT FALSE,
     padrao_controla_lote BOOLEAN DEFAULT FALSE,
     padrao_controla_validade BOOLEAN DEFAULT FALSE,
     padrao_controla_serie BOOLEAN DEFAULT FALSE,
+    -- Endereço
     cep VARCHAR(10),
     logradouro VARCHAR(255),
     numero VARCHAR(20),
@@ -294,6 +304,7 @@ CREATE TABLE tb_produto (
     cest VARCHAR(10),
     valor_unitario_padrao NUMERIC(18, 4),
     ativo BOOLEAN NOT NULL DEFAULT TRUE,
+    -- Controles
     controla_lote BOOLEAN DEFAULT FALSE,
     controla_validade BOOLEAN DEFAULT FALSE,
     controla_serie BOOLEAN DEFAULT FALSE,

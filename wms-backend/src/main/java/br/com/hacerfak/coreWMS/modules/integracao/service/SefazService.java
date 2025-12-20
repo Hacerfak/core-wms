@@ -1,7 +1,7 @@
 package br.com.hacerfak.coreWMS.modules.integracao.service;
 
-import br.com.hacerfak.coreWMS.modules.cadastro.domain.EmpresaConfig;
-import br.com.hacerfak.coreWMS.modules.cadastro.repository.EmpresaConfigRepository;
+import br.com.hacerfak.coreWMS.modules.cadastro.domain.EmpresaDados;
+import br.com.hacerfak.coreWMS.modules.cadastro.repository.EmpresaDadosRepository;
 import br.com.hacerfak.coreWMS.modules.integracao.dto.CnpjResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -26,7 +26,7 @@ import java.util.Scanner;
 @RequiredArgsConstructor
 public class SefazService {
 
-    private final EmpresaConfigRepository empresaConfigRepository;
+    private final EmpresaDadosRepository empresaDadosRepository;
 
     // Mapa de URLs de Consulta Cadastro (Produção)
     private static final Map<String, String> URLS_SEFAZ = new HashMap<>();
@@ -117,8 +117,10 @@ public class SefazService {
 
     public CnpjResponse consultarCadastro(String uf, String cnpj, String ie) {
         try {
-            EmpresaConfig config = empresaConfigRepository.findById(1L)
-                    .orElseThrow(() -> new RuntimeException("Configuração da empresa não encontrada"));
+            // Busca na nova tabela
+            EmpresaDados config = empresaDadosRepository.findById(1L)
+                    .orElseThrow(() -> new RuntimeException("Dados da empresa não encontrados"));
+
             if (config.getCertificadoArquivo() == null) {
                 throw new IllegalArgumentException("Certificado Digital não configurado.");
             }
@@ -127,21 +129,19 @@ public class SefazService {
             keyStore.load(new ByteArrayInputStream(config.getCertificadoArquivo()),
                     config.getCertificadoSenha().toCharArray());
 
+            // ... (Restante da lógica SSL igual) ...
             KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
             kmf.init(keyStore, config.getCertificadoSenha().toCharArray());
-
             SSLContext sslContext = SSLContext.getInstance("TLSv1.2");
             sslContext.init(kmf.getKeyManagers(), null, new SecureRandom());
 
             String ufTarget = uf != null ? uf.toUpperCase() : "SP";
-            String urlStr = URLS_SEFAZ.get(ufTarget);
-            if (urlStr == null)
-                urlStr = URLS_SEFAZ.get("RS");
+            String urlStr = URLS_SEFAZ.getOrDefault(ufTarget, URLS_SEFAZ.get("RS")); // Fallback corrigido para não dar
+                                                                                     // null pointer se map estiver
+                                                                                     // vazio na compilação deste
+                                                                                     // exemplo
 
             String xmlBody = construirXmlConsulta(ufTarget, cnpj, ie);
-
-            System.out.println("Enviando para SEFAZ (" + urlStr + "): " + xmlBody);
-
             String responseXml = enviarRequestSoap(urlStr, xmlBody, sslContext, ufTarget);
 
             return parseResponse(responseXml);
@@ -251,6 +251,7 @@ public class SefazService {
 
             CnpjResponse dto = new CnpjResponse();
             dto.setCnpj(getTagValue(infCad, "CNPJ"));
+            dto.setUf(getTagValue(infCad, "UF"));
             dto.setRazaoSocial(getTagValue(infCad, "xNome"));
             dto.setNomeFantasia(getTagValue(infCad, "xFant"));
 
@@ -266,25 +267,6 @@ public class SefazService {
             // do CSV
             String crtTexto = getTagValue(infCad, "xRegApur");
 
-            // Se xReg vier vazio, tenta CRT numérico
-            if (crtTexto.isEmpty()) {
-                crtTexto = getTagValue(infCad, "xReg");
-            }
-
-            if (crtTexto.isEmpty()) {
-                crtTexto = getTagValue(infCad, "xRegTrib");
-            }
-
-            if (crtTexto.isEmpty()) {
-                crtTexto = getTagValue(infCad, "xCRT");
-            }
-
-            if (crtTexto.isEmpty()) {
-                crtTexto = getTagValue(infCad, "CRT");
-            }
-
-            System.out.println("SEFAZ REGIME RETORNADO: [" + crtTexto + "]"); // Log para debug
-
             dto.setRegimeTributario(mapRegimeTributario(crtTexto));
 
             Element ender = (Element) infCad.getElementsByTagNameNS("*", "ender").item(0);
@@ -298,7 +280,6 @@ public class SefazService {
                 dto.setCep(cepRaw);
 
                 dto.setCidade(getTagValue(ender, "xMun"));
-                dto.setUf(getTagValue(ender, "UF"));
             }
 
             return dto;

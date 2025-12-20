@@ -8,12 +8,15 @@ import {
 } from '@mui/material';
 import { Upload, Lock, MapPin } from 'lucide-react';
 import { toast } from 'react-toastify';
+import SearchableSelect from '../../components/SearchableSelect';
 
 // Lista de UFs para o usuário selecionar a origem
 const ESTADOS_BR = [
     'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS',
     'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'
 ];
+
+const UF_OPTIONS = ESTADOS_BR.map(uf => ({ value: uf, label: uf }));
 
 const Onboarding = () => {
     const { refreshUserCompanies } = useContext(AuthContext);
@@ -46,7 +49,7 @@ const Onboarding = () => {
             setStatusMsg('Finalizando configurações...');
             await refreshUserCompanies();
 
-            toast.success("Ambiente criado e dados da empresa importados da SEFAZ!");
+            toast.success("Ambiente criado com sucesso!");
             navigate('/selecao-empresa');
 
         } catch (err) {
@@ -86,20 +89,12 @@ const Onboarding = () => {
                     {/* SELEÇÃO DE UF */}
                     <Box display="flex" alignItems="center" gap={2} mb={3}>
                         <MapPin size={24} color="#64748b" />
-                        <TextField
-                            select
+                        <SearchableSelect
                             label="Estado (UF) da Empresa"
-                            fullWidth
                             value={uf}
-                            onChange={(e) => setUf(e.target.value)}
-                            helperText="Necessário para consulta na SEFAZ correta."
-                        >
-                            {ESTADOS_BR.map((estado) => (
-                                <MenuItem key={estado} value={estado}>
-                                    {estado}
-                                </MenuItem>
-                            ))}
-                        </TextField>
+                            onChange={e => setUf(e.target.value)}
+                            options={UF_OPTIONS}
+                        />
                     </Box>
 
                     {/* UPLOAD */}

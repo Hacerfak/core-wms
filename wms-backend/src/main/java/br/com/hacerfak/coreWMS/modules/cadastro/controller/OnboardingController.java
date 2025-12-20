@@ -2,8 +2,8 @@ package br.com.hacerfak.coreWMS.modules.cadastro.controller;
 
 import br.com.hacerfak.coreWMS.core.multitenant.TenantContext;
 import br.com.hacerfak.coreWMS.modules.cadastro.domain.Empresa;
-import br.com.hacerfak.coreWMS.modules.cadastro.domain.EmpresaConfig;
-import br.com.hacerfak.coreWMS.modules.cadastro.repository.EmpresaConfigRepository;
+import br.com.hacerfak.coreWMS.modules.cadastro.domain.EmpresaDados;
+import br.com.hacerfak.coreWMS.modules.cadastro.repository.EmpresaDadosRepository;
 import br.com.hacerfak.coreWMS.modules.cadastro.repository.EmpresaRepository;
 import br.com.hacerfak.coreWMS.modules.cadastro.service.CertificadoService;
 import br.com.hacerfak.coreWMS.modules.cadastro.service.TenantProvisioningService;
@@ -34,7 +34,7 @@ public class OnboardingController {
 
     private final CertificadoService certificadoService;
     private final TenantProvisioningService provisioningService;
-    private final SefazService sefazService; // <--- Injetar Serviço SEFAZ
+    private final SefazService sefazService;
 
     // Repositórios MASTER
     private final EmpresaRepository empresaRepository;
@@ -44,7 +44,7 @@ public class OnboardingController {
     // Repositórios TENANT (o Spring resolve via TenantContext)
     private final PerfilRepository perfilRepository;
     private final UsuarioPerfilRepository usuarioPerfilRepository;
-    private final EmpresaConfigRepository empresaConfigRepository;
+    private final EmpresaDadosRepository empresaDadosRepository;
 
     @PostMapping("/upload-certificado")
     public ResponseEntity<?> uploadCertificado(
@@ -114,7 +114,7 @@ public class OnboardingController {
                 usuarioPerfilRepository.save(up);
 
                 // B. SALVA CERTIFICADO NO BANCO LOCAL
-                EmpresaConfig config = empresaConfigRepository.findById(1L).orElseThrow();
+                EmpresaDados config = empresaDadosRepository.findById(1L).orElseThrow();
                 config.setCertificadoArquivo(file.getBytes());
                 config.setCertificadoSenha(senha);
                 config.setNomeCertificado(file.getOriginalFilename());
@@ -122,7 +122,7 @@ public class OnboardingController {
                 config.setValidadeCertificado(dadosCert.getValidade().atStartOfDay());
                 config.setUf(uf); // Salva a UF selecionada inicialmente
 
-                empresaConfigRepository.save(config); // Persiste o certificado para poder usar na consulta
+                empresaDadosRepository.save(config); // Persiste o certificado para poder usar na consulta
 
                 // C. CONSULTA SEFAZ E AUTO-PREENCHE (O Pulo do Gato!)
                 if (!uf.equalsIgnoreCase("MA")) {
@@ -148,7 +148,7 @@ public class OnboardingController {
                         config.setCidade(dadosSefaz.getCidade());
                         config.setUf(dadosSefaz.getUf()); // Atualiza UF se a SEFAZ retornar diferente
 
-                        empresaConfigRepository.save(config);
+                        empresaDadosRepository.save(config);
 
                         // Opcional: Atualizar também o nome no Master (EmpresaRepository) para ficar
                         // bonito na lista
@@ -169,7 +169,7 @@ public class OnboardingController {
                 }
             }
 
-            return ResponseEntity.ok("Ambiente criado com sucesso! Dados importados da SEFAZ.");
+            return ResponseEntity.ok("Ambiente criado com sucesso!");
 
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
@@ -181,7 +181,7 @@ public class OnboardingController {
             else
                 TenantContext.clear();
 
-            return ResponseEntity.internalServerError().body("Erro no Onboarding: " + e.getMessage());
+            return ResponseEntity.internalServerError().body("Erro ao criar ambiente: " + e.getMessage());
         }
     }
 }

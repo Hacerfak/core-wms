@@ -1,24 +1,25 @@
 import api from './api';
 
-// --- CONFIGURAÇÃO DA EMPRESA (TENANT) ---
-
+// Busca dados cadastrais da empresa (Tabela tb_empresa_dados)
 export const getEmpresaConfig = async () => {
-    const response = await api.get('/api/empresa-config');
+    const response = await api.get('/api/empresa-dados');
     return response.data;
 };
 
+// Atualiza dados cadastrais
 export const updateEmpresaConfig = async (dados) => {
-    const response = await api.put('/api/empresa-config', dados);
+    const response = await api.put('/api/empresa-dados', dados);
     return response.data;
 };
 
+// Upload do certificado
 export const uploadCertificadoConfig = async (file, senha) => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('senha', senha);
 
-    // O Content-Type multipart/form-data é gerado automaticamente pelo browser ao usar FormData
-    await api.post('/api/empresa-config/certificado', formData);
+    const response = await api.post('/api/empresa-dados/certificado', formData);
+    return response.data;
 };
 
 // --- CONSULTAS SEFAZ ---

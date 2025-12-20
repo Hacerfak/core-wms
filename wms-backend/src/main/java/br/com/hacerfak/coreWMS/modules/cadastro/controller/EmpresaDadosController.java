@@ -1,7 +1,7 @@
 package br.com.hacerfak.coreWMS.modules.cadastro.controller;
 
-import br.com.hacerfak.coreWMS.modules.cadastro.domain.EmpresaConfig;
-import br.com.hacerfak.coreWMS.modules.cadastro.repository.EmpresaConfigRepository;
+import br.com.hacerfak.coreWMS.modules.cadastro.domain.EmpresaDados;
+import br.com.hacerfak.coreWMS.modules.cadastro.repository.EmpresaDadosRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -14,16 +14,15 @@ import java.time.ZoneId;
 import java.util.Enumeration;
 
 @RestController
-@RequestMapping("/api/empresa-config")
+@RequestMapping("/api/empresa-dados") // Endpoint Renomeado
 @RequiredArgsConstructor
-public class EmpresaConfigController {
+public class EmpresaDadosController {
 
-    private final EmpresaConfigRepository repository;
+    private final EmpresaDadosRepository repository;
 
     @GetMapping
-    public ResponseEntity<EmpresaConfig> getDadosEmpresa() {
+    public ResponseEntity<EmpresaDados> getDadosEmpresa() {
         return repository.findById(1L).map(empresa -> {
-            // Remove dados sensíveis da resposta JSON
             empresa.setCertificadoSenha(null);
             empresa.setCertificadoArquivo(null);
             return ResponseEntity.ok(empresa);
@@ -32,9 +31,9 @@ public class EmpresaConfigController {
 
     @PutMapping
     @PreAuthorize("hasAuthority('CONFIG_GERENCIAR') or hasRole('ADMIN')")
-    public ResponseEntity<EmpresaConfig> atualizarDados(@RequestBody EmpresaConfig dto) {
+    public ResponseEntity<EmpresaDados> atualizarDados(@RequestBody EmpresaDados dto) {
         return repository.findById(1L).map(empresa -> {
-            // Atualiza todos os campos de texto
+            // Atualiza APENAS dados cadastrais
             empresa.setRazaoSocial(dto.getRazaoSocial());
             empresa.setNomeFantasia(dto.getNomeFantasia());
             empresa.setCnpj(dto.getCnpj());
@@ -47,18 +46,15 @@ public class EmpresaConfigController {
             empresa.setTelefone(dto.getTelefone());
             empresa.setWebsite(dto.getWebsite());
 
-            // Endereço
             empresa.setCep(dto.getCep());
             empresa.setLogradouro(dto.getLogradouro());
             empresa.setNumero(dto.getNumero());
             empresa.setComplemento(dto.getComplemento());
             empresa.setBairro(dto.getBairro());
             empresa.setCidade(dto.getCidade());
-            empresa.setUf(dto.getUf()); // Atualiza a UF principal
+            empresa.setUf(dto.getUf());
 
-            // Configs
-            empresa.setRecebimentoCegoObrigatorio(dto.isRecebimentoCegoObrigatorio());
-            empresa.setPermiteEstoqueNegativo(dto.isPermiteEstoqueNegativo());
+            // NÃO ATUALIZA MAIS CONFIGS AQUI (foram para SistemaConfigController)
 
             return ResponseEntity.ok(repository.save(empresa));
         }).orElse(ResponseEntity.notFound().build());
@@ -66,14 +62,13 @@ public class EmpresaConfigController {
 
     @PostMapping(value = "/certificado", consumes = "multipart/form-data")
     @PreAuthorize("hasAuthority('CONFIG_GERENCIAR') or hasRole('ADMIN')")
-    public ResponseEntity<Void> uploadCertificado(
+    public ResponseEntity<EmpresaDados> uploadCertificado(
             @RequestParam("file") MultipartFile file,
             @RequestParam("senha") String senha) {
 
         try {
-            EmpresaConfig config = repository.findById(1L).orElseThrow();
+            EmpresaDados config = repository.findById(1L).orElseThrow();
 
-            // 1. Extrai Validade do PFX
             KeyStore ks = KeyStore.getInstance("PKCS12");
             ks.load(file.getInputStream(), senha.toCharArray());
 
@@ -83,19 +78,23 @@ public class EmpresaConfigController {
                 X509Certificate cert = (X509Certificate) ks.getCertificate(alias);
                 config.setValidadeCertificado(cert.getNotAfter().toInstant()
                         .atZone(ZoneId.systemDefault()).toLocalDateTime());
+                config.setNomeCertificado(file.getOriginalFilename());
             }
 
-            // 2. Salva Binário, Senha e Nome
             config.setCertificadoArquivo(file.getBytes());
             config.setCertificadoSenha(senha);
-            config.setNomeCertificado(file.getOriginalFilename());
 
             repository.save(config);
-            return ResponseEntity.ok().build();
+
+            // Retorna o objeto atualizado (sem senha)
+            config.setCertificadoSenha(null);
+            config.setCertificadoArquivo(null);
+
+            return ResponseEntity.ok(config);
 
         } catch (Exception e) {
             e.printStackTrace();
-            throw new RuntimeException("Erro ao processar certificado: Senha inválida ou arquivo corrompido.");
+            throw new RuntimeException("Erro ao processar certificado: " + e.getMessage());
         }
     }
 }

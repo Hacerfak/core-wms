@@ -8,10 +8,26 @@ import { Save, X, Search, MapPin, Briefcase, Settings } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { salvarParceiro } from '../../services/parceiroService';
 import { consultarCnpjSefaz } from '../../services/integracaoService';
+import SearchableSelect from '../../components/SearchableSelect';
 
 const ESTADOS_BR = [
     'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS',
     'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'
+];
+const UF_OPTIONS = ESTADOS_BR.map(uf => ({ value: uf, label: uf }));
+
+const TIPO_OPTIONS = [
+    { value: 'CLIENTE', label: 'Cliente' },
+    { value: 'FORNECEDOR', label: 'Fornecedor' },
+    { value: 'TRANSPORTADORA', label: 'Transportadora' },
+    { value: 'AMBOS', label: 'Híbrido' }
+];
+
+const CRT_OPTIONS = [
+    { value: '1', label: '1 - Simples Nacional' },
+    { value: '2', label: '2 - Simples (Excesso)' },
+    { value: '3', label: '3 - Regime Normal' },
+    { value: '4', label: '4 - MEI' }
 ];
 
 const ParceiroForm = ({ open, onClose, onSuccess, initialData }) => {
@@ -112,19 +128,24 @@ const ParceiroForm = ({ open, onClose, onSuccess, initialData }) => {
                         <Briefcase size={18} /> Dados Fiscais
                     </Typography>
                     <Grid container spacing={2}>
+                        {/* TIPO */}
                         <Grid item xs={12} sm={3}>
-                            <TextField select label="Tipo" fullWidth size="small" value={form.tipo} onChange={e => handleChange('tipo', e.target.value)}>
-                                <MenuItem value="CLIENTE">Cliente</MenuItem>
-                                <MenuItem value="FORNECEDOR">Fornecedor</MenuItem>
-                                <MenuItem value="TRANSPORTADORA">Transportadora</MenuItem>
-                                <MenuItem value="AMBOS">Híbrido</MenuItem>
-                            </TextField>
+                            <SearchableSelect
+                                label="Tipo"
+                                value={form.tipo}
+                                onChange={e => handleChange('tipo', e.target.value)}
+                                options={TIPO_OPTIONS}
+                            />
                         </Grid>
 
+                        {/* UF */}
                         <Grid item xs={12} sm={2}>
-                            <TextField select label="UF" fullWidth size="small" value={form.uf} onChange={e => handleChange('uf', e.target.value)}>
-                                {ESTADOS_BR.map(u => <MenuItem key={u} value={u}>{u}</MenuItem>)}
-                            </TextField>
+                            <SearchableSelect
+                                label="UF"
+                                value={form.uf}
+                                onChange={e => handleChange('uf', e.target.value)}
+                                options={UF_OPTIONS}
+                            />
                         </Grid>
 
                         <Grid item xs={12} sm={4}>
@@ -140,13 +161,14 @@ const ParceiroForm = ({ open, onClose, onSuccess, initialData }) => {
                                 }}
                             />
                         </Grid>
+                        {/* CRT */}
                         <Grid item xs={12} sm={3}>
-                            <TextField select label="Regime (CRT)" fullWidth size="small" value={form.crt} onChange={e => handleChange('crt', e.target.value)}>
-                                <MenuItem value="1">1 - Simples Nacional</MenuItem>
-                                <MenuItem value="2">2 - Simples (Excesso)</MenuItem>
-                                <MenuItem value="3">3 - Regime Normal</MenuItem>
-                                <MenuItem value="4">4 - MEI</MenuItem>
-                            </TextField>
+                            <SearchableSelect
+                                label="Regime (CRT)"
+                                value={form.crt}
+                                onChange={e => handleChange('crt', e.target.value)}
+                                options={CRT_OPTIONS}
+                            />
                         </Grid>
 
                         <Grid item xs={12} sm={6}>

@@ -5,18 +5,18 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "tb_empresa_config")
+@Table(name = "tb_empresa_dados") // Renomeado
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class EmpresaConfig {
+public class EmpresaDados {
 
     @Id
-    private Long id;
+    private Long id; // Geralmente 1 (Singleton por Tenant)
 
-    // Dados Cadastrais
+    // --- DADOS CADASTRAIS ---
     private String razaoSocial;
     private String nomeFantasia;
     private String cnpj;
@@ -25,35 +25,27 @@ public class EmpresaConfig {
     private String cnaePrincipal;
     private String regimeTributario;
 
-    // Contato
+    // --- CONTATO ---
     private String email;
     private String telefone;
     private String website;
 
-    // Endereço Estruturado
+    // --- ENDEREÇO ---
     private String cep;
     private String logradouro;
     private String numero;
     private String complemento;
     private String bairro;
     private String cidade;
-    private String uf; // <--- ESTE É O CAMPO QUE MANDA NA BUSCA SEFAZ
+    private String uf;
 
-    @Deprecated
-    private String enderecoCompleto;
-
-    // CERTIFICADO DIGITAL
+    // --- CERTIFICADO DIGITAL ---
     @Column(name = "certificado_arquivo")
     private byte[] certificadoArquivo;
 
     @Column(name = "certificado_senha")
     private String certificadoSenha;
 
-    // METADADOS (Essenciais para o front saber se tem certificado)
     private String nomeCertificado;
     private LocalDateTime validadeCertificado;
-
-    // Configs de Regra
-    private boolean permiteEstoqueNegativo;
-    private boolean recebimentoCegoObrigatorio;
 }
