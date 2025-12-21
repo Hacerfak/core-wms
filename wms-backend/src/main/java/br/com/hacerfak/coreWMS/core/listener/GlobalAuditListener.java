@@ -9,6 +9,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 public class GlobalAuditListener {
 
@@ -55,7 +56,7 @@ public class GlobalAuditListener {
                     .action(action)
                     .tenantId(tenant)
                     .usuario(usuario)
-                    .dataHora(LocalDateTime.now())
+                    .dataHora(LocalDateTime.now(ZoneId.of("America/Sao_Paulo")))
                     .conteudo(entity) // O Mongo serializa o objeto inteiro como JSON
                     .build();
 
