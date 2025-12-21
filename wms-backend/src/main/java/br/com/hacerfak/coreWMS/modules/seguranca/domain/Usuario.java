@@ -1,63 +1,66 @@
 package br.com.hacerfak.coreWMS.modules.seguranca.domain;
 
-import br.com.hacerfak.coreWMS.core.domain.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
-@Entity
 @Table(name = "tb_usuario")
+@Entity
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class Usuario extends BaseEntity implements UserDetails {
+public class Usuario implements UserDetails {
 
-    @Column(nullable = false, unique = true)
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(unique = true, nullable = false)
     private String login;
 
     @Column(nullable = false)
     private String senha;
 
-    // --- CORREÇÃO AQUI: Mudamos de String para UserRole ---
-    @Enumerated(EnumType.STRING) // Salva no banco como "ADMIN", "GERENTE", etc.
+    // --- NOVOS CAMPOS ---
     @Column(nullable = false)
-    private UserRole role;
-    // ------------------------------------------------------
+    private String nome;
 
-    @Builder.Default
-    private boolean ativo = true;
+    private String email;
+    // --------------------
 
-    @Builder.Default
+    private boolean ativo;
+
+    @Enumerated(EnumType.STRING)
+    private UserRole role; // ADMIN (Master) ou USER (Comum)
+
     @OneToMany(mappedBy = "usuario", cascade = CascadeType.ALL, fetch = FetchType.EAGER)
-    private List<UsuarioEmpresa> acessos = new ArrayList<>();
+    private List<UsuarioEmpresa> acessos;
+
+    // --- IMPLEMENTAÇÃO DO USER DETAILS ---
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        // Agora pegamos a role do Enum.
-        // O Spring Security espera algo como "ROLE_ADMIN".
-        // Se o seu UserRole for ADMIN, isso vira "ROLE_ADMIN".
-        if (this.role == UserRole.ADMIN)
+        if (this.role == UserRole.ADMIN) {
             return List.of(new SimpleGrantedAuthority("ROLE_ADMIN"), new SimpleGrantedAuthority("ROLE_USER"));
-        else
-            return List.of(new SimpleGrantedAuthority("ROLE_USER"));
+        }
+        return List.of(new SimpleGrantedAuthority("ROLE_USER"));
     }
 
     @Override
     public String getPassword() {
-        return this.senha;
+        return senha;
     }
 
     @Override
     public String getUsername() {
-        return this.login;
+        return login;
     }
 
     @Override
@@ -77,6 +80,6 @@ public class Usuario extends BaseEntity implements UserDetails {
 
     @Override
     public boolean isEnabled() {
-        return this.ativo;
+        return ativo;
     }
 }

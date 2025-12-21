@@ -1,92 +1,177 @@
-import { useState, useContext } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
-    Box, Typography, Grid, Card, CardContent, Button, Divider, Chip
+    Box, Typography, Button, Paper, Table, TableBody, TableCell,
+    TableContainer, TableHead, TableRow, IconButton, Tooltip, LinearProgress,
+    TextField, InputAdornment, Chip, Dialog, DialogTitle, DialogContent,
+    DialogActions, Grid
 } from '@mui/material';
-import { Building2, PlusCircle, LogIn } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { AuthContext } from '../../contexts/AuthContext';
+import { Plus, Edit, Trash2, Search, Building2, Save, X } from 'lucide-react';
 import { toast } from 'react-toastify';
+import { useNavigate } from 'react-router-dom'; // <--- Importante
+import { getTodasEmpresas, salvarEmpresa, excluirEmpresa } from '../../services/empresaService';
+import ConfirmDialog from '../../components/ConfirmDialog';
 
 const GestaoEmpresas = () => {
-    const { user, selecionarEmpresa } = useContext(AuthContext);
-    const navigate = useNavigate();
+    const navigate = useNavigate(); // <--- Hook de navegação
+    const [empresas, setEmpresas] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [busca, setBusca] = useState('');
 
-    // ID do Tenant Atual para destacar
-    const currentTenantId = localStorage.getItem('@App:tenant') || user?.tenantId;
+    // Dialog apenas para EDIÇÃO (Não criação)
+    const [openDialog, setOpenDialog] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [form, setForm] = useState({ id: '', razaoSocial: '', cnpj: '', tenantId: '', ativo: true });
 
-    const handleAcessar = async (tenantId) => {
-        if (String(tenantId) === String(currentTenantId)) {
-            toast.info("Você já está nesta empresa.");
-            return;
+    const [confirmOpen, setConfirmOpen] = useState(false);
+    const [idToDelete, setIdToDelete] = useState(null);
+
+    useEffect(() => { load(); }, []);
+
+    const load = async () => {
+        setLoading(true);
+        try {
+            const data = await getTodasEmpresas();
+            setEmpresas(data);
+        } catch (error) { toast.error("Erro ao carregar empresas."); }
+        finally { setLoading(false); }
+    };
+
+    const filteredEmpresas = useMemo(() => {
+        const term = busca.toLowerCase();
+        return empresas.filter(e =>
+            e.razaoSocial.toLowerCase().includes(term) ||
+            e.cnpj.includes(term) ||
+            e.tenantId?.toLowerCase().includes(term)
+        );
+    }, [empresas, busca]);
+
+    // --- NOVA LÓGICA: Vai para Onboarding ---
+    const handleNewCompany = () => {
+        // Redireciona para Onboarding passando a origem
+        navigate('/onboarding', { state: { from: '/admin/empresas' } });
+    };
+
+    // Edição continua no modal (apenas para correções rápidas)
+    const handleOpenEdit = (empresa) => {
+        setForm({ ...empresa });
+        setOpenDialog(true);
+    };
+
+    const handleSaveEdit = async () => {
+        if (!form.razaoSocial || !form.cnpj) return toast.warning("Preencha os campos obrigatórios.");
+        setSaving(true);
+        try {
+            await salvarEmpresa(form);
+            toast.success("Dados atualizados!");
+            setOpenDialog(false);
+            load();
+        } catch (error) {
+            toast.error("Erro ao salvar.");
+        } finally {
+            setSaving(false);
         }
-        const success = await selecionarEmpresa(tenantId);
-        if (success) {
-            toast.success("Ambiente alterado!");
-            navigate(0); // Reload
-        }
+    };
+
+    const handleDelete = async () => {
+        try {
+            await excluirEmpresa(idToDelete);
+            toast.success("Empresa excluída.");
+            load();
+        } catch (error) { toast.error("Erro ao excluir."); }
+        finally { setConfirmOpen(false); }
     };
 
     return (
         <Box>
-            <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
+            <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
                 <Box>
-                    <Typography variant="h5" fontWeight="bold">Gestão de Ambientes</Typography>
-                    <Typography variant="body2" color="text.secondary">
-                        Gerencie as empresas e tenants do sistema.
-                    </Typography>
+                    <Typography variant="h5" fontWeight="bold">Gestão Global de Empresas</Typography>
+                    <Typography variant="body2" color="text.secondary">Administre os Tenants (Ambientes).</Typography>
                 </Box>
-                <Button variant="contained" startIcon={<PlusCircle size={20} />} onClick={() => navigate('/onboarding')}>
+                {/* Botão leva para Onboarding */}
+                <Button variant="contained" startIcon={<Plus size={20} />} onClick={handleNewCompany}>
                     Nova Empresa
                 </Button>
             </Box>
 
-            <Grid container spacing={3}>
-                {user?.empresas?.map((empresa) => {
-                    const isCurrent = String(empresa.tenantId) === String(currentTenantId);
-                    return (
-                        <Grid item xs={12} sm={6} md={4} key={empresa.tenantId}>
-                            <Card variant="outlined" sx={{
-                                borderColor: isCurrent ? 'primary.main' : 'divider',
-                                bgcolor: isCurrent ? '#eff6ff' : 'background.paper',
-                                transition: '0.2s',
-                                '&:hover': { borderColor: 'primary.main', transform: 'translateY(-2px)', boxShadow: 2 }
-                            }}>
-                                <CardContent>
-                                    <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={2}>
-                                        <Box display="flex" gap={2} alignItems="center">
-                                            <Box sx={{ p: 1.5, bgcolor: isCurrent ? 'primary.main' : 'grey.100', borderRadius: 2, color: isCurrent ? 'white' : 'grey.600' }}>
-                                                <Building2 size={24} />
-                                            </Box>
-                                            <Box>
-                                                <Typography variant="h6" fontSize="1rem" fontWeight={600} noWrap sx={{ maxWidth: 200 }}>
-                                                    {empresa.razaoSocial}
-                                                </Typography>
-                                                <Typography variant="caption" color="text.secondary">
-                                                    ID: {empresa.tenantId}
-                                                </Typography>
-                                            </Box>
+            <Paper sx={{ width: '100%', mb: 2, p: 2, borderRadius: 2 }}>
+                <TextField
+                    fullWidth
+                    placeholder="Buscar..."
+                    value={busca}
+                    onChange={(e) => setBusca(e.target.value)}
+                    size="small"
+                    InputProps={{ startAdornment: <InputAdornment position="start"><Search size={18} color="#94a3b8" /></InputAdornment> }}
+                />
+            </Paper>
+
+            <Paper sx={{ width: '100%', overflow: 'hidden', borderRadius: 2 }}>
+                {loading && <LinearProgress />}
+                <TableContainer>
+                    <Table>
+                        <TableHead sx={{ bgcolor: 'background.subtle' }}>
+                            <TableRow>
+                                <TableCell><b>Empresa</b></TableCell>
+                                <TableCell><b>CNPJ</b></TableCell>
+                                <TableCell><b>Tenant ID</b></TableCell>
+                                <TableCell align="center"><b>Ações</b></TableCell>
+                            </TableRow>
+                        </TableHead>
+                        <TableBody>
+                            {filteredEmpresas.map((emp) => (
+                                <TableRow key={emp.id} hover>
+                                    <TableCell>
+                                        <Box display="flex" alignItems="center" gap={1.5}>
+                                            <Box p={1} bgcolor="primary.light" borderRadius={1} color="white"><Building2 size={18} /></Box>
+                                            <Typography fontWeight={500} variant="body2">{emp.razaoSocial}</Typography>
                                         </Box>
-                                        {isCurrent && <Chip label="Atual" color="primary" size="small" />}
-                                    </Box>
+                                    </TableCell>
+                                    <TableCell>{emp.cnpj}</TableCell>
+                                    <TableCell><Chip label={emp.tenantId} size="small" /></TableCell>
+                                    <TableCell align="center">
+                                        <Box display="flex" justifyContent="center" gap={1}>
+                                            <Tooltip title="Editar">
+                                                <IconButton size="small" color="primary" onClick={() => handleOpenEdit(emp)}>
+                                                    <Edit size={18} />
+                                                </IconButton>
+                                            </Tooltip>
+                                            <Tooltip title="Excluir">
+                                                <IconButton size="small" color="error" onClick={() => { setIdToDelete(emp.id); setConfirmOpen(true); }}>
+                                                    <Trash2 size={18} />
+                                                </IconButton>
+                                            </Tooltip>
+                                        </Box>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </TableContainer>
+            </Paper>
 
-                                    <Divider sx={{ my: 1.5 }} />
-
-                                    <Box display="flex" justifyContent="space-between" alignItems="center">
-                                        <Typography variant="body2" color="text.secondary">
-                                            Perfil: <strong>{empresa.role}</strong>
-                                        </Typography>
-                                        {!isCurrent && (
-                                            <Button size="small" startIcon={<LogIn size={16} />} onClick={() => handleAcessar(empresa.tenantId)}>
-                                                Acessar
-                                            </Button>
-                                        )}
-                                    </Box>
-                                </CardContent>
-                            </Card>
+            {/* Modal APENAS de Edição */}
+            <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="sm" fullWidth>
+                <DialogTitle>Editar Empresa</DialogTitle>
+                <DialogContent dividers>
+                    <Grid container spacing={2}>
+                        <Grid item xs={12}>
+                            <TextField
+                                label="Razão Social" fullWidth
+                                value={form.razaoSocial} onChange={e => setForm({ ...form, razaoSocial: e.target.value })}
+                            />
                         </Grid>
-                    );
-                })}
-            </Grid>
+                        <Grid item xs={12}>
+                            <TextField label="CNPJ" fullWidth value={form.cnpj} onChange={e => setForm({ ...form, cnpj: e.target.value })} />
+                        </Grid>
+                    </Grid>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setOpenDialog(false)}>Cancelar</Button>
+                    <Button variant="contained" onClick={handleSaveEdit} disabled={saving}>Salvar</Button>
+                </DialogActions>
+            </Dialog>
+
+            <ConfirmDialog open={confirmOpen} onClose={() => setConfirmOpen(false)} onConfirm={handleDelete} title="Excluir Empresa" message="Tem certeza?" />
         </Box>
     );
 };

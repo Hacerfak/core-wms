@@ -1,16 +1,15 @@
 import { useState, useContext } from 'react';
 import api from '../../services/api';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom'; // <--- Adicionado useLocation
 import { AuthContext } from '../../contexts/AuthContext';
 import {
     Box, Button, Card, Typography, TextField, CircularProgress,
-    Alert, MenuItem, Grid
+    Alert, Grid
 } from '@mui/material';
-import { Upload, Lock, MapPin } from 'lucide-react';
+import { Upload, Lock, MapPin, ArrowLeft } from 'lucide-react'; // Adicionei ArrowLeft para botão voltar
 import { toast } from 'react-toastify';
 import SearchableSelect from '../../components/SearchableSelect';
 
-// Lista de UFs para o usuário selecionar a origem
 const ESTADOS_BR = [
     'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS',
     'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'
@@ -22,12 +21,13 @@ const Onboarding = () => {
     const { refreshUserCompanies } = useContext(AuthContext);
     const [file, setFile] = useState(null);
     const [senha, setSenha] = useState('');
-    const [uf, setUf] = useState('SP'); // UF Padrão
+    const [uf, setUf] = useState('SP');
     const [loading, setLoading] = useState(false);
-    const [statusMsg, setStatusMsg] = useState(''); // Feedback do progresso
+    const [statusMsg, setStatusMsg] = useState('');
     const [error, setError] = useState('');
 
     const navigate = useNavigate();
+    const location = useLocation(); // <--- Hook para ler o estado da navegação
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -40,17 +40,22 @@ const Onboarding = () => {
         const formData = new FormData();
         formData.append('file', file);
         formData.append('senha', senha);
-        formData.append('uf', uf); // <--- Envia a UF escolhida
+        formData.append('uf', uf);
 
         try {
-            // O backend agora vai demorar um pouco mais pois fará a consulta SEFAZ
             await api.post('/onboarding/upload-certificado', formData);
 
             setStatusMsg('Finalizando configurações...');
+
+            // Atualiza o contexto global para que o menu do usuário já mostre a nova empresa se necessário
             await refreshUserCompanies();
 
             toast.success("Ambiente criado com sucesso!");
-            navigate('/selecao-empresa');
+
+            // --- LÓGICA DE RETORNO INTELIGENTE ---
+            // Se veio da gestão ou seleção, volta para lá. Se não tiver origem, vai para seleção.
+            const origin = location.state?.from || '/selecao-empresa';
+            navigate(origin);
 
         } catch (err) {
             console.error("Erro Onboarding:", err);
@@ -69,9 +74,25 @@ const Onboarding = () => {
         }
     };
 
+    // Botão de Cancelar/Voltar
+    const handleCancel = () => {
+        const origin = location.state?.from || '/selecao-empresa';
+        navigate(origin);
+    };
+
     return (
         <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'background.default', p: 2 }}>
             <Card sx={{ maxWidth: 450, width: '100%', p: 4, borderRadius: 2 }}>
+
+                {/* Botão Voltar (Opcional, mas boa prática) */}
+                <Button
+                    startIcon={<ArrowLeft size={16} />}
+                    onClick={handleCancel}
+                    sx={{ mb: 2, textTransform: 'none', color: 'text.secondary' }}
+                >
+                    Voltar
+                </Button>
+
                 <Box sx={{ textAlign: 'center', mb: 4 }}>
                     <Typography variant="h4" fontWeight="bold" color="primary.main" gutterBottom>
                         Novo Ambiente

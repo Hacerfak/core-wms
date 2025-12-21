@@ -31,55 +31,44 @@ public class AuthService {
         List<EmpresaResumoDTO> acessos = new ArrayList<>();
 
         // 2. Itera sobre as empresas para buscar o Perfil Específico em cada banco
-        // (Isso resolve o bug de mostrar o mesmo perfil em todas)
         for (UsuarioEmpresa acesso : usuario.getAcessos()) {
             if (!acesso.getEmpresa().isAtivo())
                 continue;
 
             String tenantId = acesso.getEmpresa().getTenantId();
             String nomePerfilExibicao = "Carregando...";
-
-            // Guarda o contexto atual (Master)
             String contextoOriginal = TenantContext.getTenant();
 
             try {
-                // A. Troca para o banco da empresa específica
                 TenantContext.setTenant(tenantId);
-
-                // B. Se for o ADMIN Global (God Mode), o nome é fixo
                 if (usuario.getRole() == UserRole.ADMIN) {
                     nomePerfilExibicao = "MASTER";
                 } else {
-                    // C. Busca o perfil configurado neste banco
                     List<UsuarioPerfil> perfisLocais = usuarioPerfilRepository.findByUsuarioId(usuario.getId());
-
                     if (!perfisLocais.isEmpty()) {
                         nomePerfilExibicao = perfisLocais.get(0).getPerfil().getNome();
                     } else {
-                        // Caso raro: tem acesso a empresa mas não tem perfil local criado ainda
                         nomePerfilExibicao = "Sem Perfil Definido";
                     }
                 }
             } catch (Exception e) {
-                nomePerfilExibicao = "Erro ao carregar perfil";
-                System.err.println("Erro ao buscar perfil no tenant " + tenantId + ": " + e.getMessage());
+                nomePerfilExibicao = "Erro leitura";
             } finally {
-                // D. IMPORTANTE: Volta para o banco Master para continuar o loop
                 TenantContext.setTenant(contextoOriginal);
             }
 
             acessos.add(new EmpresaResumoDTO(
                     acesso.getEmpresa().getId(),
                     acesso.getEmpresa().getRazaoSocial(),
+                    acesso.getEmpresa().getCnpj(),
                     tenantId,
-                    nomePerfilExibicao // Agora enviamos o nome real (ex: "Conferente Senior")
-            ));
+                    nomePerfilExibicao));
         }
 
-        // Gera o token inicial
         var token = tokenService.generateToken(usuario, null, List.of());
 
-        return new LoginResponseDTO(token, usuario.getLogin(), usuario.getRole().name(), acessos);
+        // CORREÇÃO: Passando usuario.getId()
+        return new LoginResponseDTO(token, usuario.getId(), usuario.getLogin(), usuario.getRole().name(), acessos);
     }
 
     public LoginResponseDTO selecionarEmpresa(String tenantId) {
@@ -101,19 +90,16 @@ public class AuthService {
             TenantContext.setTenant(tenantAtual);
         }
 
-        // --- CALCULA PERMISSÕES NO BANCO DO TENANT ---
         TenantContext.setTenant(tenantId);
         List<String> authorities = new ArrayList<>();
 
         try {
-            // GOD MODE: Se for ADMIN global, libera tudo
             if (usuario.getRole() == UserRole.ADMIN) {
                 authorities.add("ROLE_ADMIN");
                 for (PermissaoEnum p : PermissaoEnum.values()) {
                     authorities.add(p.name());
                 }
             } else {
-                // Usuário comum: Busca permissões do perfil
                 var perfis = usuarioPerfilRepository.findByUsuarioId(usuario.getId());
                 for (UsuarioPerfil up : perfis) {
                     if (up.getPerfil().isAtivo()) {
@@ -126,14 +112,14 @@ public class AuthService {
         }
 
         var tokenComTenant = tokenService.generateToken(usuario, tenantId, authorities);
-        return new LoginResponseDTO(tokenComTenant, usuario.getLogin(), usuario.getRole().name(), List.of());
+
+        // CORREÇÃO: Passando usuario.getId()
+        return new LoginResponseDTO(tokenComTenant, usuario.getId(), usuario.getLogin(), usuario.getRole().name(),
+                List.of());
     }
 
-    // NOVO MÉTODO: Recarrega permissões sem mudar de empresa
     public LoginResponseDTO atualizarCredenciais() {
         String tenantAtual = TenantContext.getTenant();
-
-        // 1. Identifica usuário logado
         TenantContext.setTenant(TenantContext.DEFAULT_TENANT_ID);
         Usuario usuario;
         try {
@@ -143,16 +129,13 @@ public class AuthService {
             TenantContext.setTenant(tenantAtual);
         }
 
-        // 2. Recalcula permissões no Tenant Atual (Igual ao selecionarEmpresa)
         List<String> authorities = new ArrayList<>();
-
         if (usuario.getRole() == UserRole.ADMIN) {
             authorities.add("ROLE_ADMIN");
             for (PermissaoEnum p : PermissaoEnum.values()) {
                 authorities.add(p.name());
             }
         } else {
-            // Busca permissões atualizadas no banco
             var perfis = usuarioPerfilRepository.findByUsuarioId(usuario.getId());
             for (UsuarioPerfil up : perfis) {
                 if (up.getPerfil().isAtivo()) {
@@ -161,10 +144,10 @@ public class AuthService {
             }
         }
 
-        // 3. Gera novo token
         var novoToken = tokenService.generateToken(usuario, tenantAtual, authorities);
 
-        // Retorna estrutura padrão, mas só o token importa aqui
-        return new LoginResponseDTO(novoToken, usuario.getLogin(), usuario.getRole().name(), List.of());
+        // CORREÇÃO: Passando usuario.getId()
+        return new LoginResponseDTO(novoToken, usuario.getId(), usuario.getLogin(), usuario.getRole().name(),
+                List.of());
     }
 }

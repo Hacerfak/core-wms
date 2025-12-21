@@ -1,6 +1,8 @@
 package br.com.hacerfak.coreWMS.modules.cadastro.controller;
 
 import br.com.hacerfak.coreWMS.core.multitenant.TenantContext;
+import br.com.hacerfak.coreWMS.modules.cadastro.domain.Empresa;
+import br.com.hacerfak.coreWMS.modules.cadastro.repository.EmpresaRepository;
 import br.com.hacerfak.coreWMS.modules.seguranca.domain.UserRole;
 import br.com.hacerfak.coreWMS.modules.seguranca.domain.Usuario;
 import br.com.hacerfak.coreWMS.modules.seguranca.domain.UsuarioEmpresa;
@@ -10,6 +12,7 @@ import br.com.hacerfak.coreWMS.modules.seguranca.repository.UsuarioPerfilReposit
 import br.com.hacerfak.coreWMS.modules.seguranca.repository.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -17,78 +20,86 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/empresas")
+@RequestMapping("/api/empresas")
 @RequiredArgsConstructor
 public class EmpresaController {
 
+    private final EmpresaRepository empresaRepository;
     private final UsuarioRepository usuarioRepository;
     private final UsuarioPerfilRepository usuarioPerfilRepository;
 
     @GetMapping("/meus-acessos")
     public ResponseEntity<List<EmpresaResumoDTO>> listarMinhasEmpresas() {
-        // Guarda o estado atual para restaurar no final (boa prática)
         String tenantOriginal = TenantContext.getTenant();
-
-        // 1. FORÇA O CONTEXTO MASTER (Onde estão os usuários e vínculos)
         TenantContext.setTenant(TenantContext.DEFAULT_TENANT_ID);
-
         try {
-            // Pega o usuário logado
             String login = SecurityContextHolder.getContext().getAuthentication().getName();
             Usuario usuario = usuarioRepository.findByLogin(login).orElseThrow();
-
             List<EmpresaResumoDTO> resultado = new ArrayList<>();
 
-            // 2. Itera sobre as empresas para buscar o Perfil Real em cada banco
-            // (Igual ao que o Login faz)
             for (UsuarioEmpresa acesso : usuario.getAcessos()) {
                 if (!acesso.getEmpresa().isAtivo())
                     continue;
-
                 String tenantId = acesso.getEmpresa().getTenantId();
                 String nomePerfil = "Carregando...";
 
+                // Descobre o perfil dentro do tenant
                 try {
-                    // A. Troca para o banco da empresa específica
                     TenantContext.setTenant(tenantId);
-
-                    // B. Verifica o perfil local
                     if (usuario.getRole() == UserRole.ADMIN) {
                         nomePerfil = "MASTER";
                     } else {
                         List<UsuarioPerfil> perfis = usuarioPerfilRepository.findByUsuarioId(usuario.getId());
-                        if (!perfis.isEmpty()) {
-                            nomePerfil = perfis.get(0).getPerfil().getNome();
-                        } else {
-                            nomePerfil = "Sem Perfil";
-                        }
+                        nomePerfil = !perfis.isEmpty() ? perfis.get(0).getPerfil().getNome() : "Sem Perfil";
                     }
                 } catch (Exception e) {
                     nomePerfil = "Erro leitura";
-                    System.err.println("Erro ao ler perfil do tenant " + tenantId + ": " + e.getMessage());
                 } finally {
-                    // C. IMPORTANTE: Volta para o Master para continuar o loop
                     TenantContext.setTenant(TenantContext.DEFAULT_TENANT_ID);
                 }
 
+                // CORREÇÃO: Passando todos os campos
                 resultado.add(new EmpresaResumoDTO(
                         acesso.getEmpresa().getId(),
                         acesso.getEmpresa().getRazaoSocial(),
+                        acesso.getEmpresa().getCnpj(),
                         tenantId,
                         nomePerfil));
             }
-
             return ResponseEntity.ok(resultado);
-
         } finally {
-            // Restaura contexto original
-            if (tenantOriginal != null) {
+            if (tenantOriginal != null)
                 TenantContext.setTenant(tenantOriginal);
-            } else {
+            else
                 TenantContext.clear();
-            }
+        }
+    }
+
+    @GetMapping("/lista-simples")
+    @PreAuthorize("hasRole('ADMIN') or hasAuthority('USUARIO_EDITAR')")
+    public ResponseEntity<List<EmpresaResumoDTO>> listarTodasSimples() {
+        String original = TenantContext.getTenant();
+        TenantContext.setTenant(TenantContext.DEFAULT_TENANT_ID);
+        try {
+            List<Empresa> empresas = empresaRepository.findAll();
+            return ResponseEntity.ok(empresas.stream()
+                    .filter(Empresa::isAtivo)
+                    // CORREÇÃO: Passando todos os campos
+                    .map(e -> new EmpresaResumoDTO(
+                            e.getId(),
+                            e.getRazaoSocial(),
+                            e.getCnpj(),
+                            e.getTenantId(),
+                            "ATIVO"))
+                    .collect(Collectors.toList()));
+        } finally {
+            if (original != null)
+                TenantContext.setTenant(original);
+            else
+                TenantContext.clear();
         }
     }
 }

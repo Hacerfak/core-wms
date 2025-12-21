@@ -63,14 +63,18 @@ export const AuthProvider = ({ children }) => {
     const login = async (username, password) => {
         try {
             const response = await api.post('/auth/login', { login: username, password });
-            const { token, empresas, usuario, role } = response.data;
+
+            // CORREÇÃO: Desestruturar o 'id' que agora vem do backend
+            const { token, id, empresas, usuario, role } = response.data;
 
             localStorage.setItem('wms_token', token);
             api.defaults.headers.Authorization = `Bearer ${token}`;
 
             processToken(token);
 
-            const userData = { login: usuario, role, empresas };
+            // CORREÇÃO: Incluir 'id' no objeto userData
+            const userData = { id, login: usuario, role, empresas };
+
             localStorage.setItem('wms_user', JSON.stringify(userData));
 
             setUser(userData);

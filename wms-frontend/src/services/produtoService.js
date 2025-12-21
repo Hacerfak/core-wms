@@ -6,6 +6,11 @@ export const getProdutos = async (page = 0, size = 20) => {
     return response.data;
 };
 
+export const getProdutoById = async (id) => {
+    const response = await api.get(`/api/produtos/${id}`);
+    return response.data;
+};
+
 export const salvarProduto = async (dados) => {
     // Tratamento de tipos numéricos para evitar erro no Java
     const payload = { ...dados };

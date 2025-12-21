@@ -1,119 +1,79 @@
-import { useState, useEffect, useContext } from 'react';
-import { Box, Typography, Button, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Chip, LinearProgress, IconButton, Tooltip } from '@mui/material';
-import { Plus, User, UserPlus, Shield, Trash2, Edit } from 'lucide-react';
-import { toast } from 'react-toastify';
-import { getUsuarios, removerUsuarioLocal, excluirUsuarioGlobal } from '../../services/usuarioService';
-import UsuarioForm from './UsuarioForm';
-import ConfirmDialog from '../../components/ConfirmDialog'; // <--- Importe o novo componente
+import { useState, useEffect, useMemo } from 'react';
+import {
+    Box, Typography, Button, Paper, Table, TableBody, TableCell,
+    TableContainer, TableHead, TableRow, IconButton, Tooltip, LinearProgress,
+    TextField, InputAdornment, Chip, Avatar
+} from '@mui/material';
+import { Plus, Edit, Trash2, Search, User, Shield, Lock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'react-toastify';
+import { getUsuarios, excluirUsuario } from '../../services/usuarioService';
+import ConfirmDialog from '../../components/ConfirmDialog';
 import Can from '../../components/Can';
-import { AuthContext } from '../../contexts/AuthContext';
 
 const UsuariosList = () => {
+    const navigate = useNavigate();
     const [usuarios, setUsuarios] = useState([]);
     const [loading, setLoading] = useState(true);
-
-    // Estados do Modal de Edição
-    const [modalOpen, setModalOpen] = useState(false);
-    const [usuarioEditando, setUsuarioEditando] = useState(null);
-
-    // Estados do Modal de Confirmação
+    const [busca, setBusca] = useState('');
     const [confirmOpen, setConfirmOpen] = useState(false);
-    const [confirmData, setConfirmData] = useState({ title: '', message: '', action: null });
+    const [idToDelete, setIdToDelete] = useState(null);
 
-    const navigate = useNavigate();
-    const { user } = useContext(AuthContext);
+    useEffect(() => { load(); }, []);
 
-    const loadData = async () => {
+    const load = async () => {
+        setLoading(true);
         try {
-            setLoading(true);
             const data = await getUsuarios();
             setUsuarios(data);
-        } catch (error) {
-            toast.error("Erro ao carregar usuários");
-        } finally {
-            setLoading(false);
-        }
+        } catch (error) { toast.error("Erro ao carregar usuários."); }
+        finally { setLoading(false); }
     };
 
-    useEffect(() => { loadData(); }, []);
-
-    // ... (handleNew, handleEdit, handleCloseModal mantêm-se iguais) ...
-    const handleNew = () => { setUsuarioEditando(null); setModalOpen(true); };
-    const handleEdit = (u) => { setUsuarioEditando(u); setModalOpen(true); };
-    const handleCloseModal = () => { setModalOpen(false); setUsuarioEditando(null); };
-
-    // --- NOVA LÓGICA DE DELETE COM DIÁLOGO ---
-    const handleDeleteClick = (usuarioAlvo) => {
-        const isMasterAdmin = user?.role === 'ADMIN';
-        const isSelf = user?.login === usuarioAlvo.login;
-
-        if (isSelf) {
-            toast.warning("Você não pode se excluir.");
-            return;
-        }
-
-        if (isMasterAdmin) {
-            // Configura diálogo para EXCLUSÃO GLOBAL
-            setConfirmData({
-                title: 'Exclusão Global',
-                message: `ATENÇÃO:\nIsso excluirá o usuário "${usuarioAlvo.login}" do sistema GLOBALMENTE e de TODAS as empresas.\n\nDeseja realmente continuar?`,
-                action: async () => {
-                    try {
-                        await excluirUsuarioGlobal(usuarioAlvo.id);
-                        toast.success("Usuário excluído globalmente.");
-                        loadData();
-                    } catch (error) {
-                        toast.error("Erro ao excluir usuário global.");
-                    }
-                }
-            });
-        } else {
-            // Configura diálogo para REMOÇÃO LOCAL
-            setConfirmData({
-                title: 'Remover Acesso',
-                message: `Deseja remover o acesso de "${usuarioAlvo.login}" desta empresa?\n(A conta dele continuará existindo em outras empresas)`,
-                action: async () => {
-                    try {
-                        await removerUsuarioLocal(usuarioAlvo.id);
-                        toast.success("Acesso removido com sucesso.");
-                        loadData();
-                    } catch (error) {
-                        toast.error("Erro ao remover acesso local.");
-                    }
-                }
-            });
-        }
-        setConfirmOpen(true);
+    const handleDelete = async () => {
+        try {
+            await excluirUsuario(idToDelete);
+            toast.success("Usuário excluído.");
+            load();
+        } catch (error) { toast.error(error.response?.data?.message || "Erro ao excluir."); }
+        finally { setConfirmOpen(false); }
     };
+
+    const filteredUsers = useMemo(() => {
+        const term = busca.toLowerCase();
+        return usuarios.filter(u =>
+            u.login.toLowerCase().includes(term) ||
+            (u.nome && u.nome.toLowerCase().includes(term)) ||
+            (u.email && u.email.toLowerCase().includes(term))
+        );
+    }, [usuarios, busca]);
 
     return (
         <Box>
-            <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
-                <Typography variant="h5" fontWeight="bold">Gestão de Usuários</Typography>
-
-                <Box display="flex" gap={2}>
-                    <Can I="PERFIL_GERENCIAR">
-                        <Button
-                            variant="outlined"
-                            startIcon={<Shield size={20} />}
-                            onClick={() => navigate('/perfis')}
-                        >
-                            Gerenciar Perfis
-                        </Button>
-                    </Can>
-
-                    <Can I="USUARIO_CRIAR">
-                        <Button
-                            variant="contained"
-                            startIcon={<UserPlus size={20} />}
-                            onClick={handleNew}
-                        >
-                            Novo Usuário
-                        </Button>
-                    </Can>
+            <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+                <Box>
+                    <Typography variant="h5" fontWeight="bold">Gestão de Usuários</Typography>
+                    <Typography variant="body2" color="text.secondary">Cadastre usuários e gerencie seus acessos às empresas.</Typography>
                 </Box>
+                <Can I="USUARIO_CRIAR">
+                    <Button variant="contained" startIcon={<Plus size={20} />} onClick={() => navigate('/usuarios/novo')}>
+                        Novo Usuário
+                    </Button>
+                </Can>
             </Box>
+
+            <Paper sx={{ width: '100%', mb: 2, p: 2, borderRadius: 2 }}>
+                <TextField
+                    fullWidth
+                    placeholder="Buscar por Nome, Login ou Email..."
+                    value={busca}
+                    onChange={(e) => setBusca(e.target.value)}
+                    size="small"
+                    InputProps={{
+                        startAdornment: <InputAdornment position="start"><Search size={18} color="#94a3b8" /></InputAdornment>
+                    }}
+                />
+            </Paper>
 
             <Paper sx={{ width: '100%', overflow: 'hidden', borderRadius: 2 }}>
                 {loading && <LinearProgress />}
@@ -121,79 +81,70 @@ const UsuariosList = () => {
                     <Table>
                         <TableHead sx={{ bgcolor: 'background.subtle' }}>
                             <TableRow>
+                                <TableCell><b>Usuário</b></TableCell>
                                 <TableCell><b>Login</b></TableCell>
-                                <TableCell><b>Perfil</b></TableCell>
-                                <TableCell><b>Status</b></TableCell>
+                                <TableCell><b>Email</b></TableCell>
+                                <TableCell><b>Perfil Global</b></TableCell>
                                 <TableCell align="center"><b>Ações</b></TableCell>
                             </TableRow>
                         </TableHead>
                         <TableBody>
-                            {usuarios.map((u) => {
-                                const isMasterRow = u.perfilNome === 'MASTER' || u.login === 'master';
-                                const isMe = user?.login === u.login;
+                            {filteredUsers.map((u) => (
+                                <TableRow key={u.id} hover>
+                                    <TableCell>
+                                        <Box display="flex" alignItems="center" gap={1.5}>
+                                            <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.light', fontSize: '0.8rem' }}>
+                                                {u.nome ? u.nome.charAt(0).toUpperCase() : <User size={16} />}
+                                            </Avatar>
+                                            <Typography fontWeight={500} variant="body2">{u.nome || 'Sem Nome'}</Typography>
+                                        </Box>
+                                    </TableCell>
+                                    <TableCell>{u.login}</TableCell>
+                                    <TableCell>{u.email || '-'}</TableCell>
+                                    <TableCell>
+                                        {u.adminMaster ? <Chip label="MASTER" color="error" size="small" icon={<Shield size={14} />} /> : <Chip label="Comum" size="small" />}
+                                    </TableCell>
+                                    <TableCell align="center">
 
-                                return (
-                                    <TableRow key={u.id} hover>
-                                        <TableCell>
-                                            <Box display="flex" alignItems="center" gap={1}>
-                                                <User size={16} /> {u.login}
-                                            </Box>
-                                        </TableCell>
-                                        <TableCell>
-                                            <Chip label={u.perfilNome} size="small" color="primary" variant="outlined" />
-                                        </TableCell>
-                                        <TableCell>
-                                            <Chip label={u.ativo ? "Ativo" : "Inativo"} color={u.ativo ? "success" : "default"} size="small" />
-                                        </TableCell>
-                                        <TableCell align="center">
+                                        {/* BLINDAGEM VISUAL: Se for Master, esconde ações */}
+                                        {!u.adminMaster && u.login !== 'master' ? (
                                             <Box display="flex" justifyContent="center" gap={1}>
                                                 <Can I="USUARIO_EDITAR">
-                                                    {(!isMasterRow || (isMasterRow && isMe)) && (
-                                                        <Tooltip title={isMasterRow ? "Alterar minha senha" : "Editar Usuário"}>
-                                                            <IconButton size="small" color="primary" onClick={() => handleEdit(u)}>
-                                                                <Edit size={18} />
-                                                            </IconButton>
-                                                        </Tooltip>
-                                                    )}
+                                                    <Tooltip title="Gerenciar Dados e Acessos">
+                                                        <IconButton size="small" color="primary" onClick={() => navigate(`/usuarios/${u.id}`)}>
+                                                            <Edit size={18} />
+                                                        </IconButton>
+                                                    </Tooltip>
                                                 </Can>
-
                                                 <Can I="USUARIO_EXCLUIR">
-                                                    {!isMasterRow && (
-                                                        <Tooltip title="Remover Acesso / Excluir">
-                                                            <IconButton
-                                                                size="small"
-                                                                color="error"
-                                                                onClick={() => handleDeleteClick(u)} // Chama a nova função
-                                                            >
-                                                                <Trash2 size={18} />
-                                                            </IconButton>
-                                                        </Tooltip>
-                                                    )}
+                                                    <IconButton size="small" color="error" onClick={() => { setIdToDelete(u.id); setConfirmOpen(true); }}>
+                                                        <Trash2 size={18} />
+                                                    </IconButton>
                                                 </Can>
                                             </Box>
-                                        </TableCell>
-                                    </TableRow>
-                                );
-                            })}
+                                        ) : (
+                                            <Tooltip title="Usuário Protegido">
+                                                <Lock size={18} color="#cbd5e1" style={{ margin: 'auto', display: 'block' }} />
+                                            </Tooltip>
+                                        )}
+
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                            {!loading && filteredUsers.length === 0 && (
+                                <TableRow><TableCell colSpan={5} align="center" sx={{ py: 3 }}>Nenhum usuário encontrado.</TableCell></TableRow>
+                            )}
                         </TableBody>
                     </Table>
                 </TableContainer>
             </Paper>
 
-            <UsuarioForm
-                open={modalOpen}
-                onClose={handleCloseModal}
-                usuario={usuarioEditando}
-                onSuccess={() => { handleCloseModal(); loadData(); }}
-            />
-
-            {/* COMPONENTE DE CONFIRMAÇÃO */}
             <ConfirmDialog
                 open={confirmOpen}
                 onClose={() => setConfirmOpen(false)}
-                onConfirm={confirmData.action}
-                title={confirmData.title}
-                message={confirmData.message}
+                onConfirm={handleDelete}
+                title="Excluir Usuário"
+                message="Isso removerá o acesso do usuário a TODAS as empresas. Continuar?"
             />
         </Box>
     );

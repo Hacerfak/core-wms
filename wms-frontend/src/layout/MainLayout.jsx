@@ -1,9 +1,8 @@
 import { Box, AppBar, Toolbar, Typography, IconButton, Avatar, Menu, MenuItem, Divider, ListItemIcon, Tooltip, Chip } from '@mui/material';
-import { LogOut, Building2, Check, Settings } from 'lucide-react';
+import { LogOut, Building2, Check, Settings, User } from 'lucide-react'; // Adicionei User aqui
 import { useContext, useState, useMemo } from 'react';
 import { AuthContext } from '../contexts/AuthContext';
 import Sidebar from '../components/Sidebar';
-import Can from '../components/Can';
 import { useNavigate, Outlet } from 'react-router-dom';
 import { jwtDecode } from 'jwt-decode';
 
@@ -34,6 +33,7 @@ const MainLayout = () => {
         handleClose();
         if (empresaAtual?.tenantId === tenantId) return;
         const success = await selecionarEmpresa(tenantId);
+        // Recarrega a página para garantir limpeza total de estados do contexto anterior
         if (success) navigate(0);
     };
 
@@ -101,6 +101,11 @@ const MainLayout = () => {
                                         Gerenciar Ambientes
                                     </MenuItem>
                                 )}
+
+                                {/* CORREÇÃO: handleCloseUserMenu -> handleClose */}
+                                <MenuItem onClick={() => { handleClose(); navigate('/usuarios/' + user?.id); }}>
+                                    <ListItemIcon><User size={16} /></ListItemIcon> Meus Dados
+                                </MenuItem>
 
                                 <MenuItem onClick={handleLogout} sx={{ color: 'error.main' }}>
                                     <ListItemIcon><LogOut size={18} color="#ef4444" /></ListItemIcon>

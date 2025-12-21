@@ -1,49 +1,65 @@
 import api from './api';
 
-// --- USUÁRIOS ---
+// --- CRUD BÁSICO ---
 export const getUsuarios = async () => {
-    const response = await api.get('/api/gestao-usuarios');
+    const response = await api.get('/api/usuarios');
     return response.data;
 };
 
-export const verificarUsuario = async (login) => {
-    const response = await api.get(`/api/gestao-usuarios/verificar/${login}`);
+export const getUsuarioById = async (id) => {
+    const response = await api.get(`/api/usuarios/${id}`);
     return response.data;
 };
 
-export const criarUsuario = async (dados) => {
-    await api.post('/api/gestao-usuarios', dados);
+export const salvarUsuario = async (dados) => {
+    if (dados.id) {
+        const response = await api.put(`/api/usuarios/${dados.id}`, dados);
+        return response.data;
+    } else {
+        const response = await api.post('/api/usuarios', dados);
+        return response.data;
+    }
 };
 
-// --- NOVOS MÉTODOS EXCLUSÃO ---
-export const removerUsuarioLocal = async (id) => {
-    await api.delete(`/api/gestao-usuarios/${id}/local`);
+export const excluirUsuario = async (id) => {
+    await api.delete(`/api/usuarios/${id}`);
 };
 
-export const excluirUsuarioGlobal = async (id) => {
-    await api.delete(`/api/gestao-usuarios/${id}/global`);
+/// --- PERFIS & VÍNCULOS ---
+
+// NOVO: Busca perfis de uma empresa específica (para o combo de vinculação)
+export const getPerfisDaEmpresa = async (empresaId) => {
+    const response = await api.get(`/api/usuarios/perfis-disponiveis/${empresaId}`);
+    return response.data;
 };
 
-export const atualizarUsuario = async (id, dados) => {
-    await api.put(`/api/gestao-usuarios/${id}`, dados);
+export const getEmpresasDoUsuario = async (usuarioId) => {
+    const response = await api.get(`/api/usuarios/${usuarioId}/empresas`);
+    return response.data;
 };
 
-// --- PERFIS (Novo) ---
+// ATUALIZADO: Agora passa perfilId
+export const vincularUsuarioEmpresa = async (usuarioId, empresaId, perfilId) => {
+    await api.post(`/api/usuarios/${usuarioId}/empresas`, { empresaId, perfilId });
+};
+
+export const desvincularUsuarioEmpresa = async (usuarioId, empresaId) => {
+    await api.delete(`/api/usuarios/${usuarioId}/empresas/${empresaId}`);
+};
+
+// ... (getPerfis, salvarPerfil, excluirPerfil globais mantidos para a tela de gestão de perfis) ...
 export const getPerfis = async () => {
-    const response = await api.get('/api/gestao-perfis'); // URL Corrigida para o novo controller
+    const response = await api.get('/api/gestao-perfis');
     return response.data;
 };
-
 export const getPermissoesDisponiveis = async () => {
     const response = await api.get('/api/gestao-perfis/permissoes-disponiveis');
     return response.data;
 };
-
 export const salvarPerfil = async (perfil) => {
     const response = await api.post('/api/gestao-perfis', perfil);
     return response.data;
 };
-
 export const excluirPerfil = async (id) => {
     await api.delete(`/api/gestao-perfis/${id}`);
 };
