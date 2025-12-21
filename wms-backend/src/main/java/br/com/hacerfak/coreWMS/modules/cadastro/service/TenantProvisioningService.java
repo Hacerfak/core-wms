@@ -115,4 +115,29 @@ public class TenantProvisioningService {
                 .load();
         flyway.migrate();
     }
+
+    // --- MELHORIA: ROLLBACK MANUAL ---
+    public void dropDatabase(String tenantId) {
+        try {
+            // Força desconexão de usuários ativos para permitir o drop
+            String killSql = """
+                        SELECT pg_terminate_backend(pid)
+                        FROM pg_stat_activity
+                        WHERE datname = ? AND pid <> pg_backend_pid()
+                    """;
+            // Nota: JdbcTemplate padrão pode não conseguir rodar isso dependendo das
+            // permissões,
+            // mas num cenário padrão de dono do banco funciona.
+            try {
+                jdbcTemplate.queryForList(killSql, tenantId);
+            } catch (Exception e) {
+                /* Ignora se falhar ao matar conexões */ }
+
+            String dropSql = "DROP DATABASE IF EXISTS " + tenantId;
+            jdbcTemplate.execute(dropSql);
+            System.out.println(">>> ROLLBACK: Banco " + tenantId + " removido devido a falha no processo.");
+        } catch (Exception e) {
+            System.err.println(">>> CRÍTICO: Falha ao fazer rollback do banco " + tenantId + ": " + e.getMessage());
+        }
+    }
 }

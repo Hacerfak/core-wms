@@ -30,39 +30,24 @@ public class AuthService {
 
         List<EmpresaResumoDTO> acessos = new ArrayList<>();
 
-        // 2. Itera sobre as empresas para buscar o Perfil Específico em cada banco
+        // 2. Itera sobre as empresas (PERFORMANCE FIX: Sem abrir conexão com cada
+        // tenant)
         for (UsuarioEmpresa acesso : usuario.getAcessos()) {
             if (!acesso.getEmpresa().isAtivo())
                 continue;
 
-            String tenantId = acesso.getEmpresa().getTenantId();
-            String nomePerfilExibicao = "Carregando...";
-            String contextoOriginal = TenantContext.getTenant();
-
-            try {
-                TenantContext.setTenant(tenantId);
-                if (usuario.getRole() == UserRole.ADMIN) {
-                    nomePerfilExibicao = "MASTER";
-                } else {
-                    List<UsuarioPerfil> perfisLocais = usuarioPerfilRepository.findByUsuarioId(usuario.getId());
-                    if (!perfisLocais.isEmpty()) {
-                        nomePerfilExibicao = perfisLocais.get(0).getPerfil().getNome();
-                    } else {
-                        nomePerfilExibicao = "Sem Perfil Definido";
-                    }
-                }
-            } catch (Exception e) {
-                nomePerfilExibicao = "Erro leitura";
-            } finally {
-                TenantContext.setTenant(contextoOriginal);
-            }
+            // Retornamos o Role genérico (ADMIN/USER) que está na tabela de vínculo do
+            // Master.
+            // O nome específico do "Perfil" (ex: "Gerente de Estoque") será carregado
+            // apenas quando o usuário selecionar a empresa.
+            String perfilExibicao = acesso.getRole() == UserRole.ADMIN ? "Administrador" : "Colaborador";
 
             acessos.add(new EmpresaResumoDTO(
                     acesso.getEmpresa().getId(),
                     acesso.getEmpresa().getRazaoSocial(),
                     acesso.getEmpresa().getCnpj(),
-                    tenantId,
-                    nomePerfilExibicao));
+                    acesso.getEmpresa().getTenantId(),
+                    perfilExibicao));
         }
 
         var token = tokenService.generateToken(usuario, null, List.of());

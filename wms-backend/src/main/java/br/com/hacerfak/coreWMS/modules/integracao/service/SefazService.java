@@ -3,6 +3,7 @@ package br.com.hacerfak.coreWMS.modules.integracao.service;
 import br.com.hacerfak.coreWMS.modules.cadastro.domain.EmpresaDados;
 import br.com.hacerfak.coreWMS.modules.cadastro.repository.EmpresaDadosRepository;
 import br.com.hacerfak.coreWMS.modules.integracao.dto.CnpjResponse;
+import br.com.hacerfak.coreWMS.core.service.CryptoService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.w3c.dom.Document;
@@ -27,6 +28,7 @@ import java.util.Scanner;
 public class SefazService {
 
     private final EmpresaDadosRepository empresaDadosRepository;
+    private final CryptoService cryptoService;
 
     // Mapa de URLs de Consulta Cadastro (Produção)
     private static final Map<String, String> URLS_SEFAZ = new HashMap<>();
@@ -125,13 +127,17 @@ public class SefazService {
                 throw new IllegalArgumentException("Certificado Digital não configurado.");
             }
 
+            // --- DESCRIPTOGRAFIA ---
+            String senhaDecifrada = cryptoService.decrypt(config.getCertificadoSenha());
+
             KeyStore keyStore = KeyStore.getInstance("PKCS12");
             keyStore.load(new ByteArrayInputStream(config.getCertificadoArquivo()),
-                    config.getCertificadoSenha().toCharArray());
+                    senhaDecifrada.toCharArray()); // Usa senha limpa
+
+            KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+            kmf.init(keyStore, senhaDecifrada.toCharArray()); // Usa senha limpa
 
             // ... (Restante da lógica SSL igual) ...
-            KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
-            kmf.init(keyStore, config.getCertificadoSenha().toCharArray());
             SSLContext sslContext = SSLContext.getInstance("TLSv1.2");
             sslContext.init(kmf.getKeyManagers(), null, new SecureRandom());
 

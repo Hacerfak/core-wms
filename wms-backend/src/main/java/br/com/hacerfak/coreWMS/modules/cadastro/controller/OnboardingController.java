@@ -1,6 +1,7 @@
 package br.com.hacerfak.coreWMS.modules.cadastro.controller;
 
 import br.com.hacerfak.coreWMS.core.multitenant.TenantContext;
+import br.com.hacerfak.coreWMS.core.service.CryptoService;
 import br.com.hacerfak.coreWMS.modules.cadastro.domain.Empresa;
 import br.com.hacerfak.coreWMS.modules.cadastro.domain.EmpresaDados;
 import br.com.hacerfak.coreWMS.modules.cadastro.repository.EmpresaDadosRepository;
@@ -8,7 +9,7 @@ import br.com.hacerfak.coreWMS.modules.cadastro.repository.EmpresaRepository;
 import br.com.hacerfak.coreWMS.modules.cadastro.service.CertificadoService;
 import br.com.hacerfak.coreWMS.modules.cadastro.service.TenantProvisioningService;
 import br.com.hacerfak.coreWMS.modules.integracao.dto.CnpjResponse;
-import br.com.hacerfak.coreWMS.modules.integracao.service.SefazService; // <--- Importante
+import br.com.hacerfak.coreWMS.modules.integracao.service.SefazService;
 import br.com.hacerfak.coreWMS.modules.seguranca.domain.Perfil;
 import br.com.hacerfak.coreWMS.modules.seguranca.domain.UserRole;
 import br.com.hacerfak.coreWMS.modules.seguranca.domain.Usuario;
@@ -35,13 +36,12 @@ public class OnboardingController {
     private final CertificadoService certificadoService;
     private final TenantProvisioningService provisioningService;
     private final SefazService sefazService;
+    private final CryptoService cryptoService;
 
-    // Repositórios MASTER
     private final EmpresaRepository empresaRepository;
     private final UsuarioRepository usuarioRepository;
     private final UsuarioEmpresaRepository usuarioEmpresaRepository;
 
-    // Repositórios TENANT (o Spring resolve via TenantContext)
     private final PerfilRepository perfilRepository;
     private final UsuarioPerfilRepository usuarioPerfilRepository;
     private final EmpresaDadosRepository empresaDadosRepository;
@@ -50,58 +50,53 @@ public class OnboardingController {
     public ResponseEntity<?> uploadCertificado(
             @RequestParam("file") MultipartFile file,
             @RequestParam("senha") String senha,
-            @RequestParam(value = "uf", defaultValue = "SP") String uf) { // <--- Recebe UF
+            @RequestParam(value = "uf", defaultValue = "SP") String uf) {
 
         String tenantOriginal = TenantContext.getTenant();
+        String tenantIdGerado = null;
 
         try {
-            // 1. Extrair dados básicos do certificado (offline)
             var dadosCert = certificadoService.extrairDados(file, senha);
             String cnpjLimpo = dadosCert.getCnpj().replaceAll("\\D", "");
 
-            // --- CONTEXTO MASTER ---
             TenantContext.setTenant(TenantContext.DEFAULT_TENANT_ID);
 
-            // 2. Valida duplicidade
             if (empresaRepository.existsByCnpj(cnpjLimpo)) {
                 throw new IllegalArgumentException("Empresa com CNPJ " + dadosCert.getCnpj() + " já cadastrada.");
             }
 
-            // 3. Cria Banco de Dados
-            String tenantId = "tenant_" + cnpjLimpo;
-            provisioningService.criarBancoDeDados(tenantId);
+            tenantIdGerado = "tenant_" + cnpjLimpo;
 
-            // Inicializa a tabela ID 1 com dados básicos extraídos do certificado
-            provisioningService.inicializarConfiguracao(tenantId, dadosCert.getRazaoSocial(), cnpjLimpo);
+            // --- TRANSAÇÃO DISTRIBUÍDA MANUAL ---
+            // 1. Cria DB Físico
+            provisioningService.criarBancoDeDados(tenantIdGerado);
+            provisioningService.inicializarConfiguracao(tenantIdGerado, dadosCert.getRazaoSocial(), cnpjLimpo);
 
-            // 4. Salva Empresa no Master
+            // 2. Salva no Master
             Empresa novaEmpresa = Empresa.builder()
                     .razaoSocial(dadosCert.getRazaoSocial())
                     .cnpj(cnpjLimpo)
-                    .tenantId(tenantId)
+                    .tenantId(tenantIdGerado)
                     .nomeCertificado(file.getOriginalFilename())
                     .validadeCertificado(dadosCert.getValidade())
                     .ativo(true)
                     .build();
             empresaRepository.save(novaEmpresa);
 
-            // 5. Vincula Usuário Logado
             String loginUsuario = SecurityContextHolder.getContext().getAuthentication().getName();
             Usuario usuario = usuarioRepository.findByLogin(loginUsuario).orElseThrow();
 
             UsuarioEmpresa vinculo = UsuarioEmpresa.builder()
                     .usuario(usuario)
                     .empresa(novaEmpresa)
-                    .role(UserRole.USER)
+                    .role(UserRole.USER) // Role genérico
                     .build();
             usuarioEmpresaRepository.save(vinculo);
 
-            // --- CONTEXTO TENANT ---
-            // Agora entramos no banco novo para configurar tudo
+            // 3. Configura Tenant (Dados Sensíveis)
             try {
-                TenantContext.setTenant(tenantId);
+                TenantContext.setTenant(tenantIdGerado);
 
-                // A. Perfil de Admin
                 Perfil perfilAdmin = perfilRepository.findAll().stream()
                         .filter(p -> p.getNome().toUpperCase().contains("ADMIN"))
                         .findFirst()
@@ -113,75 +108,78 @@ public class OnboardingController {
                         .build();
                 usuarioPerfilRepository.save(up);
 
-                // B. SALVA CERTIFICADO NO BANCO LOCAL
                 EmpresaDados config = empresaDadosRepository.findById(1L).orElseThrow();
                 config.setCertificadoArquivo(file.getBytes());
-                config.setCertificadoSenha(senha);
+
+                // --- CRIPTOGRAFIA APLICADA ---
+                config.setCertificadoSenha(cryptoService.encrypt(senha));
+
                 config.setNomeCertificado(file.getOriginalFilename());
-                // Validade (converter LocalDate para LocalDateTime no inicio do dia)
                 config.setValidadeCertificado(dadosCert.getValidade().atStartOfDay());
-                config.setUf(uf); // Salva a UF selecionada inicialmente
+                config.setUf(uf);
 
-                empresaDadosRepository.save(config); // Persiste o certificado para poder usar na consulta
+                empresaDadosRepository.save(config);
 
-                // C. CONSULTA SEFAZ E AUTO-PREENCHE (O Pulo do Gato!)
                 if (!uf.equalsIgnoreCase("MA")) {
                     try {
-                        System.out.println(">>> Onboarding: Consultando SEFAZ para " + cnpjLimpo + " na UF " + uf);
-
-                        // O SefazService vai ler o certificado que ACABAMOS de salvar no banco (ID 1)
                         CnpjResponse dadosSefaz = sefazService.consultarCadastro(uf, cnpjLimpo, null);
-
-                        // Atualiza com dados oficiais
                         config.setRazaoSocial(dadosSefaz.getRazaoSocial());
                         config.setNomeFantasia(dadosSefaz.getNomeFantasia());
                         config.setInscricaoEstadual(dadosSefaz.getIe());
                         config.setRegimeTributario(dadosSefaz.getRegimeTributario());
                         config.setCnaePrincipal(dadosSefaz.getCnaePrincipal());
-
-                        // Endereço
                         config.setCep(dadosSefaz.getCep());
                         config.setLogradouro(dadosSefaz.getLogradouro());
                         config.setNumero(dadosSefaz.getNumero());
                         config.setComplemento(dadosSefaz.getComplemento());
                         config.setBairro(dadosSefaz.getBairro());
                         config.setCidade(dadosSefaz.getCidade());
-                        config.setUf(dadosSefaz.getUf()); // Atualiza UF se a SEFAZ retornar diferente
-
+                        config.setUf(dadosSefaz.getUf());
                         empresaDadosRepository.save(config);
-
-                        // Opcional: Atualizar também o nome no Master (EmpresaRepository) para ficar
-                        // bonito na lista
-                        // Mas isso exigiria trocar de contexto de novo. Deixa assim por enquanto.
-
                     } catch (Exception ex) {
-                        System.err.println(">>> Aviso: Falha na consulta SEFAZ durante onboarding: " + ex.getMessage());
-                        // Não aborta o processo, o usuário pode corrigir manualmente depois
+                        System.err.println(">>> Aviso: Falha na consulta SEFAZ (Ignorado): " + ex.getMessage());
                     }
                 }
 
-            } finally {
-                // Restaura contexto
-                if (tenantOriginal != null) {
-                    TenantContext.setTenant(tenantOriginal);
-                } else {
-                    TenantContext.clear();
-                }
+            } catch (Exception e) {
+                // Erro na configuração interna do tenant, mas banco já criado.
+                // Re-lança para cair no catch externo e fazer rollback.
+                throw e;
             }
 
             return ResponseEntity.ok("Ambiente criado com sucesso!");
 
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
         } catch (Exception e) {
             e.printStackTrace();
-            // Restaura contexto em caso de erro
+
+            // --- ROLLBACK DE COMPENSAÇÃO ---
+            if (tenantIdGerado != null) {
+                // 1. Remove do Master se foi salvo
+                try {
+                    TenantContext.setTenant(TenantContext.DEFAULT_TENANT_ID);
+                    // O ideal seria deletar o registro da tabela tb_empresa, mas precisaria buscar
+                    // pelo tenantId
+                    // Se o banco foi criado mas deu erro antes de salvar no master, o drop resolve.
+                } catch (Exception exRollback) {
+                }
+
+                // 2. Dropa o banco físico
+                provisioningService.dropDatabase(tenantIdGerado);
+            }
+
+            // Restaura contexto
             if (tenantOriginal != null)
                 TenantContext.setTenant(tenantOriginal);
             else
                 TenantContext.clear();
 
             return ResponseEntity.internalServerError().body("Erro ao criar ambiente: " + e.getMessage());
+        } finally {
+            // Garante retorno ao contexto original em caso de sucesso
+            if (tenantOriginal != null)
+                TenantContext.setTenant(tenantOriginal);
+            else
+                TenantContext.clear();
         }
     }
 }

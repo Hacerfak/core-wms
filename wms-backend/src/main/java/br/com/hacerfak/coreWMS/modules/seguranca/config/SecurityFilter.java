@@ -1,7 +1,6 @@
 package br.com.hacerfak.coreWMS.modules.seguranca.config;
 
 import br.com.hacerfak.coreWMS.core.multitenant.TenantContext;
-import br.com.hacerfak.coreWMS.modules.seguranca.domain.UserRole;
 import br.com.hacerfak.coreWMS.modules.seguranca.domain.Usuario;
 import br.com.hacerfak.coreWMS.modules.seguranca.repository.UsuarioRepository;
 import br.com.hacerfak.coreWMS.modules.seguranca.service.TokenService;
@@ -45,19 +44,17 @@ public class SecurityFilter extends OncePerRequestFilter {
 
                     String tenantId = tokenService.getTenantFromToken(token);
 
-                    // --- CORREÇÃO DE SEGURANÇA CRÍTICA ---
-                    // Se não tem tenant no token, cai no Default (Master).
-                    // MAS usuários comuns NÃO podem acessar o Master, apenas ADMIN.
                     if (tenantId != null) {
+                        // Token de acesso a uma empresa específica
                         TenantContext.setTenant(tenantId);
                     } else {
-                        // Tentativa de acesso ao MASTER
-                        if (usuario.getRole() != UserRole.ADMIN) {
-                            // Bloqueia silenciosamente ou lança erro. Aqui vamos logar e não autenticar.
-                            System.out.println(">>> ALERTA SEGURANÇA: Usuário " + login
-                                    + " tentou acessar contexto MASTER sem permissão.");
-                            throw new RuntimeException("Acesso negado ao contexto Global.");
-                        }
+                        // Token de Login Inicial (Sem Tenant)
+                        // CORREÇÃO: Permitimos o acesso ao contexto Master (Lobby) para TODOS os
+                        // usuários autenticados.
+                        // Isso é necessário para que eles possam consultar a lista de empresas
+                        // (endpoint /meus-acessos).
+                        // A segurança dos dados sensíveis do Master continua garantida pelo
+                        // @PreAuthorize nos Controllers.
                         TenantContext.setTenant(TenantContext.DEFAULT_TENANT_ID);
                     }
 
@@ -67,7 +64,9 @@ public class SecurityFilter extends OncePerRequestFilter {
 
                 } catch (Exception e) {
                     System.out.println(">>> ERRO DE AUTENTICAÇÃO: " + e.getMessage());
-                    // Contexto limpo, Security retornará 403
+                    // Limpa o contexto para garantir que não haja vazamento de segurança em caso de
+                    // erro
+                    SecurityContextHolder.clearContext();
                 }
             } else {
                 System.out.println(">>> TOKEN INVÁLIDO OU EXPIRADO");

@@ -1,7 +1,10 @@
 import axios from 'axios';
 
+// Utiliza variável de ambiente do Vite (VITE_API_URL) ou fallback para localhost
+const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+
 const api = axios.create({
-    baseURL: 'http://localhost:8080', // Endereço do nosso Backend Docker
+    baseURL: baseURL,
 });
 
 // Interceptor: Antes de cada requisição, insere o Token

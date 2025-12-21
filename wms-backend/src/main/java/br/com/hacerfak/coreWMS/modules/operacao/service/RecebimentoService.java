@@ -13,7 +13,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.util.UUID;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.concurrent.ThreadLocalRandom;
 
 @Service
 @RequiredArgsConstructor
@@ -147,18 +149,19 @@ public class RecebimentoService {
     // --- Métodos Auxiliares ---
 
     private String gerarLpnUnico(Long recebimentoId, Produto produto) {
-        Long depositanteId = produto.getDepositante().getId();
-        Long produtoId = produto.getId();
+        // Formato Otimizado:
+        // Prefixo: RU + ID_Receb (base36)
+        // Meio: Timestamp (yyMMddHHmmss)
+        // Sufixo: Aleatório 3 digitos (pra garantir threads no mesmo ms)
 
-        String prefixo = depositanteId + "" + produtoId + "-" + recebimentoId + "-";
-        String sufixo = UUID.randomUUID().toString().substring(0, 4).toUpperCase();
-        String lpnGerado = prefixo + sufixo;
+        String prefix = "RU" + Long.toString(recebimentoId, 36).toUpperCase(); // Ex: R1A (base36 encurta numeros)
 
-        while (volumeRepository.existsByLpn(lpnGerado)) {
-            sufixo = UUID.randomUUID().toString().substring(0, 4).toUpperCase();
-            lpnGerado = prefixo + sufixo;
-        }
+        String timePart = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyMMddHHmmss"));
 
-        return lpnGerado;
+        // Random 100-999
+        int randomPart = ThreadLocalRandom.current().nextInt(100, 999);
+
+        // Ex: R1A-231221143000-123
+        return String.format("%s-%s-%d", prefix, timePart, randomPart);
     }
 }

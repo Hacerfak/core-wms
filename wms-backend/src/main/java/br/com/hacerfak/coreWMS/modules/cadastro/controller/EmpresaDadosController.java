@@ -2,6 +2,7 @@ package br.com.hacerfak.coreWMS.modules.cadastro.controller;
 
 import br.com.hacerfak.coreWMS.modules.cadastro.domain.EmpresaDados;
 import br.com.hacerfak.coreWMS.modules.cadastro.repository.EmpresaDadosRepository;
+import br.com.hacerfak.coreWMS.core.service.CryptoService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -19,6 +20,7 @@ import java.util.Enumeration;
 public class EmpresaDadosController {
 
     private final EmpresaDadosRepository repository;
+    private final CryptoService cryptoService;
 
     @GetMapping
     public ResponseEntity<EmpresaDados> getDadosEmpresa() {
@@ -82,11 +84,12 @@ public class EmpresaDadosController {
             }
 
             config.setCertificadoArquivo(file.getBytes());
-            config.setCertificadoSenha(senha);
+
+            // --- CRIPTOGRAFAR ---
+            config.setCertificadoSenha(cryptoService.encrypt(senha));
 
             repository.save(config);
 
-            // Retorna o objeto atualizado (sem senha)
             config.setCertificadoSenha(null);
             config.setCertificadoArquivo(null);
 
