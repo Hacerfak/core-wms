@@ -1,10 +1,10 @@
 package br.com.hacerfak.coreWMS.modules.expedicao.domain;
 
+import br.com.hacerfak.coreWMS.core.domain.BaseEntity;
 import br.com.hacerfak.coreWMS.modules.cadastro.domain.Produto;
 import jakarta.persistence.*;
 import lombok.*;
 import java.math.BigDecimal;
-
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
 @Entity
@@ -14,11 +14,9 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class ItemPedido {
+public class ItemPedido extends BaseEntity {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    // ID herdado
 
     @ManyToOne
     @JoinColumn(name = "pedido_id", nullable = false)
@@ -32,9 +30,6 @@ public class ItemPedido {
     @Column(nullable = false)
     private BigDecimal quantidadeSolicitada;
 
-    // Quanto o sistema conseguiu reservar (pode faltar estoque)
     private BigDecimal quantidadeAlocada;
-
-    // Quanto já foi bipado pelo operador
     private BigDecimal quantidadeSeparada;
 }

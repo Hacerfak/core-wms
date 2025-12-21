@@ -8,7 +8,9 @@ CREATE TABLE tb_usuario (
     senha VARCHAR(255) NOT NULL,
     role VARCHAR(20) NOT NULL,
     ativo BOOLEAN DEFAULT TRUE,
-    -- Campos de auditoria da BaseEntity
+    -- Auditoria Completa BaseEntity
+    criado_por VARCHAR(100),
+    atualizado_por VARCHAR(100),
     data_criacao TIMESTAMP DEFAULT NOW(),
     data_atualizacao TIMESTAMP,
     data_finalizacao TIMESTAMP
@@ -21,7 +23,8 @@ INSERT INTO tb_usuario (
         senha,
         role,
         ativo,
-        data_criacao
+        data_criacao,
+        criado_por
     )
 VALUES (
         'Administrador Master',
@@ -33,5 +36,6 @@ VALUES (
         -- senha: "123456"
         'ADMIN',
         TRUE,
-        NOW()
+        NOW(),
+        'SISTEMA'
     );

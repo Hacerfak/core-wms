@@ -5,7 +5,7 @@ import {
 } from '@mui/material';
 import {
     Home, PackagePlus, Box as BoxIcon, Truck, Settings, Users,
-    Contact, Package, MapPin, ChevronDown, ChevronRight, Building2, Shield
+    Contact, Package, MapPin, ChevronDown, ChevronRight, Building2, Shield, History
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import theme from '../theme/theme';
@@ -51,6 +51,13 @@ const Sidebar = () => {
                 { text: 'Produtos', icon: <Package size={20} />, path: '/cadastros/produtos', permission: 'PRODUTO_VISUALIZAR' },
                 { text: 'Parceiros', icon: <Contact size={20} />, path: '/cadastros/parceiros', permission: 'PARCEIRO_VISUALIZAR' },
                 { text: 'Endereços', icon: <MapPin size={20} />, path: '/cadastros/locais', permission: 'LOCALIZACAO_VISUALIZAR' }
+            ]
+        },
+        {
+            id: 'relatorios',
+            title: 'Relatórios',
+            items: [
+                { text: 'Auditoria', icon: <History size={20} />, path: '/auditoria', permission: 'AUDITORIA_VISUALIZAR' }
             ]
         },
         {

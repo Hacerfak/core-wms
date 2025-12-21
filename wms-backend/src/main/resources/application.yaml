@@ -50,6 +50,11 @@ spring:
     mongodb:
       # URI: protocolo://usuario:senha@host:porta/banco?authSource=admin
       uri: mongodb://admin:mongo_password@wms-mongo:27017/wms_audit_global?authSource=admin
+      host: wms-mongo
+      port: 27017
+      database: wms_audit_global
+      username: admin
+      password: mongo_password
 
   # ===================================================================
   # FLYWAY (Migrações de Banco Relacional)

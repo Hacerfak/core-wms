@@ -38,8 +38,6 @@ public class Recebimento extends BaseEntity {
     @Column(name = "data_emissao")
     private LocalDateTime dataEmissao;
 
-    private LocalDateTime dataFinalizacao;
-
     @Builder.Default
     @OneToMany(mappedBy = "recebimento", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<ItemRecebimento> itens = new ArrayList<>();

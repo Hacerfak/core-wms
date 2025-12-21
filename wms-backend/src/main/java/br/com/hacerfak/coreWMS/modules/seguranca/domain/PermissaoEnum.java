@@ -45,5 +45,8 @@ public enum PermissaoEnum {
     USUARIO_EDITAR, // Alterar dados de usuários na empresa
     USUARIO_EXCLUIR, // Remover acesso de usuário na empresa
     PERFIL_GERENCIAR, // Criar/Editar Perfis de Acesso
-    CONFIG_GERENCIAR // Alterar configurações da empresa (ex: logo, regras)
+    CONFIG_GERENCIAR, // Alterar configurações da empresa (ex: logo, regras)
+
+    // --- AUDITORIA ---
+    AUDITORIA_VISUALIZAR // Ver logs de sistema
 }

@@ -1,16 +1,16 @@
--- 1. PEDIDO DE SAÍDA
 CREATE TABLE tb_pedido_saida (
     id BIGSERIAL PRIMARY KEY,
     codigo_pedido_externo VARCHAR(50) UNIQUE,
     cliente_id BIGINT NOT NULL,
     status VARCHAR(20),
+    data_finalizacao_processo TIMESTAMP,
+    criado_por VARCHAR(100),
+    atualizado_por VARCHAR(100),
     data_criacao TIMESTAMP DEFAULT NOW(),
     data_atualizacao TIMESTAMP,
     data_finalizacao TIMESTAMP,
-    -- Data do Despacho
     CONSTRAINT fk_pedido_cliente FOREIGN KEY (cliente_id) REFERENCES tb_parceiro(id)
 );
--- 2. ITENS DO PEDIDO
 CREATE TABLE tb_item_pedido (
     id BIGSERIAL PRIMARY KEY,
     pedido_id BIGINT NOT NULL,
@@ -18,10 +18,14 @@ CREATE TABLE tb_item_pedido (
     quantidade_solicitada NUMERIC(18, 4),
     quantidade_alocada NUMERIC(18, 4) DEFAULT 0,
     quantidade_separada NUMERIC(18, 4) DEFAULT 0,
+    criado_por VARCHAR(100),
+    atualizado_por VARCHAR(100),
+    data_criacao TIMESTAMP DEFAULT NOW(),
+    data_atualizacao TIMESTAMP,
+    data_finalizacao TIMESTAMP,
     CONSTRAINT fk_item_ped FOREIGN KEY (pedido_id) REFERENCES tb_pedido_saida(id),
     CONSTRAINT fk_item_prod_ped FOREIGN KEY (produto_id) REFERENCES tb_produto(id)
 );
--- 3. TAREFAS DE SEPARAÇÃO (Picking)
 CREATE TABLE tb_tarefa_separacao (
     id BIGSERIAL PRIMARY KEY,
     pedido_id BIGINT NOT NULL,
@@ -30,10 +34,14 @@ CREATE TABLE tb_tarefa_separacao (
     lote_alocado VARCHAR(50),
     quantidade_planejada NUMERIC(18, 4),
     concluida BOOLEAN DEFAULT FALSE,
+    criado_por VARCHAR(100),
+    atualizado_por VARCHAR(100),
+    data_criacao TIMESTAMP DEFAULT NOW(),
+    data_atualizacao TIMESTAMP,
+    data_finalizacao TIMESTAMP,
     CONSTRAINT fk_tarefa_ped FOREIGN KEY (pedido_id) REFERENCES tb_pedido_saida(id),
     CONSTRAINT fk_tarefa_loc FOREIGN KEY (localizacao_origem_id) REFERENCES tb_localizacao(id)
 );
--- 4. NOTA FISCAL DE SAÍDA
 CREATE TABLE tb_nota_fiscal (
     id BIGSERIAL PRIMARY KEY,
     pedido_id BIGINT NOT NULL,
@@ -45,6 +53,11 @@ CREATE TABLE tb_nota_fiscal (
     xml_protocolo TEXT,
     motivo_rejeicao VARCHAR(255),
     data_emissao TIMESTAMP,
+    criado_por VARCHAR(100),
+    atualizado_por VARCHAR(100),
+    data_criacao TIMESTAMP DEFAULT NOW(),
+    data_atualizacao TIMESTAMP,
+    data_finalizacao TIMESTAMP,
     CONSTRAINT uk_nfe_pedido UNIQUE (pedido_id),
     CONSTRAINT fk_nfe_pedido FOREIGN KEY (pedido_id) REFERENCES tb_pedido_saida(id)
 );

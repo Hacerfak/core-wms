@@ -1,5 +1,6 @@
 package br.com.hacerfak.coreWMS.modules.expedicao.domain;
 
+import br.com.hacerfak.coreWMS.core.domain.BaseEntity;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import br.com.hacerfak.coreWMS.modules.cadastro.domain.Produto;
 import br.com.hacerfak.coreWMS.modules.estoque.domain.Localizacao;
@@ -14,31 +15,25 @@ import java.math.BigDecimal;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class TarefaSeparacao {
+public class TarefaSeparacao extends BaseEntity {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    // ID herdado
 
     @ManyToOne
-    @JsonIgnoreProperties("itens") // Evita loop infinito ao serializar o pedido
+    @JsonIgnoreProperties("itens")
     private PedidoSaida pedido;
 
     @ManyToOne
     private Produto produto;
 
-    // DE ONDE TIRAR (O sistema escolheu isso via FEFO)
     @ManyToOne
     private Localizacao localizacaoOrigem;
 
-    // DADOS ESPECÍFICOS PARA GARANTIR RASTREABILIDADE
     private String loteAlocado;
 
     @Column(nullable = false)
     private BigDecimal quantidadePlanejada;
 
-    // --- CORREÇÃO AQUI ---
-    // Adicionamos @Builder.Default para garantir que o valor comece como 'false'
     @Builder.Default
     @Column(nullable = false)
     private boolean concluida = false;

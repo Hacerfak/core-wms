@@ -1,5 +1,6 @@
 package br.com.hacerfak.coreWMS.modules.fiscal.domain;
 
+import br.com.hacerfak.coreWMS.core.domain.BaseEntity;
 import br.com.hacerfak.coreWMS.modules.expedicao.domain.PedidoSaida;
 import jakarta.persistence.*;
 import lombok.*;
@@ -12,33 +13,30 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class NotaFiscal {
+public class NotaFiscal extends BaseEntity {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    // ID herdado
 
-    // Vincula 1 Nota a 1 Pedido
     @OneToOne
     @JoinColumn(name = "pedido_id", nullable = false, unique = true)
     private PedidoSaida pedido;
 
     @Column(length = 44, unique = true)
-    private String chaveAcesso; // A chave de 44 dígitos da SEFAZ
+    private String chaveAcesso;
 
     private Integer numero;
     private Integer serie;
 
     @Enumerated(EnumType.STRING)
-    private StatusNfe status; // AUTORIZADA, REJEITADA, PROCESSANDO
+    private StatusNfe status;
 
     @Column(columnDefinition = "TEXT")
-    private String xmlAssinado; // Backup do que enviamos
+    private String xmlAssinado;
 
     @Column(columnDefinition = "TEXT")
-    private String xmlProtocolo; // O recibo da SEFAZ (obrigatório guardar)
+    private String xmlProtocolo;
 
-    private String motivoRejeicao; // Se der erro, salva aqui
+    private String motivoRejeicao;
 
     private LocalDateTime dataEmissao;
 }

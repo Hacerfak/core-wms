@@ -1,5 +1,6 @@
 package br.com.hacerfak.coreWMS.modules.seguranca.domain;
 
+import br.com.hacerfak.coreWMS.core.domain.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
 import org.springframework.security.core.GrantedAuthority;
@@ -16,11 +17,9 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class Usuario implements UserDetails {
+public class Usuario extends BaseEntity implements UserDetails {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    // ID herdado de BaseEntity
 
     @Column(unique = true, nullable = false)
     private String login;
@@ -28,23 +27,20 @@ public class Usuario implements UserDetails {
     @Column(nullable = false)
     private String senha;
 
-    // --- NOVOS CAMPOS ---
     @Column(nullable = false)
     private String nome;
 
     private String email;
-    // --------------------
 
     private boolean ativo;
 
     @Enumerated(EnumType.STRING)
-    private UserRole role; // ADMIN (Master) ou USER (Comum)
+    private UserRole role;
 
     @OneToMany(mappedBy = "usuario", cascade = CascadeType.ALL, fetch = FetchType.EAGER)
     private List<UsuarioEmpresa> acessos;
 
-    // --- IMPLEMENTAÇÃO DO USER DETAILS ---
-
+    // --- UserDetails ---
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         if (this.role == UserRole.ADMIN) {

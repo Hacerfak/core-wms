@@ -168,7 +168,7 @@ export const AuthProvider = ({ children }) => {
 
     const refreshUserCompanies = async () => {
         try {
-            const response = await api.get('/empresas/meus-acessos');
+            const response = await api.get('api/empresas/meus-acessos');
             const novasEmpresas = response.data;
             if (user) {
                 const updatedUser = { ...user, empresas: novasEmpresas };

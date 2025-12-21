@@ -1,62 +1,65 @@
-# --- Stage 1: Builder (Compilação) ---
-# Usamos uma imagem Debian (não Alpine) para evitar erros de DNS/Rede no Maven
+# ==============================================================================
+# ESTÁGIO 1: BUILD (Compilação)
+# ==============================================================================
 FROM maven:3.9.6-eclipse-temurin-21 AS builder
-
 WORKDIR /app
 
-# 1. Copia APENAS o pom.xml primeiro (Cache de dependências)
+# 1. Cache de Dependências (Otimização)
+# Copia apenas o pom.xml primeiro para baixar as dependências
 COPY pom.xml .
-
-# 2. Baixa as dependências e plugins (modo offline)
 RUN mvn dependency:go-offline -B
 
-# 3. Agora sim copia o código fonte
+# 2. Compilação do Código Fonte
+# Copia a pasta src inteira
 COPY src ./src
-
-# 4. Compila e Gera o JAR
+# Compila o JAR ignorando testes para ser mais rápido
 RUN mvn clean package -DskipTests
 
-# --- Stage 2: Runtime (Execução Leve) ---
+# ==============================================================================
+# ESTÁGIO 2: RUNTIME (Execução)
+# ==============================================================================
+# Usamos a imagem JRE (apenas execução) baseada em Linux Debian
 FROM eclipse-temurin:21-jre
-
 WORKDIR /app
 
-# ==============================================================================
-# CORREÇÃO PARA ERRO PKIX (SEFAZ / ICP-BRASIL)
-# ==============================================================================
-# 1. Garante que estamos como root para instalar pacotes
+# ------------------------------------------------------------------------------
+# CONFIGURAÇÃO DE CERTIFICADOS (SEFAZ / ICP-BRASIL)
+# ------------------------------------------------------------------------------
 USER root
 
-# 2. Instala wget para baixar os certificados
+# Instala utilitários necessários
 RUN apt-get update && apt-get install -y wget ca-certificates
 
-# 3. Baixa a cadeia Raiz da ICP-Brasil (v5 e v10)
-# ADICIONADO: --no-check-certificate para evitar erro de handshake SSL no build
+# Baixa e Instala Cadeia de Certificados V5 e V10
 RUN wget --no-check-certificate https://acraiz.icpbrasil.gov.br/credenciadas/RAIZ/ICP-Brasilv5.crt -O /tmp/icp-brasil-v5.crt && \
     wget --no-check-certificate https://acraiz.icpbrasil.gov.br/credenciadas/RAIZ/ICP-Brasilv10.crt -O /tmp/icp-brasil-v10.crt
 
-# 4. Importa para o TrustStore do Java (cacerts)
+# Importa para o Keystore do Java
 RUN keytool -import -trustcacerts -keystore "$JAVA_HOME/lib/security/cacerts" \
     -storepass changeit -noprompt -alias icp-brasil-v5 -file /tmp/icp-brasil-v5.crt && \
     keytool -import -trustcacerts -keystore "$JAVA_HOME/lib/security/cacerts" \
     -storepass changeit -noprompt -alias icp-brasil-v10 -file /tmp/icp-brasil-v10.crt
 
-# 5. Limpeza para manter a imagem leve
+# Limpeza para reduzir tamanho da imagem
 RUN rm /tmp/icp-brasil-v5.crt /tmp/icp-brasil-v10.crt && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
-# ==============================================================================
 
-# Cria usuário de segurança (boa prática)
+# ------------------------------------------------------------------------------
+# CONFIGURAÇÃO DA APLICAÇÃO
+# ------------------------------------------------------------------------------
+
+# Cria usuário não-root por segurança
 RUN groupadd -r wmsgroup && useradd -r -g wmsgroup wmsuser
 USER wmsuser
 
-# Copia apenas o JAR final do estágio anterior
+# Copia o JAR gerado no Estágio 1
 COPY --from=builder /app/target/*.jar app.jar
 
-# Configurações de Memória para Containers
+# Configurações de Memória Java para Containers
 ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
 
 EXPOSE 8080
 
+# Inicia a aplicação
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]

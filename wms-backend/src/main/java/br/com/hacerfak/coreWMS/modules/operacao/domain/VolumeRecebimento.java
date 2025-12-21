@@ -1,11 +1,11 @@
 package br.com.hacerfak.coreWMS.modules.operacao.domain;
 
+import br.com.hacerfak.coreWMS.core.domain.BaseEntity;
 import br.com.hacerfak.coreWMS.modules.cadastro.domain.Produto;
 import br.com.hacerfak.coreWMS.modules.estoque.domain.Localizacao;
 import jakarta.persistence.*;
 import lombok.*;
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "tb_volume_recebimento")
@@ -14,11 +14,9 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class VolumeRecebimento {
+public class VolumeRecebimento extends BaseEntity {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    // ID herdado
 
     @ManyToOne
     @JoinColumn(name = "recebimento_id", nullable = false)
@@ -29,19 +27,18 @@ public class VolumeRecebimento {
     private Produto produto;
 
     @Column(nullable = false, unique = true)
-    private String lpn; // O ID da Etiqueta Gerada
+    private String lpn;
 
     @Column(nullable = false)
     private BigDecimal quantidadeOriginal;
 
-    // Controle de Armazenagem
     @Builder.Default
     private boolean armazenado = false;
 
     @ManyToOne
     @JoinColumn(name = "local_destino_id")
-    private Localizacao localDestino; // Preenchido só na hora de guardar
+    private Localizacao localDestino;
 
-    private LocalDateTime dataCriacao;
-    private String usuarioCriacao;
+    // Data criação e Usuário criação agora vêm da BaseEntity
+    private String usuarioCriacao; // Mantido para compatibilidade do código existente
 }

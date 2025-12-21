@@ -11,9 +11,10 @@ public interface MovimentoEstoqueRepository extends JpaRepository<MovimentoEstoq
 
     /**
      * Busca o "Kardex" do produto: Todo o histórico de movimentação.
-     * O OrderByDataMovimentoDesc garante que o último movimento apareça primeiro.
+     * CORREÇÃO: Usamos 'DataCriacao' pois 'DataMovimento' foi removido em favor da
+     * BaseEntity.
      */
-    List<MovimentoEstoque> findByProdutoIdOrderByDataMovimentoDesc(Long produtoId);
+    List<MovimentoEstoque> findByProdutoIdOrderByDataCriacaoDesc(Long produtoId);
 
     /**
      * Rastreabilidade por Lote:

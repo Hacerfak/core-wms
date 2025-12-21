@@ -1,10 +1,6 @@
--- ==========================================================
--- 1. DADOS DA EMPRESA (Identidade e Fiscal)
--- ==========================================================
--- Antiga tb_empresa_config (Renomeada e limpa de flags)
+-- DADOS DA EMPRESA (Tabela de Configuração Única)
 CREATE TABLE tb_empresa_dados (
     id BIGINT PRIMARY KEY,
-    -- Dados Básicos
     razao_social VARCHAR(200) NOT NULL,
     nome_fantasia VARCHAR(255),
     cnpj VARCHAR(20) NOT NULL,
@@ -12,12 +8,9 @@ CREATE TABLE tb_empresa_dados (
     inscricao_municipal VARCHAR(20),
     cnae_principal VARCHAR(20),
     regime_tributario VARCHAR(20),
-    -- (CRT: 1=Simples, 3=Normal)
-    -- Contato
     email VARCHAR(255),
     telefone VARCHAR(20),
     website VARCHAR(255),
-    -- Endereço Estruturado
     cep VARCHAR(10),
     logradouro VARCHAR(255),
     numero VARCHAR(20),
@@ -26,31 +19,33 @@ CREATE TABLE tb_empresa_dados (
     cidade VARCHAR(100),
     uf VARCHAR(2) NOT NULL DEFAULT 'RS',
     endereco_completo VARCHAR(255),
-    -- Mantido para compatibilidade
     logo_url VARCHAR(500),
-    -- CERTIFICADO DIGITAL
     certificado_arquivo BYTEA,
-    -- O arquivo .pfx salvo em bytes
     certificado_senha VARCHAR(100),
-    -- A senha do certificado
     nome_certificado VARCHAR(255),
-    -- Nome original do arquivo
-    validade_certificado TIMESTAMP -- Data de expiração extraída
+    validade_certificado TIMESTAMP,
+    -- Auditoria
+    criado_por VARCHAR(100),
+    atualizado_por VARCHAR(100),
+    data_criacao TIMESTAMP DEFAULT NOW(),
+    data_atualizacao TIMESTAMP,
+    data_finalizacao TIMESTAMP
 );
--- Seed Inicial da Empresa (ID 1 Fixo)
-INSERT INTO tb_empresa_dados (id, razao_social, cnpj, uf)
-VALUES (1, 'A Configurar...', '00000000000000', 'RS');
--- ==========================================================
--- 1.1 CONFIGURAÇÃO DO SISTEMA (Parâmetros Globais)
--- ==========================================================
--- Antiga tb_configuracao (Agora centraliza todas as flags)
+INSERT INTO tb_empresa_dados (id, razao_social, cnpj, uf, criado_por)
+VALUES (
+        1,
+        'A Configurar...',
+        '00000000000000',
+        'RS',
+        'SISTEMA'
+    );
+-- CONFIGURAÇÃO DO SISTEMA
 CREATE TABLE tb_sistema_config (
     chave VARCHAR(100) PRIMARY KEY,
     valor VARCHAR(255),
     descricao VARCHAR(255),
-    tipo VARCHAR(20) -- BOOLEAN, INTEGER, STRING, LIST
+    tipo VARCHAR(20)
 );
--- Seeds de Configuração (Migrados da empresa + Novos)
 INSERT INTO tb_sistema_config (chave, valor, descricao, tipo)
 VALUES (
         'SISTEMA_MANUTENCAO',
@@ -82,46 +77,40 @@ VALUES (
         'Imprime etiquetas automaticamente após conferência',
         'BOOLEAN'
     );
--- ==========================================================
--- 2. ARMAZÉNS (Nível 1)
--- ==========================================================
+-- ARMAZÉNS
 CREATE TABLE tb_armazem (
     id BIGSERIAL PRIMARY KEY,
     codigo VARCHAR(10) NOT NULL,
     nome VARCHAR(100) NOT NULL,
     endereco_completo VARCHAR(255),
     ativo BOOLEAN DEFAULT TRUE,
-    -- Auditoria
+    criado_por VARCHAR(100),
+    atualizado_por VARCHAR(100),
     data_criacao TIMESTAMP DEFAULT NOW(),
     data_atualizacao TIMESTAMP,
     data_finalizacao TIMESTAMP,
     CONSTRAINT uk_armazem_codigo UNIQUE (codigo)
 );
--- ==========================================================
--- 3. ÁREAS (Nível 2 - Zonas dentro do Armazém)
--- ==========================================================
+-- ÁREAS
 CREATE TABLE tb_area (
     id BIGSERIAL PRIMARY KEY,
     armazem_id BIGINT NOT NULL,
     codigo VARCHAR(10) NOT NULL,
     nome VARCHAR(100) NOT NULL,
     tipo VARCHAR(20) NOT NULL,
-    -- ARMAZENAGEM, DOCA, SEGREGACAO, PERDA
-    -- Flags de automação
     padrao_recebimento BOOLEAN DEFAULT FALSE,
     padrao_expedicao BOOLEAN DEFAULT FALSE,
     padrao_quarentena BOOLEAN DEFAULT FALSE,
     ativo BOOLEAN DEFAULT TRUE,
-    -- Auditoria
+    criado_por VARCHAR(100),
+    atualizado_por VARCHAR(100),
     data_criacao TIMESTAMP DEFAULT NOW(),
     data_atualizacao TIMESTAMP,
     data_finalizacao TIMESTAMP,
     CONSTRAINT fk_area_armazem FOREIGN KEY (armazem_id) REFERENCES tb_armazem(id),
     CONSTRAINT uk_area_codigo_armazem UNIQUE (armazem_id, codigo)
 );
--- ==========================================================
--- 4. POSIÇÕES / LOCALIZAÇÕES (Nível 3 - Onde o estoque fica)
--- ==========================================================
+-- LOCALIZAÇÕES
 CREATE TABLE tb_localizacao (
     id BIGINT PRIMARY KEY,
     area_id BIGINT NOT NULL,
@@ -129,35 +118,32 @@ CREATE TABLE tb_localizacao (
     endereco_completo VARCHAR(100) NOT NULL,
     descricao VARCHAR(255),
     tipo VARCHAR(20) NOT NULL,
-    -- PALLET, BLOCADO, PICKING, VIRTUAL
     virtual BOOLEAN DEFAULT FALSE,
     permite_multi_lpn BOOLEAN DEFAULT TRUE,
     capacidade_lpn INTEGER DEFAULT 1,
     capacidade_peso_kg NUMERIC(19, 4),
     bloqueado BOOLEAN DEFAULT FALSE,
     ativo BOOLEAN DEFAULT TRUE,
-    -- Auditoria
+    criado_por VARCHAR(100),
+    atualizado_por VARCHAR(100),
     data_criacao TIMESTAMP DEFAULT NOW(),
     data_atualizacao TIMESTAMP,
     data_finalizacao TIMESTAMP,
     CONSTRAINT fk_local_area FOREIGN KEY (area_id) REFERENCES tb_area(id),
     CONSTRAINT uk_local_endereco_completo UNIQUE (endereco_completo)
 );
--- Sequence personalizada para iniciar endereços do usuário a partir de 1000
 CREATE SEQUENCE tb_localizacao_id_seq START 1000;
 ALTER TABLE tb_localizacao
 ALTER COLUMN id
 SET DEFAULT nextval('tb_localizacao_id_seq');
--- ==========================================================
--- SEEDS OBRIGATÓRIOS (DADOS INICIAIS)
--- ==========================================================
--- 1. ARMAZÉM PADRÃO (ID 1)
-INSERT INTO tb_armazem (id, codigo, nome, endereco_completo)
+-- SEEDS MAPA
+INSERT INTO tb_armazem (id, codigo, nome, endereco_completo, criado_por)
 VALUES (
         1,
         'CD01',
         'Centro de Distribuição Principal',
-        'Endereço da Empresa'
+        'Endereço da Empresa',
+        'SISTEMA'
     );
 SELECT setval(
         'tb_armazem_id_seq',
@@ -166,7 +152,6 @@ SELECT setval(
             FROM tb_armazem
         )
     );
--- 2. ÁREAS DE SISTEMA (IDs 1, 2, 3)
 INSERT INTO tb_area (
         id,
         armazem_id,
@@ -175,7 +160,8 @@ INSERT INTO tb_area (
         tipo,
         padrao_recebimento,
         padrao_expedicao,
-        padrao_quarentena
+        padrao_quarentena,
+        criado_por
     )
 VALUES (
         1,
@@ -185,7 +171,8 @@ VALUES (
         'DOCA',
         true,
         true,
-        false
+        false,
+        'SISTEMA'
     ),
     (
         2,
@@ -195,7 +182,8 @@ VALUES (
         'SEGREGACAO',
         false,
         false,
-        true
+        true,
+        'SISTEMA'
     ),
     (
         3,
@@ -205,7 +193,8 @@ VALUES (
         'ARMAZENAGEM',
         false,
         false,
-        false
+        false,
+        'SISTEMA'
     );
 SELECT setval(
         'tb_area_id_seq',
@@ -214,7 +203,6 @@ SELECT setval(
             FROM tb_area
         )
     );
--- 3. LOCALIZAÇÕES DE SISTEMA (IDs 1 a 5 Fixos)
 INSERT INTO tb_localizacao (
         id,
         area_id,
@@ -222,11 +210,39 @@ INSERT INTO tb_localizacao (
         endereco_completo,
         tipo,
         virtual,
-        ativo
+        ativo,
+        criado_por
     )
-VALUES (1, 1, 'REC', 'CD01DOCREC', 'DOCA', true, true),
-    (2, 1, 'EXP', 'CD01DOCEXP', 'DOCA', true, true),
-    (3, 2, 'AV', 'CD01SEGAV', 'AVARIA', true, true),
+VALUES (
+        1,
+        1,
+        'REC',
+        'CD01DOCREC',
+        'DOCA',
+        true,
+        true,
+        'SISTEMA'
+    ),
+    (
+        2,
+        1,
+        'EXP',
+        'CD01DOCEXP',
+        'DOCA',
+        true,
+        true,
+        'SISTEMA'
+    ),
+    (
+        3,
+        2,
+        'AV',
+        'CD01SEGAV',
+        'AVARIA',
+        true,
+        true,
+        'SISTEMA'
+    ),
     (
         4,
         2,
@@ -234,7 +250,8 @@ VALUES (1, 1, 'REC', 'CD01DOCREC', 'DOCA', true, true),
         'CD01SEGPERDA',
         'PERDA',
         true,
-        true
+        true,
+        'SISTEMA'
     ),
     (
         5,
@@ -243,28 +260,23 @@ VALUES (1, 1, 'REC', 'CD01DOCREC', 'DOCA', true, true),
         'CD01SEGQUAR',
         'QUARENTENA',
         true,
-        true
+        true,
+        'SISTEMA'
     );
--- ==========================================================
--- 5. PARCEIROS
--- ==========================================================
+-- PARCEIROS
 CREATE TABLE tb_parceiro (
     id BIGSERIAL PRIMARY KEY,
     documento VARCHAR(20) NOT NULL,
-    -- CPF/CNPJ limpo
     nome VARCHAR(255) NOT NULL,
     nome_fantasia VARCHAR(255),
     ie VARCHAR(20),
     crt VARCHAR(5),
     tipo VARCHAR(20) DEFAULT 'AMBOS',
-    -- CLIENTE, FORNECEDOR, AMBOS, TRANSPORTADORA
     ativo BOOLEAN NOT NULL DEFAULT TRUE,
-    -- Configurações Específicas por Parceiro
     recebimento_cego BOOLEAN NOT NULL DEFAULT FALSE,
     padrao_controla_lote BOOLEAN DEFAULT FALSE,
     padrao_controla_validade BOOLEAN DEFAULT FALSE,
     padrao_controla_serie BOOLEAN DEFAULT FALSE,
-    -- Endereço
     cep VARCHAR(10),
     logradouro VARCHAR(255),
     numero VARCHAR(20),
@@ -274,21 +286,22 @@ CREATE TABLE tb_parceiro (
     uf VARCHAR(2),
     telefone VARCHAR(20),
     email VARCHAR(255),
+    criado_por VARCHAR(100),
+    atualizado_por VARCHAR(100),
     data_criacao TIMESTAMP DEFAULT NOW(),
     data_atualizacao TIMESTAMP,
     data_finalizacao TIMESTAMP,
     CONSTRAINT uk_parceiro_documento UNIQUE (documento)
 );
-INSERT INTO tb_parceiro (documento, nome, ie, tipo)
+INSERT INTO tb_parceiro (documento, nome, ie, tipo, criado_por)
 VALUES (
         '00000000000000',
         'EMPRESA PADRAO',
         'ISENTO',
-        'AMBOS'
+        'AMBOS',
+        'SISTEMA'
     );
--- ==========================================================
--- 6. PRODUTOS
--- ==========================================================
+-- PRODUTOS
 CREATE TABLE tb_produto (
     id BIGSERIAL PRIMARY KEY,
     depositante_id BIGINT NOT NULL,
@@ -304,10 +317,11 @@ CREATE TABLE tb_produto (
     cest VARCHAR(10),
     valor_unitario_padrao NUMERIC(18, 4),
     ativo BOOLEAN NOT NULL DEFAULT TRUE,
-    -- Controles
     controla_lote BOOLEAN DEFAULT FALSE,
     controla_validade BOOLEAN DEFAULT FALSE,
     controla_serie BOOLEAN DEFAULT FALSE,
+    criado_por VARCHAR(100),
+    atualizado_por VARCHAR(100),
     data_criacao TIMESTAMP DEFAULT NOW(),
     data_atualizacao TIMESTAMP,
     data_finalizacao TIMESTAMP,

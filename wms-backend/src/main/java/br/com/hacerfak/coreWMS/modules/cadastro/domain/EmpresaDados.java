@@ -1,20 +1,20 @@
 package br.com.hacerfak.coreWMS.modules.cadastro.domain;
 
+import br.com.hacerfak.coreWMS.core.domain.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "tb_empresa_dados") // Renomeado
+@Table(name = "tb_empresa_dados")
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class EmpresaDados {
+public class EmpresaDados extends BaseEntity {
 
-    @Id
-    private Long id; // Geralmente 1 (Singleton por Tenant)
+    // ID herdado
 
     // --- DADOS CADASTRAIS ---
     private String razaoSocial;

@@ -31,6 +31,10 @@ import UsuarioForm from './pages/Usuarios/UsuarioForm';
 import PerfisList from './pages/Usuarios/PerfisList';
 import MinhaEmpresa from './pages/Configuracao/MinhaEmpresa';
 import GestaoEmpresas from './pages/Admin/GestaoEmpresas';
+
+// RELATÓRIOS
+import AuditoriaList from './pages/Relatorios/AuditoriaList';
+
 import MainLayout from './layout/MainLayout';
 
 const PrivateRoute = ({ children }) => {
@@ -169,8 +173,13 @@ function App() {
                   <GestaoEmpresas />
                 </Can>
               } />
+              {/* Relatórios */}
+              <Route path="/auditoria" element={
+                <Can I="AUDITORIA_VISUALIZAR" elseShow={<Navigate to="/dashboard" />}>
+                  <AuditoriaList />
+                </Can>
+              } />
             </Route>
-
             <Route path="/" element={<Navigate to="/dashboard" />} />
             <Route path="*" element={<Navigate to="/dashboard" />} />
           </Routes>

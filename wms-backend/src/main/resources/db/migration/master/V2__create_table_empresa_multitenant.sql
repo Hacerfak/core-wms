@@ -6,6 +6,9 @@ CREATE TABLE tb_empresa (
     nome_certificado VARCHAR(255),
     validade_certificado DATE,
     ativo BOOLEAN DEFAULT TRUE,
+    -- Auditoria
+    criado_por VARCHAR(100),
+    atualizado_por VARCHAR(100),
     data_criacao TIMESTAMP DEFAULT NOW(),
     data_atualizacao TIMESTAMP,
     data_finalizacao TIMESTAMP
@@ -15,6 +18,9 @@ CREATE TABLE tb_usuario_empresa (
     usuario_id BIGINT NOT NULL,
     empresa_id BIGINT NOT NULL,
     role VARCHAR(20) NOT NULL,
+    -- Auditoria
+    criado_por VARCHAR(100),
+    atualizado_por VARCHAR(100),
     data_criacao TIMESTAMP DEFAULT NOW(),
     data_atualizacao TIMESTAMP,
     data_finalizacao TIMESTAMP,

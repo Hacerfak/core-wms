@@ -6,13 +6,12 @@ import br.com.hacerfak.coreWMS.modules.operacao.domain.*;
 import br.com.hacerfak.coreWMS.modules.operacao.dto.ConferenciaRequest;
 import br.com.hacerfak.coreWMS.modules.operacao.repository.RecebimentoRepository;
 import br.com.hacerfak.coreWMS.modules.operacao.repository.VolumeRecebimentoRepository;
-import br.com.hacerfak.coreWMS.core.exception.EntityNotFoundException; // Sua exception customizada
+import br.com.hacerfak.coreWMS.core.exception.EntityNotFoundException;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
 import java.math.BigDecimal;
 import java.util.UUID;
 
@@ -37,8 +36,7 @@ public class RecebimentoService {
             throw new IllegalStateException("Recebimento já finalizado.");
         }
 
-        // --- MUDANÇA AQUI: Busca Flexível (SKU, EAN ou DUN) ---
-        // O campo 'dto.sku()' agora pode conter qualquer código
+        // Busca Flexível (SKU, EAN ou DUN)
         Produto produto = produtoRepository.findByCodigoBarras(dto.sku())
                 .orElseThrow(() -> new EntityNotFoundException("Produto não encontrado com o código: " + dto.sku()));
 
@@ -51,7 +49,6 @@ public class RecebimentoService {
         }
 
         // 2. Gera o LPN (License Plate Number)
-        // Se o operador não bipou um código externo, geramos um nosso.
         String lpn = (dto.lpnExterno() != null && !dto.lpnExterno().isBlank())
                 ? dto.lpnExterno()
                 : gerarLpnUnico(recebimentoId, produto);
@@ -67,8 +64,8 @@ public class RecebimentoService {
                 .lpn(lpn)
                 .quantidadeOriginal(dto.quantidade())
                 .armazenado(false)
-                .dataCriacao(LocalDateTime.now())
-                .usuarioCriacao(usuarioResponsavel) // <--- AGORA É REAL! Antes era "OPERADOR"
+                // .dataCriacao(LocalDateTime.now()) <--- REMOVIDO (BaseEntity cuida disso)
+                .usuarioCriacao(usuarioResponsavel)
                 .build();
 
         volumeRepository.save(volume);
@@ -79,7 +76,6 @@ public class RecebimentoService {
                 .findFirst()
                 .orElseThrow();
 
-        // Somamos a quantidade
         item.setQuantidadeConferida(item.getQuantidadeConferida().add(dto.quantidade()));
 
         // 4. Atualiza status se for o primeiro bip
@@ -88,8 +84,6 @@ public class RecebimentoService {
             recebimentoRepository.save(recebimento);
         }
 
-        // --- CORREÇÃO: SALVAR EXPLICITAMENTE O RECEBIMENTO ---
-        // Isso força a atualização do ItemRecebimento no banco
         recebimentoRepository.save(recebimento);
 
         return lpn;
@@ -111,10 +105,9 @@ public class RecebimentoService {
 
         // 1. Verifica item por item
         for (ItemRecebimento item : recebimento.getItens()) {
-            // compareTo != 0 significa que os números são diferentes
             if (item.getQuantidadeConferida().compareTo(item.getQuantidadeNota()) != 0) {
                 divergente = true;
-                break; // Achou um erro, já basta
+                break;
             }
         }
 
@@ -123,13 +116,7 @@ public class RecebimentoService {
             recebimento.setStatus(StatusRecebimento.DIVERGENTE);
         } else {
             recebimento.setStatus(StatusRecebimento.FINALIZADO);
-            // Aqui futuramente chamaremos o EstoqueService.adicionarEstoque(recebimento)
         }
-
-        // 3. Marca a data de fim (se necessário criamos o campo no banco depois, por
-        // enquanto usamos data atualização)
-        // recebimento.setDataFinalizacao(LocalDateTime.now()); // Se tiver criado a
-        // coluna no banco
 
         return recebimentoRepository.save(recebimento);
     }
@@ -160,21 +147,13 @@ public class RecebimentoService {
     // --- Métodos Auxiliares ---
 
     private String gerarLpnUnico(Long recebimentoId, Produto produto) {
-        // Formato Solicitado: {DepID}{ProdID}-{RecID}-{Nano}
-        // Ex: Depositante 1, Produto 500, Rec 10 -> "1500-10-829381203"
-
         Long depositanteId = produto.getDepositante().getId();
         Long produtoId = produto.getId();
 
         String prefixo = depositanteId + "" + produtoId + "-" + recebimentoId + "-";
-
-        // Gera um UUID (ex: 550e8400-e29b...) e pega só os primeiros 4 caracteres
         String sufixo = UUID.randomUUID().toString().substring(0, 4).toUpperCase();
-
         String lpnGerado = prefixo + sufixo;
 
-        // Validação de segurança (Loop de colisão - muito raro, mas boa prática)
-        // Se por um acaso do destino gerar um repetido, ele tenta de novo
         while (volumeRepository.existsByLpn(lpnGerado)) {
             sufixo = UUID.randomUUID().toString().substring(0, 4).toUpperCase();
             lpnGerado = prefixo + sufixo;
