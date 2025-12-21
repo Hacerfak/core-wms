@@ -38,8 +38,8 @@ const AuditoriaList = () => {
             // Conversão para ISO string que o Java espera
             const filtrosApi = {
                 ...filtros,
-                inicio: filtros.inicio ? new Date(filtros.inicio).toISOString() : null,
-                fim: filtros.fim ? new Date(filtros.fim).toISOString() : null,
+                inicio: filtros.inicio ? dayjs(filtros.inicio).format('YYYY-MM-DDTHH:mm:ss') : null,
+                fim: filtros.fim ? dayjs(filtros.fim).format('YYYY-MM-DDTHH:mm:ss') : null,
                 // CORREÇÃO 3: Se for 'TODAS', envia vazio para a API não filtrar
                 acao: filtros.acao === 'TODAS' ? '' : filtros.acao
             };

@@ -1,5 +1,6 @@
 package br.com.hacerfak.coreWMS.modules.sistema.domain;
 
+import br.com.hacerfak.coreWMS.core.listener.GlobalAuditListener;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -10,6 +11,7 @@ import lombok.*;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@EntityListeners(GlobalAuditListener.class)
 public class SistemaConfig {
 
     @Id

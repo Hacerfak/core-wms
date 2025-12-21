@@ -2,6 +2,7 @@ package br.com.hacerfak.coreWMS.modules.seguranca.domain;
 
 import br.com.hacerfak.coreWMS.core.domain.BaseEntity;
 import br.com.hacerfak.coreWMS.modules.cadastro.domain.Empresa;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -16,6 +17,7 @@ public class UsuarioEmpresa extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "usuario_id", nullable = false)
+    @JsonIgnore
     private Usuario usuario;
 
     @ManyToOne(fetch = FetchType.EAGER)

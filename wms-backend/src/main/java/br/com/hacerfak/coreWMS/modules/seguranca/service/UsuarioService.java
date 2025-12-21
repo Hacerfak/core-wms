@@ -2,6 +2,7 @@ package br.com.hacerfak.coreWMS.modules.seguranca.service;
 
 import br.com.hacerfak.coreWMS.core.exception.EntityNotFoundException;
 import br.com.hacerfak.coreWMS.core.multitenant.TenantContext;
+import br.com.hacerfak.coreWMS.modules.auditoria.service.AuditService;
 import br.com.hacerfak.coreWMS.modules.cadastro.domain.Empresa;
 import br.com.hacerfak.coreWMS.modules.cadastro.repository.EmpresaRepository;
 import br.com.hacerfak.coreWMS.modules.seguranca.domain.*;
@@ -29,6 +30,7 @@ public class UsuarioService {
     private final UsuarioPerfilRepository usuarioPerfilRepository;
     private final PasswordEncoder passwordEncoder;
     private final PlatformTransactionManager transactionManager;
+    private final AuditService auditService;
 
     // --- HELPERS ---
     private <T> T callAsMaster(java.util.function.Supplier<T> action) {
@@ -119,6 +121,10 @@ public class UsuarioService {
                 }
 
                 Usuario salvo = usuarioRepository.save(usuario);
+                // Note: auditService.registrarLogManual não é estritamente necessário aqui pois
+                // o save() dispara o Listener,
+                // mas para consistência em ações críticas pode ser mantido ou removido.
+                // O Listener Global já pega o INSERT/UPDATE aqui.
                 return new UsuarioDTO(salvo.getId(), salvo.getLogin(), salvo.getEmail(), salvo.getNome(), "USER",
                         salvo.isAtivo(), false);
             });
@@ -129,7 +135,9 @@ public class UsuarioService {
         Usuario alvo = callAsMaster(() -> usuarioRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Usuário não encontrado")));
 
-        Long logadoId = ((Usuario) SecurityContextHolder.getContext().getAuthentication().getPrincipal()).getId();
+        Usuario logado = (Usuario) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        Long logadoId = logado.getId();
+        String logadoLogin = logado.getLogin();
 
         if ("master".equalsIgnoreCase(alvo.getLogin()) || alvo.getRole() == UserRole.ADMIN) {
             throw new IllegalArgumentException("O usuário MASTER não pode ser excluído.");
@@ -151,6 +159,12 @@ public class UsuarioService {
 
         runAsMaster(() -> {
             new TransactionTemplate(transactionManager).execute(status -> {
+                // --- CORREÇÃO: REGISTRO MANUAL DE AUDITORIA ---
+                // Operações deleteBy... não disparam @PostRemove automaticamente no JPA
+                auditService.registrarLogManual("DELETE", "Usuario", String.valueOf(id),
+                        "Exclusão Global de Usuário: " + alvo.getNome() + " (" + alvo.getLogin() + ")",
+                        logadoLogin);
+
                 usuarioEmpresaRepository.deleteByUsuarioId(id);
                 usuarioRepository.deleteById(id);
                 return null;
@@ -241,18 +255,13 @@ public class UsuarioService {
     }
 
     public void desvincularEmpresa(Long usuarioId, Long empresaId) {
-        // --- 1. Busca o Usuário Alvo (Para saber se é Master) ---
         Usuario usuarioAlvo = callAsMaster(() -> usuarioRepository.findById(usuarioId).orElseThrow());
-
-        // --- 2. Busca o Usuário Logado (Para saber se é auto-remoção) ---
         Long logadoId = ((Usuario) SecurityContextHolder.getContext().getAuthentication().getPrincipal()).getId();
 
-        // VALIDAÇÃO 1: Ninguém remove o próprio vínculo (Auto-kick)
         if (logadoId.equals(usuarioId)) {
             throw new IllegalArgumentException("Você não pode remover seus próprios vínculos/acessos.");
         }
 
-        // VALIDAÇÃO 2: O Master é sagrado e onipresente. Ninguém remove vínculo dele.
         if (usuarioAlvo.getRole() == UserRole.ADMIN) {
             throw new IllegalArgumentException("Não é possível remover vínculos do usuário Master (Admin Global).");
         }

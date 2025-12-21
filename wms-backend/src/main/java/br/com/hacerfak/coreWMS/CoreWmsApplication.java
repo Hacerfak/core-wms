@@ -13,6 +13,7 @@ import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.data.web.config.EnableSpringDataWebSupport;
 import org.springframework.data.web.config.EnableSpringDataWebSupport.PageSerializationMode;
 import br.com.hacerfak.coreWMS.core.config.UserAuditorAware;
+import br.com.hacerfak.coreWMS.modules.auditoria.repository.AuditLogRepository;
 
 @SpringBootApplication
 @EnableJpaAuditing(auditorAwareRef = "auditorAware")
@@ -21,7 +22,9 @@ import br.com.hacerfak.coreWMS.core.config.UserAuditorAware;
 
 // --- 1. CONFIGURAÇÃO DO JPA (POSTGRES) ---
 // Varre o projeto todo, MAS EXCLUI a pasta do Mongo para não confundir
-@EnableJpaRepositories(basePackages = "br.com.hacerfak.coreWMS", excludeFilters = @ComponentScan.Filter(type = FilterType.REGEX, pattern = "br\\.com\\.hacerfak\\.coreWMS\\.modules\\.auditoria\\.repository\\..*"))
+@EnableJpaRepositories(basePackages = "br.com.hacerfak.coreWMS", excludeFilters = @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = {
+		AuditLogRepository.class } // <--- EXCLUSÃO EXPLÍCITA E SEGURA
+))
 
 // --- 2. CONFIGURAÇÃO DO MONGO ---
 // Varre APENAS a pasta específica de auditoria
