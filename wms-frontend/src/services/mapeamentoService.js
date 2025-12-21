@@ -51,3 +51,11 @@ export const excluirItem = async (tipo, id) => {
     // tipo = 'armazens', 'areas', 'locais'
     await api.delete(`/api/mapeamento/${tipo}/${id}`);
 };
+
+// --- UTILITÁRIOS ---
+export const buscarLocalPorCodigo = async (enderecoCompleto) => {
+    // Codifica a barra (/) para evitar erro na URL se houver
+    const encoded = encodeURIComponent(enderecoCompleto);
+    const response = await api.get(`/api/mapeamento/scan/${encoded}`);
+    return response.data;
+};

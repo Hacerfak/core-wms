@@ -25,6 +25,10 @@ import RecebimentoList from './pages/Recebimento/RecebimentoList';
 import Recebimento from './pages/Recebimento/Recebimento';
 import Conferencia from './pages/Recebimento/Conferencia';
 
+// ESTOQUE
+import EstoqueList from './pages/Estoque/EstoqueList';
+import Armazenagem from './pages/Estoque/Armazenagem';
+
 // CONFIGURAÇÃO E ADMIN
 import UsuariosList from './pages/Usuarios/UsuariosList';
 import UsuarioForm from './pages/Usuarios/UsuarioForm';
@@ -125,9 +129,16 @@ function App() {
                 </Can>
               } />
 
+              {/* ROTAS DE ESTOQUE */}
               <Route path="/estoque" element={
                 <Can I="ESTOQUE_VISUALIZAR" elseShow={<Navigate to="/dashboard" />}>
-                  <div>Módulo de Estoque (Em breve)</div>
+                  <EstoqueList />
+                </Can>
+              } />
+
+              <Route path="/estoque/armazenagem" element={
+                <Can I="ESTOQUE_ARMAZENAR" elseShow={<Navigate to="/dashboard" />}>
+                  <Armazenagem />
                 </Can>
               } />
 

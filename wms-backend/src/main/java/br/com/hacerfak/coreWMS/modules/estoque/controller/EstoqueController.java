@@ -73,6 +73,7 @@ public class EstoqueController {
     @GetMapping("/detalhado")
     @PreAuthorize("hasAuthority('ESTOQUE_VISUALIZAR') or hasRole('ADMIN')")
     public ResponseEntity<List<EstoqueSaldo>> saldoDetalhado() {
-        return ResponseEntity.ok(saldoRepository.findAll());
+        // CORREÇÃO: Usa o método findAllCompleto em vez do findAll padrão
+        return ResponseEntity.ok(saldoRepository.findAllCompleto());
     }
 }
