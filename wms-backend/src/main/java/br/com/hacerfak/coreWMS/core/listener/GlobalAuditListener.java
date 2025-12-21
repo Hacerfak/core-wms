@@ -7,6 +7,7 @@ import br.com.hacerfak.coreWMS.modules.auditoria.service.AuditService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.fasterxml.jackson.datatype.hibernate7.Hibernate7Module;
 import jakarta.persistence.*;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -18,7 +19,6 @@ import java.util.Map;
 
 public class GlobalAuditListener {
 
-    // ObjectMapper estático para evitar instanciar toda vez (leve e thread-safe)
     private static final ObjectMapper mapper = new ObjectMapper();
 
     static {
@@ -26,9 +26,16 @@ public class GlobalAuditListener {
         mapper.registerModule(new JavaTimeModule());
         mapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
         mapper.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
-        // DICA: Se tiver o módulo Hibernate5Module no pom.xml, registre-o aqui para
-        // ignorar Lazy:
-        // mapper.registerModule(new Hibernate5Module());
+
+        // --- CORREÇÃO: REGISTRO DO MÓDULO HIBERNATE ---
+        // Isso impede que o Jackson tente serializar proxies Lazy e entre em loop
+        // infinito
+        // ATENÇÃO: Se estiver usando Hibernate 7
+        Hibernate7Module hibernateModule = new Hibernate7Module();
+
+        // Configuração para não travar a auditoria com Lazy Loading
+        hibernateModule.configure(Hibernate7Module.Feature.FORCE_LAZY_LOADING, false);
+        mapper.registerModule(hibernateModule);
     }
 
     @PostPersist
@@ -48,28 +55,22 @@ public class GlobalAuditListener {
 
     private void enviarLog(String action, Object entity) {
         try {
-            // 1. Obter dependência do Service via BeanUtil (pois Listener não é Bean
-            // gerenciado)
             AuditService auditService = BeanUtil.getBean(AuditService.class);
             if (auditService == null)
-                return; // Evita NullPointer na inicialização
+                return;
 
-            // 2. Identificar Usuário
             String usuario = "SISTEMA";
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
             if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
                 usuario = auth.getName();
             }
 
-            // 3. Identificar Tenant e ID
             String tenant = TenantContext.getTenant();
             String entityId = safeGetId(entity);
 
-            // 4. Converter Entidade para Map/JSON Seguro
-            // Isso resolve o problema de LazyInitializationException
+            // Conversão agora é segura graças ao HibernateModule
             Object conteudoSeguro = converterParaMapSeguro(entity);
 
-            // 5. Montar o Log
             AuditLog log = AuditLog.builder()
                     .entityName(entity.getClass().getSimpleName())
                     .entityId(entityId)
@@ -80,11 +81,9 @@ public class GlobalAuditListener {
                     .conteudo(conteudoSeguro)
                     .build();
 
-            // 6. Enviar (Assíncrono)
             auditService.registrarLog(log);
 
         } catch (Exception e) {
-            // Log de erro no console apenas, para não travar a transação principal
             System.err.println("ERRO AUDITORIA (" + entity.getClass().getSimpleName() + "): " + e.getMessage());
         }
     }
@@ -99,12 +98,8 @@ public class GlobalAuditListener {
 
     private Object converterParaMapSeguro(Object entity) {
         try {
-            // Tenta converter o objeto para um Map via Jackson
-            // Se falhar por causa de Lazy Loading, cai no catch
             return mapper.convertValue(entity, Map.class);
         } catch (Exception e) {
-            // Fallback: Se der erro de serialização, salva apenas uma String básica
-            // Isso garante que o log é salvo mesmo que o conteúdo detalhado falhe
             Map<String, String> fallback = new HashMap<>();
             fallback.put("erro_serializacao", e.getMessage());
             fallback.put("dados_brutos", entity.toString());

@@ -1,6 +1,7 @@
 package br.com.hacerfak.coreWMS.modules.seguranca.config;
 
 import br.com.hacerfak.coreWMS.core.multitenant.TenantContext;
+import br.com.hacerfak.coreWMS.modules.seguranca.domain.UserRole;
 import br.com.hacerfak.coreWMS.modules.seguranca.domain.Usuario;
 import br.com.hacerfak.coreWMS.modules.seguranca.repository.UsuarioRepository;
 import br.com.hacerfak.coreWMS.modules.seguranca.service.TokenService;
@@ -27,7 +28,6 @@ public class SecurityFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
 
-        // Ignora requisições OPTIONS (Preflight) no filtro
         if (request.getMethod().equals("OPTIONS")) {
             filterChain.doFilter(request, response);
             return;
@@ -45,9 +45,19 @@ public class SecurityFilter extends OncePerRequestFilter {
 
                     String tenantId = tokenService.getTenantFromToken(token);
 
+                    // --- CORREÇÃO DE SEGURANÇA CRÍTICA ---
+                    // Se não tem tenant no token, cai no Default (Master).
+                    // MAS usuários comuns NÃO podem acessar o Master, apenas ADMIN.
                     if (tenantId != null) {
                         TenantContext.setTenant(tenantId);
                     } else {
+                        // Tentativa de acesso ao MASTER
+                        if (usuario.getRole() != UserRole.ADMIN) {
+                            // Bloqueia silenciosamente ou lança erro. Aqui vamos logar e não autenticar.
+                            System.out.println(">>> ALERTA SEGURANÇA: Usuário " + login
+                                    + " tentou acessar contexto MASTER sem permissão.");
+                            throw new RuntimeException("Acesso negado ao contexto Global.");
+                        }
                         TenantContext.setTenant(TenantContext.DEFAULT_TENANT_ID);
                     }
 
@@ -57,15 +67,11 @@ public class SecurityFilter extends OncePerRequestFilter {
 
                 } catch (Exception e) {
                     System.out.println(">>> ERRO DE AUTENTICAÇÃO: " + e.getMessage());
-                    // Não lançamos erro aqui para deixar o Spring Security retornar 403 padrão se
-                    // falhar
+                    // Contexto limpo, Security retornará 403
                 }
             } else {
                 System.out.println(">>> TOKEN INVÁLIDO OU EXPIRADO");
             }
-        } else {
-            // System.out.println(">>> TOKEN NÃO ENCONTRADO NO HEADER"); // Descomente para
-            // debug severo
         }
 
         try {
