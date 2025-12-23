@@ -90,4 +90,13 @@ public interface EstoqueSaldoRepository extends JpaRepository<EstoqueSaldo, Long
             AND e.quantidade > 0
          """)
    boolean existsByProdutoIdAndNumeroSerie(@Param("produtoId") Long produtoId, @Param("serial") String serial);
+
+   // SOMA TOTAL DO LOCAL (Para Inventário Geográfico/Cego Geral)
+   @Query("SELECT COALESCE(SUM(e.quantidade), 0) FROM EstoqueSaldo e WHERE e.localizacao.id = :localId")
+   java.math.BigDecimal somarQuantidadePorLocal(@Param("localId") Long localId);
+
+   // SOMA DE PRODUTO ESPECÍFICO NO LOCAL (Para Inventário Rotativo/Focado)
+   @Query("SELECT COALESCE(SUM(e.quantidade), 0) FROM EstoqueSaldo e WHERE e.localizacao.id = :localId AND e.produto.id = :produtoId")
+   java.math.BigDecimal somarQuantidadePorLocalEProduto(@Param("localId") Long localId,
+         @Param("produtoId") Long produtoId);
 }

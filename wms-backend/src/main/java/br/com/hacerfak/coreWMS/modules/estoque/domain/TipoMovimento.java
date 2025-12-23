@@ -1,10 +1,13 @@
 package br.com.hacerfak.coreWMS.modules.estoque.domain;
 
 public enum TipoMovimento {
-    ENTRADA,
-    SAIDA,
-    AJUSTE_POSITIVO, // Inventário (Sobrou)
-    AJUSTE_NEGATIVO, // Inventário (Faltou)
-    BLOQUEIO, // Move de "Disponível" para "Avaria" (Logicamente é uma troca)
-    DESBLOQUEIO // Move de "Avaria" para "Disponível" (Logicamente é uma troca)
+    ENTRADA, // Recebimento
+    SAIDA, // Expedição
+    AJUSTE_POSITIVO, // Correção manual (+)
+    AJUSTE_NEGATIVO, // Correção manual (-)
+    AJUSTE_INVENTARIO, // Gerado pelo módulo de inventário (Auditoria)
+    BLOQUEIO, // Mudança de status
+    DESBLOQUEIO,
+    PERDA_QUEBRA, // Avaria declarada
+    CONSUMO_INTERNO
 }
