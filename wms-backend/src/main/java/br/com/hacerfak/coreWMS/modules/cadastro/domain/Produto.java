@@ -71,4 +71,8 @@ public class Produto extends BaseEntity {
         private String unidadeArmazenagem; // Ex: CX
         @Builder.Default
         private Integer fatorConversao = 1; // Ex: 12 (1 CX = 12 UN)
+
+        @Column(name = "fator_empilhamento")
+        @Builder.Default
+        private Integer fatorEmpilhamento = 1; // 1 = Não empilha (Vinho). 3 = Empilha 3 (Suco).
 }
