@@ -140,3 +140,41 @@ UPDATE tb_localizacao
 SET tipo_estrutura = 'BLOCADO',
     capacidade_maxima = 1
 WHERE tipo_estrutura IS NULL;
+CREATE TABLE tb_configuracao_picking (
+    id BIGSERIAL PRIMARY KEY,
+    criado_por VARCHAR(100),
+    atualizado_por VARCHAR(100),
+    data_criacao TIMESTAMP DEFAULT NOW(),
+    data_atualizacao TIMESTAMP,
+    data_finalizacao TIMESTAMP,
+    produto_id BIGINT NOT NULL,
+    localizacao_id BIGINT NOT NULL,
+    ponto_ressuprimento NUMERIC(18, 4) NOT NULL,
+    capacidade_maxima NUMERIC(18, 4) NOT NULL,
+    ativo BOOLEAN DEFAULT TRUE,
+    CONSTRAINT uk_conf_pick_prod_loc UNIQUE (produto_id, localizacao_id),
+    CONSTRAINT fk_conf_pick_prod FOREIGN KEY (produto_id) REFERENCES tb_produto(id),
+    CONSTRAINT fk_conf_pick_loc FOREIGN KEY (localizacao_id) REFERENCES tb_localizacao(id)
+);
+CREATE TABLE tb_tarefa_movimentacao (
+    id BIGSERIAL PRIMARY KEY,
+    criado_por VARCHAR(100),
+    atualizado_por VARCHAR(100),
+    data_criacao TIMESTAMP DEFAULT NOW(),
+    data_atualizacao TIMESTAMP,
+    data_finalizacao TIMESTAMP,
+    status VARCHAR(30) NOT NULL,
+    usuario_atribuido VARCHAR(100),
+    inicio_execucao TIMESTAMP,
+    fim_execucao TIMESTAMP,
+    tipo_movimento VARCHAR(30) NOT NULL,
+    produto_id BIGINT NOT NULL,
+    origem_id BIGINT NOT NULL,
+    destino_id BIGINT NOT NULL,
+    quantidade NUMERIC(18, 4),
+    lpn_id BIGINT,
+    CONSTRAINT fk_tm_prod FOREIGN KEY (produto_id) REFERENCES tb_produto(id),
+    CONSTRAINT fk_tm_origem FOREIGN KEY (origem_id) REFERENCES tb_localizacao(id),
+    CONSTRAINT fk_tm_destino FOREIGN KEY (destino_id) REFERENCES tb_localizacao(id),
+    CONSTRAINT fk_tm_lpn FOREIGN KEY (lpn_id) REFERENCES tb_lpn(id)
+);

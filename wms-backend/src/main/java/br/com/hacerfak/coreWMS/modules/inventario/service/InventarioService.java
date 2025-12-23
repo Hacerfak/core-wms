@@ -62,7 +62,6 @@ public class InventarioService {
 
         Produto prod = produtoId != null ? produtoRepository.findById(produtoId).orElse(null) : null;
 
-        // --- RESOLUÇÃO DO TODO: SNAPSHOT DO SISTEMA ---
         BigDecimal snapshot;
 
         if (prod != null) {
