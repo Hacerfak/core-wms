@@ -127,3 +127,16 @@ CREATE TABLE tb_tarefa_contagem (
     CONSTRAINT fk_tarefa_cont_loc FOREIGN KEY (localizacao_id) REFERENCES tb_localizacao(id),
     CONSTRAINT fk_tarefa_cont_prod FOREIGN KEY (produto_foco_id) REFERENCES tb_produto(id)
 );
+-- Atualizar Localização
+ALTER TABLE tb_localizacao
+ADD COLUMN tipo_estrutura VARCHAR(30);
+ALTER TABLE tb_localizacao
+ADD COLUMN capacidade_maxima INTEGER DEFAULT 1;
+-- Atualizar Produto
+ALTER TABLE tb_produto
+ADD COLUMN fator_empilhamento INTEGER DEFAULT 1;
+-- Atualizar dados legados (opcional)
+UPDATE tb_localizacao
+SET tipo_estrutura = 'BLOCADO',
+    capacidade_maxima = 1
+WHERE tipo_estrutura IS NULL;

@@ -164,31 +164,70 @@ public class RelatorioService {
     // --- 5. OCUPAÇÃO DO ARMAZÉM ---
     @SuppressWarnings("unchecked")
     public List<OcupacaoDTO> gerarRelatorioOcupacao() {
-        // Conta locais ativos e quantos têm saldo > 0
         String sql = """
                     SELECT
-                        a.nome as area,
-                        l.tipo,
-                        COUNT(l.id) as total_posicoes,
-                        COUNT(DISTINCT CASE WHEN e.id IS NOT NULL AND e.quantidade > 0 THEN l.id END) as ocupadas
+                        a.nome AS area,
+                        l.tipo_estrutura,
+
+                        -- 1. Total de Posições (Endereços cadastrados)
+                        COUNT(l.id) AS total_enderecos,
+
+                        -- 2. Capacidade Ideal (Mundo perfeito ou PP vazio)
+                        SUM(COALESCE(l.capacidade_maxima, 1)) AS cap_ideal,
+
+                        -- 3. Capacidade Real (Considerando a restrição do produto que está lá)
+                        SUM(
+                            CASE
+                                -- Se está vazio, assumimos o potencial máximo (ou 1 se não definido)
+                                WHEN e.produto_id IS NULL THEN COALESCE(l.capacidade_maxima, 1)
+                                -- Se tem produto, a capacidade é limitada pelo MENOR valor (Produto vs Local)
+                                ELSE LEAST(COALESCE(p.fator_empilhamento, 1), COALESCE(l.capacidade_maxima, 1))
+                            END
+                        ) AS cap_real,
+
+                        -- 4. Pallets Físicos (Total de LPNs estocados)
+                        -- Precisamos contar LPNs distintos ou somar saldo?
+                        -- Para ocupação volumétrica, vamos contar "unidades de empilhamento" (geralmente LPNs inteiros).
+                        -- Simplificando: Assumimos que cada LPN ocupa 1 slot vertical.
+                        (
+                            SELECT COUNT(DISTINCT lpn_sub.id)
+                            FROM tb_lpn lpn_sub
+                            JOIN tb_localizacao loc_sub ON lpn_sub.localizacao_atual_id = loc_sub.id
+                            WHERE loc_sub.area_id = a.id
+                            AND loc_sub.tipo_estrutura = l.tipo_estrutura
+                            AND lpn_sub.status = 'ARMAZENADO'
+                        ) as pallets_fisicos
+
                     FROM tb_localizacao l
                     LEFT JOIN tb_area a ON l.area_id = a.id
-                    LEFT JOIN tb_estoque_saldo e ON e.localizacao_id = l.id
+                    -- Join com Estoque/Produto para saber QUEM está ocupando o local
+                    -- Usamos LEFT JOIN e pegamos o primeiro produto encontrado no local para definir a restrição
+                    LEFT JOIN (
+                        SELECT DISTINCT ON (localizacao_id) localizacao_id, produto_id
+                        FROM tb_estoque_saldo WHERE quantidade > 0
+                    ) e ON e.localizacao_id = l.id
+                    LEFT JOIN tb_produto p ON e.produto_id = p.id
+
                     WHERE l.ativo = true
-                    GROUP BY a.nome, l.tipo
+                    GROUP BY a.id, a.nome, l.tipo_estrutura
                 """;
 
         Query query = entityManager.createNativeQuery(sql);
         List<Object[]> rows = query.getResultList();
 
         return rows.stream().map(row -> {
-            long total = ((Number) row[2]).longValue();
-            long ocupadas = ((Number) row[3]).longValue();
-            long vazias = total - ocupadas;
-            double taxa = (total > 0) ? ((double) ocupadas / total) * 100 : 0.0;
+            String area = (String) row[0];
+            String tipo = (String) row[1];
+            long totalEnderecos = ((Number) row[2]).longValue();
+            long capIdeal = ((Number) row[3]).longValue();
+            long capReal = ((Number) row[4]).longValue();
+            long ocupados = ((Number) row[5]).longValue();
+
+            double taxa = (capReal > 0) ? ((double) ocupados / capReal) * 100 : 0.0;
+            long perda = capIdeal - capReal;
 
             return new OcupacaoDTO(
-                    (String) row[0], (String) row[1], total, ocupadas, vazias, taxa);
+                    area, tipo, totalEnderecos, capIdeal, capReal, ocupados, taxa, perda);
         }).collect(Collectors.toList());
     }
 }

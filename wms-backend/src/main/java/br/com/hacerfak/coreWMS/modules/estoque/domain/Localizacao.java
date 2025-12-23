@@ -31,6 +31,13 @@ public class Localizacao extends BaseEntity {
     @Enumerated(EnumType.STRING)
     private TipoLocalizacao tipo; // Pode sobrescrever o tipo da área
 
+    @Enumerated(EnumType.STRING)
+    @Column(length = 30)
+    private TipoEstrutura tipoEstrutura; // PORTA_PALLET ou BLOCADO
+
+    @Column(name = "capacidade_maxima")
+    private Integer capacidadeMaxima; // Se for BLOCADO, é o limite do teto (ex: 4 alturas). Se PP, é 1.
+
     // --- REGRAS ---
     @Builder.Default
     private boolean virtual = false;
