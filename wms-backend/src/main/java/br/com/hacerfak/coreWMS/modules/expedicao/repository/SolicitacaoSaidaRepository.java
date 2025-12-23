@@ -4,6 +4,8 @@ import br.com.hacerfak.coreWMS.core.domain.workflow.StatusSolicitacao;
 import br.com.hacerfak.coreWMS.modules.expedicao.domain.SolicitacaoSaida;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
@@ -18,4 +20,13 @@ public interface SolicitacaoSaidaRepository extends JpaRepository<SolicitacaoSai
     boolean existsByCodigoExterno(String codigoExterno);
 
     List<SolicitacaoSaida> findByStatus(StatusSolicitacao status);
+
+    @Query("""
+               SELECT COUNT(i) > 0
+               FROM ItemSolicitacaoSaida i
+               WHERE i.produto.id = :produtoId
+               AND i.solicitacao.status IN ('CRIADA', 'EM_PROCESSAMENTO')
+               AND (i.quantidadeSolicitada - i.quantidadeAlocada) > 0
+            """)
+    boolean existeDemandaPendenteParaProduto(@Param("produtoId") Long produtoId);
 }

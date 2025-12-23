@@ -44,3 +44,45 @@ ADD COLUMN saldo_atual NUMERIC(18, 4);
 CREATE INDEX idx_mov_lpn ON tb_movimento_estoque(lpn);
 ALTER TABLE tb_lpn_item
 ADD COLUMN numero_serie VARCHAR(100);
+-- TABELA DE AGENDAMENTO
+CREATE TABLE tb_agendamento (
+    id BIGSERIAL PRIMARY KEY,
+    criado_por VARCHAR(100),
+    atualizado_por VARCHAR(100),
+    data_criacao TIMESTAMP DEFAULT NOW(),
+    data_atualizacao TIMESTAMP,
+    data_finalizacao TIMESTAMP,
+    codigo_reserva VARCHAR(50),
+    transportadora_id BIGINT,
+    motorista_id BIGINT,
+    doca_id BIGINT,
+    solicitacao_entrada_id BIGINT,
+    data_prevista_inicio TIMESTAMP,
+    data_prevista_fim TIMESTAMP,
+    status VARCHAR(30) NOT NULL,
+    -- Execução
+    data_chegada TIMESTAMP,
+    data_saida TIMESTAMP,
+    placa_veiculo VARCHAR(20),
+    nome_motorista_avulso VARCHAR(100),
+    cpf_motorista_avulso VARCHAR(20),
+    CONSTRAINT uk_agendamento_cod UNIQUE (codigo_reserva),
+    CONSTRAINT fk_agendamento_transp FOREIGN KEY (transportadora_id) REFERENCES tb_parceiro(id),
+    CONSTRAINT fk_agendamento_doca FOREIGN KEY (doca_id) REFERENCES tb_localizacao(id)
+);
+-- TABELA DE ANEXOS (Evidências)
+CREATE TABLE tb_anexo (
+    id BIGSERIAL PRIMARY KEY,
+    criado_por VARCHAR(100),
+    atualizado_por VARCHAR(100),
+    data_criacao TIMESTAMP DEFAULT NOW(),
+    data_atualizacao TIMESTAMP,
+    data_finalizacao TIMESTAMP,
+    nome_arquivo VARCHAR(255) NOT NULL,
+    content_type VARCHAR(100) NOT NULL,
+    caminho_url VARCHAR(500) NOT NULL,
+    entidade_id BIGINT NOT NULL,
+    entidade_tipo VARCHAR(50) NOT NULL,
+    descricao VARCHAR(255)
+);
+CREATE INDEX idx_anexo_entidade ON tb_anexo(entidade_id, entidade_tipo);

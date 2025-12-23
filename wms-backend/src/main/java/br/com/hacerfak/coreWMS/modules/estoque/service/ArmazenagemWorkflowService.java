@@ -4,6 +4,7 @@ import br.com.hacerfak.coreWMS.core.domain.workflow.StatusTarefa;
 import br.com.hacerfak.coreWMS.core.exception.EntityNotFoundException;
 import br.com.hacerfak.coreWMS.modules.estoque.domain.*;
 import br.com.hacerfak.coreWMS.modules.estoque.repository.*;
+import br.com.hacerfak.coreWMS.modules.expedicao.repository.SolicitacaoSaidaRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,38 +19,54 @@ public class ArmazenagemWorkflowService {
     private final TarefaArmazenagemRepository tarefaRepository;
     private final LocalizacaoRepository localizacaoRepository;
     private final EstoqueService estoqueService;
+    private final SolicitacaoSaidaRepository solicitacaoSaidaRepository;
 
     @Transactional
     public void gerarTarefasDeArmazenagem(Long solicitacaoEntradaId) {
         List<Lpn> lpnsPendentes = lpnRepository.findBySolicitacaoEntradaIdAndStatus(
                 solicitacaoEntradaId, StatusLpn.FECHADO);
 
+        // Busca Local de Expedição (Stage) para Cross-Docking
+        Localizacao stageExpedicao = localizacaoRepository.findFirstByTipoAndAtivoTrue(TipoLocalizacao.DOCA)
+                .orElse(null); // Ajustar TipoLocalizacao conforme seu Enum
+
         for (Lpn lpn : lpnsPendentes) {
-            boolean jaTemTarefa = tarefaRepository.existsByLpnIdAndStatus(lpn.getId(), StatusTarefa.PENDENTE);
-            if (jaTemTarefa)
+            if (tarefaRepository.existsByLpnIdAndStatus(lpn.getId(), StatusTarefa.PENDENTE))
                 continue;
 
-            // --- LÓGICA DE SEGREGAÇÃO AUTOMÁTICA ---
             Localizacao destinoSugerido = null;
 
-            // Verifica se tem algum item avariado ou bloqueado dentro da LPN
+            // 1. Verifica Qualidade (Prioridade Máxima: Segregação)
             boolean temAvaria = lpn.getItens().stream()
                     .anyMatch(i -> i.getStatusQualidade() == StatusQualidade.AVARIA
                             || i.getStatusQualidade() == StatusQualidade.BLOQUEADO);
 
             if (temAvaria) {
-                // Busca uma área de SEGREGACAO ou AVARIA no armazém
-                // Simplificação: Pega o primeiro local do tipo AVARIA
                 destinoSugerido = localizacaoRepository.findFirstByTipoAndAtivoTrue(TipoLocalizacao.AVARIA)
                         .orElse(null);
             }
-            // ----------------------------------------
+            // 2. Verifica Cross-Docking (Se qualidade OK)
+            else {
+                // Se algum produto da LPN tem demanda de saída urgente
+                boolean crossDockingCandidate = lpn.getItens().stream()
+                        .anyMatch(item -> solicitacaoSaidaRepository
+                                .existeDemandaPendenteParaProduto(item.getProduto().getId()));
+
+                if (crossDockingCandidate && stageExpedicao != null) {
+                    destinoSugerido = stageExpedicao;
+                    // Opcional: Marcar na tarefa ou Log que é Cross-Docking
+                    System.out.println("CROSS-DOCKING DETECTADO PARA LPN: " + lpn.getCodigo());
+                }
+            }
+
+            // Se não for Avaria nem Cross-Docking, destinoSugerido fica null (sistema de
+            // slotting depois define)
 
             TarefaArmazenagem tarefa = TarefaArmazenagem.builder()
                     .lpn(lpn)
                     .origem(lpn.getLocalizacaoAtual())
                     .solicitacaoEntradaId(solicitacaoEntradaId)
-                    .destinoSugerido(destinoSugerido) // Salva a sugestão
+                    .destinoSugerido(destinoSugerido)
                     .build();
 
             tarefa.setStatus(StatusTarefa.PENDENTE);
