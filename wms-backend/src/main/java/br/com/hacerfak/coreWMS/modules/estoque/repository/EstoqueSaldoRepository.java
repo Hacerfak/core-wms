@@ -99,4 +99,8 @@ public interface EstoqueSaldoRepository extends JpaRepository<EstoqueSaldo, Long
    @Query("SELECT COALESCE(SUM(e.quantidade), 0) FROM EstoqueSaldo e WHERE e.localizacao.id = :localId AND e.produto.id = :produtoId")
    java.math.BigDecimal somarQuantidadePorLocalEProduto(@Param("localId") Long localId,
          @Param("produtoId") Long produtoId);
+
+   // Conta quantos pallets (LPNs distintos) cada cliente possui
+   @Query("SELECT s.produto.depositante, COUNT(DISTINCT s.lpn) FROM EstoqueSaldo s WHERE s.lpn IS NOT NULL GROUP BY s.produto.depositante")
+   List<Object[]> contarPalletsPorCliente();
 }

@@ -37,7 +37,7 @@ public class ParceiroController {
     public ResponseEntity<Parceiro> criar(@RequestBody @Valid ParceiroRequest dto) {
         Parceiro parceiro = Parceiro.builder()
                 .nome(dto.nome())
-                .documento(dto.documento().replaceAll("\\D", "")) // Limpa CNPJ
+                .cpfCnpj(dto.documento().replaceAll("\\D", "")) // Limpa CNPJ
                 .ie(dto.ie())
                 .nomeFantasia(dto.nomeFantasia())
                 .crt(dto.crt())
@@ -72,7 +72,7 @@ public class ParceiroController {
     public ResponseEntity<Parceiro> atualizar(@PathVariable Long id, @RequestBody @Valid ParceiroRequest dto) {
         return repository.findById(id).map(parceiro -> {
             parceiro.setNome(dto.nome());
-            parceiro.setDocumento(dto.documento().replaceAll("\\D", ""));
+            parceiro.setCpfCnpj(dto.documento().replaceAll("\\D", ""));
             parceiro.setIe(dto.ie());
             parceiro.setNomeFantasia(dto.nomeFantasia());
             parceiro.setCrt(dto.crt());

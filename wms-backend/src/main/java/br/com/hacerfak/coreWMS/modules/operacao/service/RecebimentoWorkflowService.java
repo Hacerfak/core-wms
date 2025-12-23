@@ -154,6 +154,8 @@ public class RecebimentoWorkflowService {
                 eventPublisher.publishEvent(new EntradaFinalizadaEvent(
                                 solicitacao.getId(),
                                 TenantContext.getTenant(),
+                                solicitacao, // O objeto SolicitacaoEntrada que você acabou de processar
+                                solicitacao.getNotaFiscal(), // A String da nota fiscal
                                 usuario));
         }
 

@@ -6,7 +6,7 @@ import br.com.hacerfak.coreWMS.core.domain.BaseEntity;
 
 @Entity
 @Table(name = "tb_parceiro", indexes = {
-        @Index(name = "idx_parceiro_documento", columnList = "documento", unique = true)
+        @Index(name = "idx_parceiro_doc", columnList = "cpf_cnpj", unique = true)
 })
 @Getter
 @Setter
@@ -16,8 +16,10 @@ import br.com.hacerfak.coreWMS.core.domain.BaseEntity;
 @EqualsAndHashCode(callSuper = true)
 public class Parceiro extends BaseEntity {
 
-    @Column(nullable = false, length = 20)
-    private String documento; // CNPJ/CPF
+    // CORREÇÃO: Renomeado de 'documento' para 'cpfCnpj' para bater com o
+    // getCpfCnpj()
+    @Column(name = "cpf_cnpj", nullable = false, length = 20, unique = true)
+    private String cpfCnpj;
 
     @Column(nullable = false)
     private String nome;
@@ -37,7 +39,6 @@ public class Parceiro extends BaseEntity {
     @Builder.Default
     private boolean recebimentoCego = false;
 
-    // --- NOVOS CAMPOS QUE FALTAVAM ---
     @Builder.Default
     private Boolean padraoControlaLote = false;
     @Builder.Default
@@ -49,15 +50,20 @@ public class Parceiro extends BaseEntity {
     private String cep;
     private String logradouro;
     private String numero;
-
     private String complemento;
-
     private String bairro;
     private String cidade;
-    private String uf;
+    private String uf; // Estado
 
+    // Contato
     private String telefone;
     private String email;
 
+    // Tipo (CLIENTE, FORNECEDOR, TRANSPORTADORA)
     private String tipo;
+
+    // Método auxiliar caso algum código antigo ainda chame getDocumento
+    public String getDocumento() {
+        return this.cpfCnpj;
+    }
 }

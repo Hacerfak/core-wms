@@ -79,7 +79,7 @@ public class NfeImportService {
             // Cria a SOLICITAÇÃO (em vez de Recebimento)
             SolicitacaoEntrada solicitacao = SolicitacaoEntrada.builder()
                     .codigoExterno(nNF) // Usamos o número da nota como código externo
-                    .numNotaFiscal(nNF)
+                    .notaFiscal(nNF)
                     .chaveAcesso(chaveAcesso)
                     .fornecedor(fornecedor)
                     .dataEmissao(dataEmissao)
@@ -142,7 +142,7 @@ public class NfeImportService {
             parceiro.setRecebimentoCego(false); // Default
         }
 
-        parceiro.setDocumento(cnpj);
+        parceiro.setCpfCnpj(cnpj);
         parceiro.setNome(nome);
         parceiro.setNomeFantasia(fantasia);
         parceiro.setIe(ie);

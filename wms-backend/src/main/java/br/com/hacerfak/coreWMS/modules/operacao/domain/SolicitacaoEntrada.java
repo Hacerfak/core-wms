@@ -21,7 +21,8 @@ public class SolicitacaoEntrada extends Solicitacao {
 
     // Dados específicos de Entrada que vieram do antigo Recebimento
 
-    private String numNotaFiscal;
+    @Column(name = "nota_fiscal")
+    private String notaFiscal;
 
     @Column(length = 44)
     private String chaveAcesso;
