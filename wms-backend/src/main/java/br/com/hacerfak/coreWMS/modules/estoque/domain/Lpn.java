@@ -32,6 +32,11 @@ public class Lpn extends BaseEntity {
     @JoinColumn(name = "localizacao_atual_id")
     private Localizacao localizacaoAtual;
 
+    // Mapeamos apenas o ID para evitar acoplamento direto com o módulo de
+    // 'operacao'
+    @Column(name = "solicitacao_entrada_id")
+    private Long solicitacaoEntradaId;
+
     // Conteúdo da LPN (Mix de produtos)
     @Builder.Default
     @OneToMany(mappedBy = "lpn", cascade = CascadeType.ALL, orphanRemoval = true)
