@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.cache.annotation.CacheEvict;
 
 import java.util.List;
 
@@ -69,12 +70,14 @@ public class MapeamentoController {
 
     @PostMapping("/locais")
     @PreAuthorize("hasAuthority('LOCALIZACAO_GERENCIAR') or hasRole('ADMIN')")
+    @CacheEvict(value = "locais", allEntries = true)
     public ResponseEntity<Localizacao> salvarLocal(@RequestBody LocalizacaoRequest dto) {
         return ResponseEntity.ok(service.salvarLocal(dto));
     }
 
     @DeleteMapping("/locais/{id}")
     @PreAuthorize("hasAuthority('LOCALIZACAO_EXCLUIR') or hasRole('ADMIN')")
+    @CacheEvict(value = "locais", allEntries = true)
     public ResponseEntity<Void> excluirLocal(@PathVariable Long id) {
         service.excluirLocal(id);
         return ResponseEntity.noContent().build();

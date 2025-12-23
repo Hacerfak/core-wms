@@ -11,6 +11,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.security.access.prepost.PreAuthorize;
 
 @RestController
@@ -38,6 +39,7 @@ public class ProdutoController {
 
     @PostMapping
     @PreAuthorize("hasAuthority('PRODUTO_CRIAR') or hasRole('ADMIN')")
+    @CacheEvict(value = "produtos", allEntries = true)
     public ResponseEntity<Produto> criar(@RequestBody @Valid ProdutoRequest dto) {
         // Assume parceiro ID 1 por enquanto (Multitenant resolve isso depois)
         var parceiro = parceiroRepository.findById(1L).orElseThrow();
@@ -70,6 +72,7 @@ public class ProdutoController {
 
     @PutMapping("/{id}")
     @PreAuthorize("hasAuthority('PRODUTO_EDITAR') or hasRole('ADMIN')")
+    @CacheEvict(value = "produtos", allEntries = true)
     public ResponseEntity<Produto> atualizar(@PathVariable Long id, @RequestBody @Valid ProdutoRequest dto) {
         return repository.findById(id).map(produto -> {
             produto.setNome(dto.nome());
@@ -100,6 +103,7 @@ public class ProdutoController {
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAuthority('PRODUTO_EXCLUIR') or hasRole('ADMIN')")
+    @CacheEvict(value = "produtos", allEntries = true)
     public ResponseEntity<Void> deletar(@PathVariable Long id) {
         if (!repository.existsById(id))
             return ResponseEntity.notFound().build();

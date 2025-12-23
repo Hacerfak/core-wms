@@ -176,4 +176,10 @@ public class RessuprimentoService {
         tarefa.setUsuarioAtribuido(usuario);
         tarefaRepository.save(tarefa);
     }
+
+    // Método exposto para o Listener chamar sem esperar o agendamento
+    @Transactional
+    public void analisarConfiguracaoEspecifica(ConfiguracaoPicking config) {
+        verificarNecessidade(config);
+    }
 }

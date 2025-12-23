@@ -4,11 +4,13 @@ import br.com.hacerfak.coreWMS.core.exception.EntityNotFoundException;
 import br.com.hacerfak.coreWMS.modules.cadastro.domain.Produto;
 import br.com.hacerfak.coreWMS.modules.cadastro.repository.ProdutoRepository;
 import br.com.hacerfak.coreWMS.modules.estoque.domain.*;
+import br.com.hacerfak.coreWMS.modules.estoque.event.EstoqueMovimentadoEvent; // <--- Importante
 import br.com.hacerfak.coreWMS.modules.estoque.repository.EstoqueSaldoRepository;
 import br.com.hacerfak.coreWMS.modules.estoque.repository.LocalizacaoRepository;
 import br.com.hacerfak.coreWMS.modules.estoque.repository.MovimentoEstoqueRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher; // <--- Importante
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -21,6 +23,7 @@ public class EstoqueService {
     private final MovimentoEstoqueRepository movimentoRepository;
     private final ProdutoRepository produtoRepository;
     private final LocalizacaoRepository localizacaoRepository;
+    private final ApplicationEventPublisher eventPublisher; // <--- Injeção do Publicador
 
     @Transactional
     public void movimentar(Long produtoId, Long localId, BigDecimal quantidade,
@@ -44,26 +47,17 @@ public class EstoqueService {
                 tipo == TipoMovimento.AJUSTE_POSITIVO ||
                 tipo == TipoMovimento.DESBLOQUEIO;
 
-        // --- NOVA VALIDAÇÃO DE SERIAL ---
         if (isEntrada && serial != null && !serial.isBlank()) {
-            // Regra: Serial deve ser único para o produto no estoque inteiro
             boolean serialJaExiste = saldoRepository.existsByProdutoIdAndNumeroSerie(produtoId, serial);
-
             if (serialJaExiste) {
-                // Caso extremo: Se estamos fazendo um estorno ou ajuste, o serial pode já
-                // existir no banco mas zerado.
-                // A query do repository já filtra por quantidade > 0, então se retornou true, é
-                // duplicidade real.
                 throw new IllegalArgumentException(
                         String.format("O Serial '%s' já consta no estoque para o produto %d.", serial, produtoId));
             }
         }
 
-        // Busca o saldo ou retorna null
         EstoqueSaldo saldo = saldoRepository.buscarSaldoExato(
                 produtoId, localId, lpn, lote, serial, qualidade).orElse(null);
 
-        // --- Captura Snapshot Antes ---
         BigDecimal saldoAnterior = (saldo != null) ? saldo.getQuantidade() : BigDecimal.ZERO;
         BigDecimal saldoFinal;
 
@@ -82,7 +76,6 @@ public class EstoqueService {
             }
             saldo.setQuantidade(saldo.getQuantidade().add(quantidade));
         } else {
-            // Saída
             if (saldo == null) {
                 throw new IllegalArgumentException("Saldo não encontrado para saída.");
             }
@@ -92,10 +85,8 @@ public class EstoqueService {
             saldo.setQuantidade(saldo.getQuantidade().subtract(quantidade));
         }
 
-        // --- Captura Snapshot Depois ---
         saldoFinal = saldo.getQuantidade();
 
-        // Persiste Saldo
         if (saldoFinal.compareTo(BigDecimal.ZERO) == 0
                 && saldo.getQuantidadeReservada().compareTo(BigDecimal.ZERO) == 0) {
             saldoRepository.delete(saldo);
@@ -103,9 +94,18 @@ public class EstoqueService {
             saldoRepository.save(saldo);
         }
 
-        // Persiste Histórico (Kardex)
         gerarMovimento(tipo, produto, local, quantidade, lpn, lote, serial,
                 saldoAnterior, saldoFinal, usuario, obs);
+
+        // --- PUBLICAR EVENTO ---
+        // Desacopla a lógica: avisa que o estoque mudou.
+        // O Listener de Ressuprimento vai pegar isso e decidir se gera tarefa.
+        eventPublisher.publishEvent(new EstoqueMovimentadoEvent(
+                produtoId,
+                localId,
+                quantidade,
+                saldoFinal,
+                tipo.name()));
     }
 
     private void validarLocal(Localizacao local) {
@@ -124,8 +124,8 @@ public class EstoqueService {
                 .produto(produto)
                 .localizacao(local)
                 .quantidade(qtd)
-                .saldoAnterior(saldoAnt) // Gravado
-                .saldoAtual(saldoAtu) // Gravado
+                .saldoAnterior(saldoAnt)
+                .saldoAtual(saldoAtu)
                 .lpn(lpn)
                 .lote(lote)
                 .numeroSerie(serial)
