@@ -33,6 +33,11 @@ public class EstoqueSaldo extends BaseEntity {
         @JoinColumn(name = "localizacao_id", nullable = false)
         private Localizacao localizacao;
 
+        @Enumerated(EnumType.STRING)
+        @Column(nullable = false)
+        @Builder.Default
+        private StatusQualidade statusQualidade = StatusQualidade.DISPONIVEL;
+
         // --- Rastreabilidade ---
         @Column(length = 50)
         private String lote;

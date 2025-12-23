@@ -7,8 +7,6 @@ import br.com.hacerfak.coreWMS.modules.estoque.domain.*;
 import br.com.hacerfak.coreWMS.modules.estoque.repository.EstoqueSaldoRepository;
 import br.com.hacerfak.coreWMS.modules.estoque.repository.LocalizacaoRepository;
 import br.com.hacerfak.coreWMS.modules.estoque.repository.MovimentoEstoqueRepository;
-import br.com.hacerfak.coreWMS.modules.operacao.domain.VolumeRecebimento;
-import br.com.hacerfak.coreWMS.modules.operacao.repository.VolumeRecebimentoRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -23,60 +21,11 @@ public class EstoqueService {
     private final MovimentoEstoqueRepository movimentoRepository;
     private final ProdutoRepository produtoRepository;
     private final LocalizacaoRepository localizacaoRepository;
-    private final VolumeRecebimentoRepository volumeRepository;
 
-    /**
-     * 1. ARMAZENAGEM DE LPN (Novo Fluxo de Recebimento)
-     * Transforma um Volume Virtual (VolumeRecebimento) em Saldo Real
-     * (EstoqueSaldo).
-     */
-    @Transactional
-    public void armazenarLpn(String lpn, Long localDestinoId, String usuario) {
-        // Valida Volume
-        VolumeRecebimento volume = volumeRepository.findByLpn(lpn)
-                .orElseThrow(() -> new EntityNotFoundException("Volume/LPN não encontrado: " + lpn));
-
-        if (volume.isArmazenado()) {
-            throw new IllegalArgumentException("Este LPN já foi armazenado anteriormente!");
-        }
-
-        // Valida Local
-        Localizacao local = localizacaoRepository.findById(localDestinoId)
-                .orElseThrow(() -> new EntityNotFoundException("Local de destino não encontrado"));
-
-        validarLocal(local);
-
-        // Cria o Saldo Físico com LPN
-        EstoqueSaldo novoSaldo = EstoqueSaldo.builder()
-                .produto(volume.getProduto())
-                .localizacao(local)
-                .lpn(volume.getLpn()) // VITAL: O saldo nasce amarrado a este ID
-                .quantidade(volume.getQuantidadeOriginal())
-                .quantidadeReservada(BigDecimal.ZERO)
-                .lote(null)
-                .numeroSerie(null)
-                .build();
-
-        saldoRepository.save(novoSaldo);
-
-        // Gera Histórico
-        gerarMovimento(TipoMovimento.ENTRADA, volume.getProduto(), local,
-                volume.getQuantidadeOriginal(), volume.getLpn(), null, null,
-                usuario, "Armazenagem Recebimento " + volume.getRecebimento().getId());
-
-        // Atualiza o Volume (Baixa a pendência)
-        volume.setArmazenado(true);
-        volume.setLocalDestino(local);
-        volumeRepository.save(volume);
-    }
-
-    /**
-     * 2. MOVIMENTAÇÃO GENÉRICA (Ajustes, Picking, Transferências)
-     * Agora suporta LPN (se informado) ou Produto Solto (se lpn for null).
-     */
     @Transactional
     public void movimentar(Long produtoId, Long localId, BigDecimal quantidade,
             String lpn, String lote, String serial,
+            StatusQualidade qualidade,
             TipoMovimento tipo, String usuario, String obs) {
 
         if (quantidade.compareTo(BigDecimal.ZERO) <= 0) {
@@ -91,14 +40,32 @@ public class EstoqueService {
 
         validarLocal(local);
 
-        // Define sinal matemático (Entrada soma, Saída subtrai)
         boolean isEntrada = tipo == TipoMovimento.ENTRADA ||
                 tipo == TipoMovimento.AJUSTE_POSITIVO ||
                 tipo == TipoMovimento.DESBLOQUEIO;
 
-        // Busca saldo exato (considerando se tem LPN ou não)
-        EstoqueSaldo saldo = saldoRepository.buscarSaldoExato(produtoId, localId, lpn, lote, serial)
-                .orElse(null);
+        // --- NOVA VALIDAÇÃO DE SERIAL ---
+        if (isEntrada && serial != null && !serial.isBlank()) {
+            // Regra: Serial deve ser único para o produto no estoque inteiro
+            boolean serialJaExiste = saldoRepository.existsByProdutoIdAndNumeroSerie(produtoId, serial);
+
+            if (serialJaExiste) {
+                // Caso extremo: Se estamos fazendo um estorno ou ajuste, o serial pode já
+                // existir no banco mas zerado.
+                // A query do repository já filtra por quantidade > 0, então se retornou true, é
+                // duplicidade real.
+                throw new IllegalArgumentException(
+                        String.format("O Serial '%s' já consta no estoque para o produto %d.", serial, produtoId));
+            }
+        }
+
+        // Busca o saldo ou retorna null
+        EstoqueSaldo saldo = saldoRepository.buscarSaldoExato(
+                produtoId, localId, lpn, lote, serial, qualidade).orElse(null);
+
+        // --- Captura Snapshot Antes ---
+        BigDecimal saldoAnterior = (saldo != null) ? saldo.getQuantidade() : BigDecimal.ZERO;
+        BigDecimal saldoFinal;
 
         if (isEntrada) {
             if (saldo == null) {
@@ -108,6 +75,7 @@ public class EstoqueService {
                         .lpn(lpn)
                         .lote(lote)
                         .numeroSerie(serial)
+                        .statusQualidade(qualidade != null ? qualidade : StatusQualidade.DISPONIVEL)
                         .quantidade(BigDecimal.ZERO)
                         .quantidadeReservada(BigDecimal.ZERO)
                         .build();
@@ -118,52 +86,46 @@ public class EstoqueService {
             if (saldo == null) {
                 throw new IllegalArgumentException("Saldo não encontrado para saída.");
             }
-
-            // --- CORREÇÃO DO AVISO "VARIABLE NOT USED" ---
-            // Valida saldo disponível (Físico - Reservado)
-            BigDecimal disponivel = saldo.getQuantidade().subtract(saldo.getQuantidadeReservada());
-
-            // Usamos a variável 'disponivel' para validar, garantindo que não consumimos
-            // estoque reservado
-            if (disponivel.compareTo(quantidade) < 0) {
-                throw new IllegalArgumentException("Saldo disponível insuficiente. Físico: " + saldo.getQuantidade()
-                        + ", Reservado: " + saldo.getQuantidadeReservada() + ", Solicitado: " + quantidade);
+            if (saldo.getQuantidade().compareTo(quantidade) < 0) {
+                throw new IllegalArgumentException("Saldo físico insuficiente.");
             }
-
             saldo.setQuantidade(saldo.getQuantidade().subtract(quantidade));
-
-            // Se zerou e tem LPN, podemos querer deletar o registro para não ficar lixo no
-            // banco
-            // Mas cuidado com logs. Por enquanto, mantemos zerado.
         }
 
-        saldoRepository.save(saldo);
+        // --- Captura Snapshot Depois ---
+        saldoFinal = saldo.getQuantidade();
 
-        gerarMovimento(tipo, produto, local, quantidade, lpn, lote, serial, usuario, obs);
+        // Persiste Saldo
+        if (saldoFinal.compareTo(BigDecimal.ZERO) == 0
+                && saldo.getQuantidadeReservada().compareTo(BigDecimal.ZERO) == 0) {
+            saldoRepository.delete(saldo);
+        } else {
+            saldoRepository.save(saldo);
+        }
+
+        // Persiste Histórico (Kardex)
+        gerarMovimento(tipo, produto, local, quantidade, lpn, lote, serial,
+                saldoAnterior, saldoFinal, usuario, obs);
     }
 
-    // --- Métodos Privados Auxiliares ---
-
     private void validarLocal(Localizacao local) {
-        if (!local.isAtivo()) {
-            throw new IllegalArgumentException("Local inativo: " + local.getCodigo());
-        }
-        if (local.isBloqueado()) {
-            // Permitimos saída de local bloqueado? Geralmente sim (para esvaziar).
-            // Mas entrada não. Fica a critério da regra.
-            // Vamos bloquear tudo por segurança padrão.
-            throw new IllegalArgumentException("Local bloqueado: " + local.getCodigo());
-        }
+        if (!local.isAtivo())
+            throw new IllegalArgumentException("Local inativo.");
+        if (local.isBloqueado())
+            throw new IllegalArgumentException("Local bloqueado.");
     }
 
     private void gerarMovimento(TipoMovimento tipo, Produto produto, Localizacao local,
             BigDecimal qtd, String lpn, String lote, String serial,
+            BigDecimal saldoAnt, BigDecimal saldoAtu,
             String usuario, String obs) {
         MovimentoEstoque historico = MovimentoEstoque.builder()
                 .tipo(tipo)
                 .produto(produto)
                 .localizacao(local)
                 .quantidade(qtd)
+                .saldoAnterior(saldoAnt) // Gravado
+                .saldoAtual(saldoAtu) // Gravado
                 .lpn(lpn)
                 .lote(lote)
                 .numeroSerie(serial)

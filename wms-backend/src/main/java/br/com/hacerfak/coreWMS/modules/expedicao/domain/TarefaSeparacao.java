@@ -1,11 +1,12 @@
 package br.com.hacerfak.coreWMS.modules.expedicao.domain;
 
-import br.com.hacerfak.coreWMS.core.domain.BaseEntity;
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import br.com.hacerfak.coreWMS.core.domain.workflow.Tarefa;
 import br.com.hacerfak.coreWMS.modules.cadastro.domain.Produto;
 import br.com.hacerfak.coreWMS.modules.estoque.domain.Localizacao;
 import jakarta.persistence.*;
 import lombok.*;
+import lombok.experimental.SuperBuilder; // Importante
+
 import java.math.BigDecimal;
 
 @Entity
@@ -14,27 +15,31 @@ import java.math.BigDecimal;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
-public class TarefaSeparacao extends BaseEntity {
-
-    // ID herdado
+@SuperBuilder // <--- MUDANÇA
+public class TarefaSeparacao extends Tarefa {
 
     @ManyToOne
-    @JsonIgnoreProperties("itens")
-    private PedidoSaida pedido;
+    @JoinColumn(name = "onda_id", nullable = false)
+    private OndaSeparacao onda;
 
     @ManyToOne
+    @JoinColumn(name = "produto_id", nullable = false)
     private Produto produto;
 
     @ManyToOne
-    private Localizacao localizacaoOrigem;
+    @JoinColumn(name = "origem_id", nullable = false)
+    private Localizacao origem;
 
-    private String loteAlocado;
+    @ManyToOne
+    @JoinColumn(name = "destino_id")
+    private Localizacao destino;
 
-    @Column(nullable = false)
+    private String loteSolicitado;
+
+    @Column(nullable = false, precision = 18, scale = 4)
     private BigDecimal quantidadePlanejada;
 
     @Builder.Default
-    @Column(nullable = false)
-    private boolean concluida = false;
+    @Column(nullable = false, precision = 18, scale = 4)
+    private BigDecimal quantidadeExecutada = BigDecimal.ZERO;
 }

@@ -33,4 +33,10 @@ public interface MovimentoEstoqueRepository extends JpaRepository<MovimentoEstoq
      * Descobre tudo que um operador específico fez.
      */
     List<MovimentoEstoque> findByUsuarioResponsavel(String usuarioResponsavel);
+
+    // Kardex por LPN (Rastrear por onde um pallet passou)
+    List<MovimentoEstoque> findByLpnOrderByDataCriacaoDesc(String lpn);
+
+    // Kardex por Lote (Recall)
+    List<MovimentoEstoque> findByLoteOrderByDataCriacaoDesc(String lote);
 }

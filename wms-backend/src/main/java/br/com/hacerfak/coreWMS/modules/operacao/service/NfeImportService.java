@@ -4,10 +4,9 @@ import br.com.hacerfak.coreWMS.modules.cadastro.domain.Parceiro;
 import br.com.hacerfak.coreWMS.modules.cadastro.domain.Produto;
 import br.com.hacerfak.coreWMS.modules.cadastro.repository.ParceiroRepository;
 import br.com.hacerfak.coreWMS.modules.cadastro.repository.ProdutoRepository;
-import br.com.hacerfak.coreWMS.modules.operacao.domain.ItemRecebimento;
-import br.com.hacerfak.coreWMS.modules.operacao.domain.Recebimento;
-import br.com.hacerfak.coreWMS.modules.operacao.domain.StatusRecebimento;
-import br.com.hacerfak.coreWMS.modules.operacao.repository.RecebimentoRepository;
+import br.com.hacerfak.coreWMS.modules.operacao.domain.ItemSolicitacaoEntrada;
+import br.com.hacerfak.coreWMS.modules.operacao.domain.SolicitacaoEntrada;
+import br.com.hacerfak.coreWMS.modules.operacao.repository.SolicitacaoEntradaRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,62 +20,68 @@ import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.InputStream;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
 public class NfeImportService {
 
-    private final RecebimentoRepository recebimentoRepository;
+    private final SolicitacaoEntradaRepository solicitacaoRepository;
+    private final RecebimentoWorkflowService inboundWorkflowService; // <--- O novo orquestrador
     private final ProdutoRepository produtoRepository;
     private final ParceiroRepository parceiroRepository;
 
     @Transactional
-    public Recebimento importarXml(MultipartFile file) {
+    public SolicitacaoEntrada importarXml(MultipartFile file) {
         try {
             InputStream is = file.getInputStream();
             DocumentBuilderFactory dbFactory = DocumentBuilderFactory.newInstance();
-
-            // --- CORREÇÃO CRÍTICA: Desligar namespace awareness facilita encontrar tags
-            // simples ---
-            dbFactory.setNamespaceAware(false);
+            dbFactory.setNamespaceAware(false); // Facilita a leitura das tags
 
             DocumentBuilder dBuilder = dbFactory.newDocumentBuilder();
             Document doc = dBuilder.parse(is);
             doc.getDocumentElement().normalize();
 
-            // --- 1. PROCESSAR EMITENTE (Salva TODOS os dados) ---
+            // --- 1. PROCESSAR EMITENTE ---
             NodeList emitList = doc.getElementsByTagName("emit");
             if (emitList == null || emitList.getLength() == 0) {
                 throw new IllegalArgumentException("Tag <emit> não encontrada no XML.");
             }
             Element emit = (Element) emitList.item(0);
-            Parceiro depositante = processarEmitente(emit);
+            Parceiro fornecedor = processarEmitente(emit);
 
             // --- 2. DADOS DA NOTA ---
             String nNF = getTagValue("nNF", doc.getDocumentElement());
             String chaveAcesso = extractChaveAcesso(doc);
 
-            if (chaveAcesso != null && recebimentoRepository.existsByChaveAcesso(chaveAcesso)) {
+            // Validação de Duplicidade na nova estrutura
+            if (chaveAcesso != null && solicitacaoRepository.existsByChaveAcesso(chaveAcesso)) {
                 throw new IllegalArgumentException("Nota Fiscal já importada: " + nNF);
             }
 
+            // Extração da Data
             String dataEmissaoStr = getTagValue("dhEmi", doc.getDocumentElement());
             LocalDateTime dataEmissao = null;
             if (dataEmissaoStr != null && !dataEmissaoStr.isEmpty()) {
+                // Tenta lidar com o formato UTC (ex: 2023-10-01T10:00:00-03:00)
                 try {
-                    dataEmissao = LocalDateTime.parse(dataEmissaoStr.substring(0, 19));
+                    dataEmissao = LocalDateTime.parse(dataEmissaoStr, DateTimeFormatter.ISO_DATE_TIME);
                 } catch (Exception e) {
-                    System.out.println("Erro data: " + e.getMessage());
+                    // Fallback simples se der erro no parser
+                    try {
+                        dataEmissao = LocalDateTime.parse(dataEmissaoStr.substring(0, 19));
+                    } catch (Exception ignored) {
+                    }
                 }
             }
 
-            Recebimento recebimento = Recebimento.builder()
+            // Cria a SOLICITAÇÃO (em vez de Recebimento)
+            SolicitacaoEntrada solicitacao = SolicitacaoEntrada.builder()
+                    .codigoExterno(nNF) // Usamos o número da nota como código externo
                     .numNotaFiscal(nNF)
                     .chaveAcesso(chaveAcesso)
-                    .fornecedor(depositante.getNome())
-                    .parceiro(depositante) // Vínculo Forte
-                    .status(StatusRecebimento.AGUARDANDO)
+                    .fornecedor(fornecedor)
                     .dataEmissao(dataEmissao)
                     .build();
 
@@ -87,20 +92,23 @@ public class NfeImportService {
                 Element det = (Element) listaItens.item(i);
                 Element prod = (Element) det.getElementsByTagName("prod").item(0);
 
-                Produto produto = processarProduto(prod, depositante);
+                Produto produto = processarProduto(prod, fornecedor);
                 String qCom = getTagValue("qCom", prod);
 
-                ItemRecebimento item = ItemRecebimento.builder()
-                        .recebimento(recebimento)
+                ItemSolicitacaoEntrada item = ItemSolicitacaoEntrada.builder()
+                        .solicitacao(solicitacao)
                         .produto(produto)
-                        .quantidadeNota(new BigDecimal(qCom))
+                        .quantidadePrevista(new BigDecimal(qCom))
                         .quantidadeConferida(BigDecimal.ZERO)
                         .build();
 
-                recebimento.getItens().add(item);
+                solicitacao.getItens().add(item);
             }
 
-            return recebimentoRepository.save(recebimento);
+            // 🔥 AQUI ESTÁ A MUDANÇA PRINCIPAL:
+            // Não salvamos direto. Passamos para o Workflow iniciar o processo.
+            // O Workflow vai definir o status inicial, criar as tarefas, etc.
+            return inboundWorkflowService.iniciarProcessoEntrada(solicitacao);
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -108,8 +116,10 @@ public class NfeImportService {
         }
     }
 
+    // --- MÉTODOS AUXILIARES (Mantidos praticamente iguais, apenas ajustes de
+    // tipos) ---
+
     private Parceiro processarEmitente(Element emit) {
-        // Extração Robusta de Documento
         String cnpj = getTagValue("CNPJ", emit);
         if (cnpj == null || cnpj.isEmpty()) {
             cnpj = getTagValue("CPF", emit);
@@ -123,38 +133,32 @@ public class NfeImportService {
         String ie = getTagValue("IE", emit);
         String crt = getTagValue("CRT", emit);
 
-        // Busca ou Cria (Upsert)
         Optional<Parceiro> existente = parceiroRepository.findByDocumento(cnpj);
         Parceiro parceiro = existente.orElse(new Parceiro());
 
-        // Se for novo, define defaults importantes
         if (parceiro.getId() == null) {
-            parceiro.setTipo("AMBOS"); // <--- Padrão solicitado
+            parceiro.setTipo("AMBOS");
             parceiro.setAtivo(true);
-            parceiro.setRecebimentoCego(false);
+            parceiro.setRecebimentoCego(false); // Default
         }
 
-        // Atualiza SEMPRE os dados cadastrais
         parceiro.setDocumento(cnpj);
         parceiro.setNome(nome);
         parceiro.setNomeFantasia(fantasia);
         parceiro.setIe(ie);
         parceiro.setCrt(crt);
 
-        // Endereço Completo (Proteção contra null)
+        // Endereço
         NodeList enderList = emit.getElementsByTagName("enderEmit");
         if (enderList != null && enderList.getLength() > 0) {
             Element ender = (Element) enderList.item(0);
-
             parceiro.setLogradouro(getTagValue("xLgr", ender));
             parceiro.setNumero(getTagValue("nro", ender));
             parceiro.setBairro(getTagValue("xBairro", ender));
             parceiro.setCidade(getTagValue("xMun", ender));
             parceiro.setUf(getTagValue("UF", ender));
             parceiro.setCep(getTagValue("CEP", ender));
-
-            String fone = getTagValue("fone", ender);
-            parceiro.setTelefone(fone);
+            parceiro.setTelefone(getTagValue("fone", ender));
         }
 
         return parceiroRepository.save(parceiro);

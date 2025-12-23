@@ -1,6 +1,8 @@
 package br.com.hacerfak.coreWMS.modules.estoque.repository;
 
 import br.com.hacerfak.coreWMS.modules.estoque.domain.Localizacao;
+import br.com.hacerfak.coreWMS.modules.estoque.domain.TipoLocalizacao;
+
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 import java.util.List;
@@ -17,4 +19,7 @@ public interface LocalizacaoRepository extends JpaRepository<Localizacao, Long> 
 
     // Método Legado (Opcional, se algum código antigo ainda usar)
     Optional<Localizacao> findByCodigo(String codigo);
+
+    // Novo: Para sugerir local de avaria automaticamente
+    Optional<Localizacao> findFirstByTipoAndAtivoTrue(TipoLocalizacao tipo);
 }

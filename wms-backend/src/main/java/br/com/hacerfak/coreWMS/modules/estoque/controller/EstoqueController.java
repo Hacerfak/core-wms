@@ -1,16 +1,18 @@
 package br.com.hacerfak.coreWMS.modules.estoque.controller;
 
+import br.com.hacerfak.coreWMS.core.domain.workflow.StatusTarefa;
 import br.com.hacerfak.coreWMS.modules.estoque.domain.EstoqueSaldo;
+import br.com.hacerfak.coreWMS.modules.estoque.domain.TarefaArmazenagem;
 import br.com.hacerfak.coreWMS.modules.estoque.dto.ArmazenagemRequest;
-import br.com.hacerfak.coreWMS.modules.estoque.dto.MovimentacaoRequest;
 import br.com.hacerfak.coreWMS.modules.estoque.repository.EstoqueSaldoRepository;
-import br.com.hacerfak.coreWMS.modules.estoque.service.EstoqueService;
+import br.com.hacerfak.coreWMS.modules.estoque.repository.TarefaArmazenagemRepository;
+import br.com.hacerfak.coreWMS.modules.estoque.service.ArmazenagemWorkflowService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.util.List;
 
@@ -19,61 +21,38 @@ import java.util.List;
 @RequiredArgsConstructor
 public class EstoqueController {
 
-    private final EstoqueService estoqueService;
+    private final ArmazenagemWorkflowService armazenagemService;
     private final EstoqueSaldoRepository saldoRepository;
+    private final TarefaArmazenagemRepository tarefaRepository;
 
-    // --- 1. OPERAÇÃO: ARMAZENAGEM DE LPN (Putaway) ---
-    @PostMapping("/armazenar")
+    // --- COLETOR: LISTA DE TAREFAS (PUT-AWAY) ---
+    @GetMapping("/tarefas/pendentes")
     @PreAuthorize("hasAuthority('ESTOQUE_ARMAZENAR') or hasRole('ADMIN')")
-    public ResponseEntity<Void> armazenarLpn(
-            @RequestBody @Valid ArmazenagemRequest dto,
-            Authentication authentication) { // <--- O Spring injeta o usuário logado aqui
+    public ResponseEntity<List<TarefaArmazenagem>> listarTarefasPendentes() {
+        // Retorna tudo que precisa ser guardado
+        return ResponseEntity.ok(tarefaRepository.findByStatus(StatusTarefa.PENDENTE));
+    }
 
-        // Pega o nome do usuário direto do Token JWT
-        String usuarioLogado = authentication.getName();
+    // --- COLETOR: CONFIRMAR ARMAZENAGEM ---
+    @PostMapping("/tarefas/{tarefaId}/confirmar")
+    @PreAuthorize("hasAuthority('ESTOQUE_ARMAZENAR') or hasRole('ADMIN')")
+    public ResponseEntity<Void> confirmarArmazenagem(
+            @PathVariable Long tarefaId,
+            @RequestBody @Valid ArmazenagemRequest dto, // Reaproveitando o DTO que tem localDestinoId
+            Authentication authentication) {
 
-        estoqueService.armazenarLpn(dto.lpn(), dto.localDestinoId(), usuarioLogado);
+        armazenagemService.confirmarArmazenagem(
+                tarefaId,
+                dto.localDestinoId(),
+                authentication.getName());
 
         return ResponseEntity.ok().build();
     }
 
-    // --- 2. OPERAÇÃO: AJUSTES E MOVIMENTAÇÕES MANUAIS ---
-    @PostMapping("/movimentar")
-    @PreAuthorize("hasAuthority('ESTOQUE_MOVIMENTAR') or hasRole('ADMIN')")
-    public ResponseEntity<Void> movimentar(
-            @RequestBody @Valid MovimentacaoRequest dto,
-            Authentication authentication) { // <--- Injeção de Segurança
-
-        String usuarioLogado = authentication.getName();
-
-        estoqueService.movimentar(
-                dto.produtoId(),
-                dto.localizacaoId(),
-                dto.quantidade(),
-                null, // LPN (Se quiser mover LPN manualmente, precisamos atualizar o DTO depois)
-                dto.lote(),
-                dto.numeroSerie(),
-                dto.tipo(),
-                usuarioLogado, // <--- Auditoria Real
-                dto.observacao());
-
-        return ResponseEntity.ok().build();
-    }
-
-    // --- 3. CONSULTA: SALDOS ---
-
-    // Visão Geral (Soma simples por produto)
-    @GetMapping("/produto/{produtoId}/total")
-    @PreAuthorize("hasAuthority('ESTOQUE_VISUALIZAR') or hasRole('ADMIN')")
-    public ResponseEntity<Double> saldoTotal(@PathVariable Long produtoId) {
-        return ResponseEntity.ok(saldoRepository.somarEstoqueDoProduto(produtoId));
-    }
-
-    // Visão Detalhada (Lotes, LPNs, Locais)
+    // --- CONSULTAS (DASHBOARD) ---
     @GetMapping("/detalhado")
     @PreAuthorize("hasAuthority('ESTOQUE_VISUALIZAR') or hasRole('ADMIN')")
     public ResponseEntity<List<EstoqueSaldo>> saldoDetalhado() {
-        // CORREÇÃO: Usa o método findAllCompleto em vez do findAll padrão
         return ResponseEntity.ok(saldoRepository.findAllCompleto());
     }
 }
