@@ -13,6 +13,9 @@ import br.com.hacerfak.coreWMS.modules.expedicao.domain.*;
 import br.com.hacerfak.coreWMS.modules.expedicao.dto.SolicitacaoSaidaRequest;
 import br.com.hacerfak.coreWMS.modules.expedicao.repository.*;
 import br.com.hacerfak.coreWMS.modules.expedicao.service.strategy.AlocacaoStrategy;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
+import jakarta.persistence.OptimisticLockException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -107,8 +110,11 @@ public class OutboundWorkflowService {
         return onda;
     }
 
-    // 3. ALOCAÇÃO E GERAÇÃO DE TAREFAS (Execução)
+    // 3. ALOCAÇÃO E GERAÇÃO DE TAREFAS
+    // Se der erro de concorrência (alguém mexeu no saldo milissegundos antes),
+    // o sistema espera 500ms e tenta de novo, até 3 vezes.
     @Transactional
+    @Retryable(retryFor = { OptimisticLockException.class }, maxAttempts = 3, backoff = @Backoff(delay = 500))
     public void processarOnda(Long ondaId) {
         OndaSeparacao onda = ondaRepository.findById(ondaId)
                 .orElseThrow(() -> new EntityNotFoundException("Onda não encontrada"));

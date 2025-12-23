@@ -9,7 +9,7 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-
+import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.LocalDate;
@@ -19,6 +19,8 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+// Padrão: Tudo é readOnly (mais rápido)
+@Transactional(readOnly = true)
 public class RelatorioService {
 
     private final EntityManager entityManager;

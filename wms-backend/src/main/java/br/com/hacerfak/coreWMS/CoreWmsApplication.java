@@ -12,11 +12,14 @@ import org.springframework.data.mongodb.repository.config.EnableMongoRepositorie
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.data.web.config.EnableSpringDataWebSupport;
 import org.springframework.data.web.config.EnableSpringDataWebSupport.PageSerializationMode;
+import org.springframework.retry.annotation.EnableRetry;
+
 import br.com.hacerfak.coreWMS.core.config.UserAuditorAware;
 import br.com.hacerfak.coreWMS.modules.auditoria.repository.AuditLogRepository;
 
 @SpringBootApplication
 @EnableJpaAuditing(auditorAwareRef = "auditorAware")
+@EnableRetry
 @EnableAsync // <--- Habilita processamento em segundo plano para os logs
 @EnableSpringDataWebSupport(pageSerializationMode = PageSerializationMode.VIA_DTO)
 
