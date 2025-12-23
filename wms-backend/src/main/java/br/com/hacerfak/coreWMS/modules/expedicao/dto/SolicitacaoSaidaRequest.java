@@ -14,6 +14,8 @@ public record SolicitacaoSaidaRequest(
         @NotNull Long clienteId,
         Integer prioridade,
         LocalDateTime dataLimite,
+        String rota,
+        Integer sequenciaEntrega,
         @NotEmpty List<ItemSolicitacaoRequest> itens) {
     public record ItemSolicitacaoRequest(
             @NotNull Long produtoId,

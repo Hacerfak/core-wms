@@ -10,6 +10,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @RestController
@@ -42,17 +43,19 @@ public class PickingController {
         return ResponseEntity.ok(tarefaRepository.findByStatus(StatusTarefa.PENDENTE));
     }
 
-    // 2. O Operador confirma: "Peguei X unidades e levei para a Doca Y"
+    /**
+     * Confirmação de Picking com suporte a Divergência (Corte).
+     * Se quantidadeConfirmada < QuantidadePlanejada, gera corte e auditoria.
+     */
     @PostMapping("/tarefas/{tarefaId}/confirmar")
     @PreAuthorize("hasAuthority('EXPEDICAO_SEPARAR') or hasRole('ADMIN')")
     public ResponseEntity<Void> confirmarSeparacao(
             @PathVariable Long tarefaId,
-            @RequestParam Long docaId, // ID do Local de Destino (Doca/Stage)
+            @RequestParam Long docaId,
+            @RequestParam(required = false) BigDecimal quantidadeConfirmada, // Opcional, se nulo assume total
             Authentication authentication) {
 
-        String usuarioLogado = authentication.getName();
-
-        pickingService.confirmarSeparacao(tarefaId, docaId, usuarioLogado);
+        pickingService.confirmarSeparacao(tarefaId, docaId, quantidadeConfirmada, authentication.getName());
 
         return ResponseEntity.ok().build();
     }

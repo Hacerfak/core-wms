@@ -178,3 +178,38 @@ CREATE TABLE tb_tarefa_movimentacao (
     CONSTRAINT fk_tm_destino FOREIGN KEY (destino_id) REFERENCES tb_localizacao(id),
     CONSTRAINT fk_tm_lpn FOREIGN KEY (lpn_id) REFERENCES tb_lpn(id)
 );
+-- Atualizar Solicitação com Roteirização
+ALTER TABLE tb_solicitacao_saida
+ADD COLUMN rota VARCHAR(50);
+ALTER TABLE tb_solicitacao_saida
+ADD COLUMN sequencia_entrega INTEGER;
+CREATE INDEX idx_sol_saida_rota ON tb_solicitacao_saida(rota);
+-- Tabelas de Packing (Conferência)
+CREATE TABLE tb_volume_expedicao (
+    id BIGSERIAL PRIMARY KEY,
+    criado_por VARCHAR(100),
+    atualizado_por VARCHAR(100),
+    data_criacao TIMESTAMP DEFAULT NOW(),
+    data_atualizacao TIMESTAMP,
+    data_finalizacao TIMESTAMP,
+    solicitacao_id BIGINT NOT NULL,
+    codigo_rastreio VARCHAR(50) NOT NULL,
+    tipo_embalagem VARCHAR(30),
+    peso_bruto NUMERIC(18, 4),
+    fechado BOOLEAN DEFAULT FALSE,
+    CONSTRAINT uk_volume_rastreio UNIQUE (codigo_rastreio),
+    CONSTRAINT fk_volume_solicitacao FOREIGN KEY (solicitacao_id) REFERENCES tb_solicitacao_saida(id)
+);
+CREATE TABLE tb_item_volume_expedicao (
+    id BIGSERIAL PRIMARY KEY,
+    criado_por VARCHAR(100),
+    atualizado_por VARCHAR(100),
+    data_criacao TIMESTAMP DEFAULT NOW(),
+    data_atualizacao TIMESTAMP,
+    data_finalizacao TIMESTAMP,
+    volume_id BIGINT NOT NULL,
+    produto_id BIGINT NOT NULL,
+    quantidade NUMERIC(18, 4) NOT NULL,
+    CONSTRAINT fk_item_vol_pai FOREIGN KEY (volume_id) REFERENCES tb_volume_expedicao(id),
+    CONSTRAINT fk_item_vol_prod FOREIGN KEY (produto_id) REFERENCES tb_produto(id)
+);

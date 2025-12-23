@@ -29,6 +29,12 @@ public class SolicitacaoSaida extends Solicitacao {
     @JoinColumn(name = "onda_id")
     private OndaSeparacao onda;
 
+    @Column(length = 50)
+    private String rota; // Ex: "ZONA_SUL", "ROTA_01"
+
+    @Column(name = "sequencia_entrega")
+    private Integer sequenciaEntrega; // 1, 2, 3... (Ordem de parada do caminhão)
+
     @OneToMany(mappedBy = "solicitacao", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<ItemSolicitacaoSaida> itens = new ArrayList<>();

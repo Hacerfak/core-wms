@@ -21,6 +21,9 @@ public interface SolicitacaoSaidaRepository extends JpaRepository<SolicitacaoSai
 
     List<SolicitacaoSaida> findByStatus(StatusSolicitacao status);
 
+    // --- NOVO MÉTODO PARA ROTEIRIZAÇÃO ---
+    List<SolicitacaoSaida> findByStatusAndRota(StatusSolicitacao status, String rota);
+
     @Query("""
                SELECT COUNT(i) > 0
                FROM ItemSolicitacaoSaida i

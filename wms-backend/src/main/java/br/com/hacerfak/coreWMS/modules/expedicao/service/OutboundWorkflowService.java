@@ -54,6 +54,8 @@ public class OutboundWorkflowService {
                 .prioridade(dto.prioridade() != null ? dto.prioridade() : 0)
                 .status(StatusSolicitacao.CRIADA)
                 .dataLimite(dto.dataLimite())
+                .rota(dto.rota())
+                .sequenciaEntrega(dto.sequenciaEntrega())
                 .build();
 
         for (var itemDto : dto.itens()) {
@@ -75,14 +77,17 @@ public class OutboundWorkflowService {
     // 2. GERAÇÃO DE ONDA (Planejamento)
     // Agrupa solicitações pendentes em uma nova Onda
     @Transactional
-    public OndaSeparacao gerarOndaAutomatica() {
+    public OndaSeparacao gerarOndaAutomatica(String rotaAlvo) {
         // Busca solicitações CRIADAS (ainda não processadas)
         // Simplificação: Pega todas. Num cenário real, filtraria por
         // rota/transportadora.
-        List<SolicitacaoSaida> pendentes = solicitacaoRepository.findByStatus(StatusSolicitacao.CRIADA);
+        List<SolicitacaoSaida> pendentes;
 
-        if (pendentes.isEmpty()) {
-            throw new IllegalArgumentException("Nenhuma solicitação pendente para gerar onda.");
+        if (rotaAlvo != null && !rotaAlvo.isBlank()) {
+            // Cria query no repository: findByStatusAndRota(CRIADA, rotaAlvo)
+            pendentes = solicitacaoRepository.findByStatusAndRota(StatusSolicitacao.CRIADA, rotaAlvo);
+        } else {
+            pendentes = solicitacaoRepository.findByStatus(StatusSolicitacao.CRIADA);
         }
 
         OndaSeparacao onda = OndaSeparacao.builder()

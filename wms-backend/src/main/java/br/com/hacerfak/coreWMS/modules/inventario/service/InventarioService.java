@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 @Service
 @RequiredArgsConstructor
@@ -54,6 +55,34 @@ public class InventarioService {
         // existe
 
         return inventario;
+    }
+
+    /**
+     * GATILHO DE EXCEÇÃO: Chamado automaticamente quando ocorre um erro de picking
+     * (Short Pick).
+     * Gera um inventário pontual para verificar o saldo do local.
+     */
+    @Transactional
+    public void gerarInventarioPorDemanda(Localizacao local, Produto produto, String observacao) {
+        // 1. Cria o cabeçalho do inventário
+        Inventario inventario = Inventario.builder()
+                .descricao("Auditoria Picking: " + observacao)
+                .tipo(TipoInventario.POR_DEMANDA)
+                .dataAgendada(LocalDate.now())
+                .cego(true)
+                .maxTentativas(2) // 2 tentativas para ser rápido
+                .status(StatusInventario.EM_EXECUCAO) // Já nasce pronto para execução
+                .build();
+
+        inventario = inventarioRepository.save(inventario);
+
+        // 2. Gera a tarefa de contagem (reutilizando lógica interna)
+        // Precisamos expor ou duplicar a lógica de 'gerarTarefaParaLocal' se ela for
+        // privada.
+        // Vamos chamá-la diretamente aqui:
+        gerarTarefaParaLocal(inventario, local.getId(), produto.getId());
+
+        System.out.println("Gatilho de Inventário gerado: " + inventario.getDescricao());
     }
 
     private void gerarTarefaParaLocal(Inventario inv, Long localId, Long produtoId) {
