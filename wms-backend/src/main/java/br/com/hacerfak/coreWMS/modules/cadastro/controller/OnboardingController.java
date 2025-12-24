@@ -20,6 +20,8 @@ import br.com.hacerfak.coreWMS.modules.seguranca.repository.UsuarioEmpresaReposi
 import br.com.hacerfak.coreWMS.modules.seguranca.repository.UsuarioPerfilRepository;
 import br.com.hacerfak.coreWMS.modules.seguranca.repository.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -31,6 +33,7 @@ import org.springframework.web.multipart.MultipartFile;
 @RestController
 @RequestMapping("/onboarding")
 @RequiredArgsConstructor
+@Slf4j
 public class OnboardingController {
 
     private final CertificadoService certificadoService;
@@ -147,10 +150,12 @@ public class OnboardingController {
                 throw e;
             }
 
+            log.info("Ambiente '{}' provisionado com sucesso para a empresa: {}", tenantIdGerado,
+                    dadosCert.getRazaoSocial());
             return ResponseEntity.ok("Ambiente criado com sucesso!");
 
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("Erro crítico no Onboarding do tenant: {}", tenantIdGerado, e); // Log estruturado
 
             // --- ROLLBACK DE COMPENSAÇÃO ---
             if (tenantIdGerado != null) {
@@ -161,6 +166,7 @@ public class OnboardingController {
                     // pelo tenantId
                     // Se o banco foi criado mas deu erro antes de salvar no master, o drop resolve.
                 } catch (Exception exRollback) {
+                    log.warn("Falha ao limpar registro no Master durante rollback", exRollback);
                 }
 
                 // 2. Dropa o banco físico

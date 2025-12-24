@@ -29,12 +29,10 @@ public class MessagingConfig {
      * Configura o conversor JSON.
      * Usamos @SuppressWarnings("deprecation") para ignorar o aviso do Spring Boot 4
      * e usar a implementação estável que aceita o ObjectMapper corretamente.
+     * ObjectMapper objectMapper
      */
     @Bean
-    @SuppressWarnings("deprecation")
     public MessageConverter jsonMessageConverter(ObjectMapper objectMapper) {
-        // O Jackson2JsonMessageConverter (com '2') possui o construtor correto
-        // para receber o objectMapper configurado pelo Spring Boot.
         return new Jackson2JsonMessageConverter(objectMapper);
     }
 

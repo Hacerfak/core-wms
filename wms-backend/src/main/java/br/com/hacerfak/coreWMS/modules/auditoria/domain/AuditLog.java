@@ -50,10 +50,4 @@ public class AuditLog {
     // No Mongo não precisamos de @Column(columnDefinition = "TEXT"), ele suporta
     // Strings grandes nativamente
     private String dados;
-
-    // Campos legados
-    @Deprecated
-    private String dadosAntigos;
-    @Deprecated
-    private String dadosNovos;
 }

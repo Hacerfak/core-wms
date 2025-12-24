@@ -4,12 +4,16 @@ import com.mongodb.ConnectionString;
 import com.mongodb.MongoClientSettings;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
+
+import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.mongodb.config.AbstractMongoClientConfiguration;
 
 @Configuration
+@Slf4j // Adicionado Lombok SLF4J
 public class MongoConfig extends AbstractMongoClientConfiguration {
 
     // Injeta a URI definida no Docker (JAVA_TOOL_OPTIONS ou environment)
@@ -24,11 +28,7 @@ public class MongoConfig extends AbstractMongoClientConfiguration {
     @Override
     @Bean
     public MongoClient mongoClient() {
-        // LOG PARA PROVA REAL (Vai aparecer no console do Docker)
-        System.out.println("=============================================");
-        System.out.println(">>> FORCANDO CONEXAO MONGO MANUALMENTE <<<");
-        System.out.println(">>> URI USADA: " + mongoUri);
-        System.out.println("=============================================");
+        log.info("Iniciando conexão MongoDB com URI dedicada para Auditoria: {}", mongoUri);
 
         ConnectionString connectionString = new ConnectionString(mongoUri);
 

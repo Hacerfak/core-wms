@@ -2,6 +2,8 @@ package br.com.hacerfak.coreWMS.modules.cadastro.service;
 
 import br.com.hacerfak.coreWMS.core.config.MultiTenantConfig;
 import br.com.hacerfak.coreWMS.core.multitenant.MultiTenantDataSource;
+import lombok.extern.slf4j.Slf4j;
+
 import org.flywaydb.core.Flyway;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
@@ -12,6 +14,7 @@ import org.springframework.stereotype.Service;
 import javax.sql.DataSource;
 
 @Service
+@Slf4j
 public class TenantProvisioningService {
 
     private final JdbcTemplate jdbcTemplate;
@@ -40,7 +43,7 @@ public class TenantProvisioningService {
         if (count == null || count == 0) {
             String createSql = "CREATE DATABASE " + tenantId;
             jdbcTemplate.execute(createSql);
-            System.out.println("Banco de dados " + tenantId + " criado com sucesso!");
+            log.info("Banco de dados '{}' criado com sucesso!", tenantId);
         }
         rodarMigracoes(tenantId);
     }
@@ -51,7 +54,7 @@ public class TenantProvisioningService {
     }
 
     public void inicializarConfiguracao(String tenantId, String razaoSocial, String cnpj) {
-        System.out.println(">>> Inicializando dados e configs para: " + tenantId);
+        log.info(">>> Inicializando dados e configs para: '{}'", tenantId);
 
         String tenantUrl = masterUrl.replace("wms_master", tenantId);
         if (tenantUrl.equals(masterUrl)) {
@@ -91,7 +94,7 @@ public class TenantProvisioningService {
                 "BOOLEAN");
 
         registrarTenantNoPool(tenantId);
-        System.out.println(">>> Tenant " + tenantId + " provisionado!");
+        log.info(">>> Tenant '{}' provisionado!", tenantId);
     }
 
     private void inserirConfigSeNaoExistir(JdbcTemplate jdbc, String chave, String valor, String desc, String tipo) {
@@ -135,9 +138,9 @@ public class TenantProvisioningService {
 
             String dropSql = "DROP DATABASE IF EXISTS " + tenantId;
             jdbcTemplate.execute(dropSql);
-            System.out.println(">>> ROLLBACK: Banco " + tenantId + " removido devido a falha no processo.");
+            log.info(">>> ROLLBACK: Banco " + tenantId + " removido devido a falha no processo.");
         } catch (Exception e) {
-            System.err.println(">>> CRÍTICO: Falha ao fazer rollback do banco " + tenantId + ": " + e.getMessage());
+            log.info(">>> CRÍTICO: Falha ao fazer rollback do banco " + tenantId + ": " + e.getMessage());
         }
     }
 }

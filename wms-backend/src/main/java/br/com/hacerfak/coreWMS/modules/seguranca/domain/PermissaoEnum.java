@@ -2,51 +2,65 @@ package br.com.hacerfak.coreWMS.modules.seguranca.domain;
 
 public enum PermissaoEnum {
     // --- CADASTROS BÁSICOS ---
-    // Produto
     PRODUTO_VISUALIZAR,
     PRODUTO_CRIAR,
     PRODUTO_EDITAR,
-    PRODUTO_EXCLUIR, // Cuidado: geralmente inativação
+    PRODUTO_EXCLUIR,
 
-    // Parceiro (Cliente/Fornecedor)
     PARCEIRO_VISUALIZAR,
     PARCEIRO_CRIAR,
     PARCEIRO_EDITAR,
     PARCEIRO_EXCLUIR,
 
-    // Localização (Ruas, Prédios, Docas)
     LOCALIZACAO_VISUALIZAR,
-    LOCALIZACAO_GERENCIAR, // Criar/Editar/Bloquear
+    LOCALIZACAO_GERENCIAR,
     LOCALIZACAO_EXCLUIR,
 
     // --- OPERAÇÃO: RECEBIMENTO (Inbound) ---
-    RECEBIMENTO_VISUALIZAR, // Ver lista e detalhes
-    RECEBIMENTO_IMPORTAR_XML, // Subir XML
-    RECEBIMENTO_CONFERIR, // Bipar produtos (App Coletor)
-    RECEBIMENTO_FINALIZAR, // Fechar a nota e gerar estoque
-    RECEBIMENTO_CANCELAR, // Estornar tudo
+    RECEBIMENTO_VISUALIZAR,
+    RECEBIMENTO_IMPORTAR_XML,
+    RECEBIMENTO_CONFERIR,
+    RECEBIMENTO_FINALIZAR,
+    RECEBIMENTO_CANCELAR,
 
     // --- OPERAÇÃO: ESTOQUE (Inventory) ---
-    ESTOQUE_VISUALIZAR, // Ver saldos e extratos
-    ESTOQUE_MOVIMENTAR, // Ajustes manuais, trocas de local
-    ESTOQUE_ARMAZENAR, // Guardar LPN (Putaway)
+    ESTOQUE_VISUALIZAR,
+    ESTOQUE_MOVIMENTAR,
+    ESTOQUE_ARMAZENAR,
 
     // --- OPERAÇÃO: EXPEDIÇÃO (Outbound) ---
-    PEDIDO_VISUALIZAR, // Ver pedidos de saída
-    PEDIDO_CRIAR, // Criar pedido manual
-    PEDIDO_ALOCAR, // Rodar algoritmo de reserva (FEFO)
-    PEDIDO_CANCELAR, // Cancelar pedido
-    EXPEDICAO_SEPARAR, // Realizar Picking (Coletor)
-    EXPEDICAO_DESPACHAR, // Dar baixa final (Caminhão saiu)
+    PEDIDO_VISUALIZAR,
+    PEDIDO_CRIAR,
+    PEDIDO_ALOCAR,
+    PEDIDO_CANCELAR,
+    EXPEDICAO_SEPARAR, // Picking
+    EXPEDICAO_CONFERIR, // Packing (Conferência de Saída)
+    EXPEDICAO_DESPACHAR, // Checkout
 
-    // --- GESTÃO DE ACESSO E CONFIGURAÇÃO ---
+    // --- OPERAÇÃO: INVENTÁRIO (Novo) ---
+    // Usados no InventarioController
+    INVENTARIO_CRIAR, // Criar ordens de inventário
+    INVENTARIO_CONTAR, // Executar contagem (App Coletor)
+    INVENTARIO_APROVAR, // Finalizar e ajustar estoque (Gerente)
+
+    // --- MÓDULO: FATURAMENTO (Novo) ---
+    // Usados no FaturamentoController
+    FATURAMENTO_VISUALIZAR, // Ver extratos
+    FATURAMENTO_APONTAR, // Lançar serviços manuais
+
+    // --- MÓDULO: IMPRESSÃO & SISTEMA ---
+    // Usado no AgenteImpressaoController e Configs
+    CONFIG_GERENCIAR, // Configurações gerais (Logo, Regras)
+    CONFIG_SISTEMA, // Gestão de Agentes de Impressão e Hardware (Renomeado para bater com seu
+                    // Controller)
+
+    // --- GESTÃO DE ACESSO ---
     USUARIO_LISTAR,
-    USUARIO_CRIAR, // Vincular usuário à empresa
-    USUARIO_EDITAR, // Alterar dados de usuários na empresa
-    USUARIO_EXCLUIR, // Remover acesso de usuário na empresa
-    PERFIL_GERENCIAR, // Criar/Editar Perfis de Acesso
-    CONFIG_GERENCIAR, // Alterar configurações da empresa (ex: logo, regras)
+    USUARIO_CRIAR,
+    USUARIO_EDITAR,
+    USUARIO_EXCLUIR,
+    PERFIL_GERENCIAR,
 
     // --- AUDITORIA ---
-    AUDITORIA_VISUALIZAR // Ver logs de sistema
+    AUDITORIA_VISUALIZAR
 }

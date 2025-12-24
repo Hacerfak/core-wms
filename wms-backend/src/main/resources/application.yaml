@@ -97,6 +97,10 @@ api:
     token:
       # Lê da variável de ambiente do Docker. Se não achar, usa o valor padrão.
       secret: ${API_SECURITY_TOKEN_SECRET:chave_secreta_padrao_desenvolvimento_123}
+    routes:
+      # Define qual rota é protegida por API Key (Agente de Impressão)
+      # Valor padrão: /api/impressao/fila
+      print-agent: ${API_ROUTE_PRINT_AGENT:/api/impressao/fila}
 
 # ===================================================================
 # LOGS
