@@ -17,7 +17,6 @@ services:
       - wms-network
     restart: always
     command: postgres -c 'max_connections=200'
-    # CORREÇÃO 1: Adicionado "-d postgres" para não buscar o banco "wms_user"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U wms_user -d postgres"]
       interval: 5s
@@ -40,41 +39,79 @@ services:
     networks:
       - wms-network
     restart: always
-    # CORREÇÃO 2: Adicionado autenticação ao Healthcheck
     healthcheck:
-      test: echo 'db.runCommand("ping").ok' | mongosh --username admin --password mongo_password --authenticationDatabase admin --quiet
-      interval: 5s
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
       timeout: 5s
-      retries: 10
+      retries: 5
 
-  # --- 3. BACKEND (Spring Boot) ---
+  # --- 3. FILA DE MENSAGENS (RabbitMQ) ---
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: wms-rabbitmq
+    ports:
+      - "5672:5672"   # Porta do Protocolo AMQP
+      - "15672:15672" # Painel de Gestão Web
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+      TZ: America/Sao_Paulo
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - wms-network
+    restart: always
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --- 4. CACHE DISTRIBUÍDO (Redis) ---
+  redis:
+    image: redis:alpine
+    container_name: wms-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - wms-network
+    restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # --- 5. BACKEND API (Spring Boot) ---
   wms-backend:
     build:
       context: ./wms-backend
       dockerfile: Dockerfile
     container_name: wms-backend-prod
-    depends_on:
-      wms-db-main:
-        condition: service_healthy 
-      wms-mongo:
-        condition: service_healthy 
     environment:
+      SPRING_PROFILES_ACTIVE: prod
       TZ: America/Sao_Paulo
-
-      SPRING_DATASOURCE_URL: jdbc:postgresql://wms-db-main:5432/wms_master
+      
+      # Banco Relacional
+      SPRING_DATASOURCE_URL: jdbc:postgresql://wms-db-main:5432/core_wms
       SPRING_DATASOURCE_USERNAME: wms_user
       SPRING_DATASOURCE_PASSWORD: wms_password
       
-      # Garanta que a URI está EXATAMENTE assim (wms-mongo)
-      SPRING_DATA_MONGODB_HOST: wms-mongo
-      SPRING_DATA_MONGODB_PORT: 27017
-      SPRING_DATA_MONGODB_DATABASE: wms_audit_global
-      SPRING_DATA_MONGODB_AUTHENTICATION_DATABASE: admin
-      SPRING_DATA_MONGODB_USERNAME: admin
-      SPRING_DATA_MONGODB_PASSWORD: mongo_password
+      # Banco NoSQL (Auditoria)
+      SPRING_DATA_MONGODB_URI: mongodb://admin:mongo_password@wms-mongo:27017/wms_audit_global?authSource=admin
       
-
-      JAVA_TOOL_OPTIONS: "-Dspring.data.mongodb.uri=mongodb://admin:mongo_password@wms-mongo:27017/wms_audit_global?authSource=admin"
+      # Mensageria (RabbitMQ)
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: guest
+      SPRING_RABBITMQ_PASSWORD: guest
+      
+      # Cache (Redis)
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
 
       API_SECURITY_TOKEN_SECRET: "chave_super_secreta_wms_enterprise_2025"
     ports:
@@ -82,8 +119,18 @@ services:
     networks:
       - wms-network
     restart: on-failure
+    # ORQUESTRAÇÃO DE INICIALIZAÇÃO
+    depends_on:
+      wms-db-main:
+        condition: service_healthy
+      wms-mongo:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
-  # --- 4. FRONTEND ---
+  # --- 6. FRONTEND (React/Nginx) ---
   wms-frontend:
     build:
       context: ./wms-frontend
@@ -102,6 +149,8 @@ services:
 volumes:
   wms_main_data:
   wms_mongo_data:
+  rabbitmq_data:
+  redis_data:
 
 networks:
   wms-network:

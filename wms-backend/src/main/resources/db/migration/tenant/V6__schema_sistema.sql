@@ -5,6 +5,7 @@ CREATE TABLE tb_sistema_config (
     data_criacao TIMESTAMP DEFAULT NOW(),
     data_atualizacao TIMESTAMP,
     data_finalizacao TIMESTAMP,
+    tipo VARCHAR(50),
     chave VARCHAR(100) NOT NULL UNIQUE,
     valor VARCHAR(500),
     descricao VARCHAR(255),

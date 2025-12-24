@@ -3,7 +3,6 @@ package br.com.hacerfak.coreWMS.modules.auditoria.service;
 import br.com.hacerfak.coreWMS.core.multitenant.TenantContext;
 import br.com.hacerfak.coreWMS.core.util.DiffUtils;
 import br.com.hacerfak.coreWMS.modules.auditoria.domain.AuditLog;
-import br.com.hacerfak.coreWMS.modules.auditoria.repository.AuditLogRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,13 +12,15 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import br.com.hacerfak.coreWMS.core.config.MessagingConfig;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class AuditService {
 
-    private final AuditLogRepository repository;
+    private final RabbitTemplate rabbitTemplate;
     private final DiffUtils diffUtils;
 
     /**
@@ -64,28 +65,30 @@ public class AuditService {
 
     // --- Método Privado Centralizado para reaproveitar a captura de contexto ---
     private void salvarLog(String evento, String entidade, String entidadeId, String dados) {
-        // Captura Contexto (Quem, Onde, Qual Empresa)
-        String usuario = getUsuarioLogado();
-        String ip = getIpCliente();
-        String userAgent = getUserAgent();
+        try {
+            // ... (lógica de pegar usuario, ip, tenant igual você já tem) ...
+            String tenantId = TenantContext.getTenant();
+            if (tenantId == null)
+                tenantId = "public";
 
-        // Pega o ID do Tenant da Thread atual
-        String tenantId = TenantContext.getTenant();
-        if (tenantId == null)
-            tenantId = "public";
+            AuditLog logEntry = AuditLog.builder()
+                    .tenantId(tenantId)
+                    .evento(evento)
+                    .entidade(entidade)
+                    .entidadeId(entidadeId)
+                    .usuario(getUsuarioLogado()) // seus métodos helpers
+                    .ipOrigem(getIpCliente())
+                    .userAgent(getUserAgent())
+                    .dados(dados)
+                    .build();
 
-        AuditLog logEntry = AuditLog.builder()
-                .tenantId(tenantId)
-                .evento(evento)
-                .entidade(entidade)
-                .entidadeId(entidadeId)
-                .usuario(usuario)
-                .ipOrigem(ip)
-                .userAgent(userAgent)
-                .dados(dados) // Pode ser o JSON do diff ou a mensagem manual
-                .build();
+            // AGORA ENVIA PARA FILA
+            rabbitTemplate.convertAndSend(MessagingConfig.QUEUE_AUDITORIA, logEntry);
 
-        repository.save(logEntry);
+        } catch (Exception e) {
+            // Fallback: Se o Rabbit falhar, loga erro mas não trava o sistema
+            log.error("Erro ao enviar auditoria para fila", e);
+        }
     }
 
     // --- Helpers ---

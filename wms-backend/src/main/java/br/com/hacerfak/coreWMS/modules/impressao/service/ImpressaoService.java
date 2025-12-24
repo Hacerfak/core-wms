@@ -7,6 +7,8 @@ import br.com.hacerfak.coreWMS.modules.impressao.dto.PrintJobDTO;
 import br.com.hacerfak.coreWMS.modules.impressao.repository.FilaImpressaoRepository;
 import br.com.hacerfak.coreWMS.modules.impressao.repository.ImpressoraRepository;
 import lombok.RequiredArgsConstructor;
+
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,6 +21,7 @@ public class ImpressaoService {
 
     private final FilaImpressaoRepository filaRepository;
     private final ImpressoraRepository impressoraRepository;
+    private final StringRedisTemplate redisTemplate;
 
     /**
      * Enfileira um ZPL gerado para ser impresso pelo Agente.
@@ -43,6 +46,34 @@ public class ImpressaoService {
                 .build();
 
         FilaImpressao salvo = filaRepository.save(item);
+
+        // 2. OTIMIZAÇÃO: Notificar Agente via Redis (Inbox Pattern)
+        // Se a impressora não tem agente (impressora de rede direta), processamos
+        // diferente.
+        // Assumindo que a impressora está vinculada a um agente pelo Hostname ou
+        // Config.
+        // Vamos supor que você vai vincular Impressora -> Agente.
+        // Por simplificação: vamos enviar para uma chave global ou específica do
+        // agente.
+
+        // Estratégia: Chave = "print_jobs:NOME_DO_AGENTE"
+        // Como descobrir o agente da impressora? Idealmente a tabela Impressora deve
+        // ter um "agente_id".
+        // Se não tiver, vamos assumir um broadcast ou buscar o agente pelo IP/Rede.
+
+        // Exemplo simplificado: Buscando agente pelo vínculo (adicione esse campo na
+        // entidade se precisar)
+        // String agenteQueueKey = "wms:print:inbox:" +
+        // impressora.getAgente().getNome();
+
+        // Se não tiver vínculo direto ainda, usaremos uma fila global e o agente filtra
+        // (menos otimizado)
+        // OU, melhor: O Controller do Agente busca direto no Redis.
+
+        // Vamos gravar o ID do Job na lista de tarefas pendentes
+        String redisKey = "wms:print:jobs:pending";
+        redisTemplate.opsForList().rightPush(redisKey, String.valueOf(salvo.getId()));
+
         return salvo.getId();
     }
 
