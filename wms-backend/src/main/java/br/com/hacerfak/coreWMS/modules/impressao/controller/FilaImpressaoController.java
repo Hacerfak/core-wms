@@ -7,10 +7,14 @@ import br.com.hacerfak.coreWMS.modules.impressao.repository.FilaImpressaoReposit
 import br.com.hacerfak.coreWMS.modules.impressao.service.ImpressaoService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize; // Pode exigir permissão técnica
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.context.request.async.DeferredResult;
+import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Collections;
 
 @RestController
 @RequestMapping("/api/impressao/fila")
@@ -19,6 +23,7 @@ public class FilaImpressaoController {
 
     private final ImpressaoService impressaoService;
     private final FilaImpressaoRepository filaRepository;
+    private final Map<String, DeferredResult<List<PrintJobDTO>>> pollingClients = new ConcurrentHashMap<>();
 
     // --- MÉTODOS PARA O AGENTE ---
 
@@ -41,6 +46,27 @@ public class FilaImpressaoController {
     public ResponseEntity<Void> reportarErro(@PathVariable Long id, @RequestBody String erro) {
         impressaoService.atualizarStatusFila(id, false, erro);
         return ResponseEntity.ok().build();
+    }
+
+    // O Agente chama este endpoint
+    @GetMapping("/poll")
+    public DeferredResult<List<PrintJobDTO>> aguardarTrabalho(@RequestParam String agentId) {
+        // Timeout de 30s. Se ninguém imprimir nada, retorna lista vazia (204 No
+        // Content)
+        DeferredResult<List<PrintJobDTO>> output = new DeferredResult<>(30000L, Collections.emptyList());
+
+        pollingClients.put(agentId, output);
+
+        output.onCompletion(() -> pollingClients.remove(agentId));
+        return output;
+    }
+
+    // No método que cria o job (ImpressaoService), você chama este método para
+    // "acordar" o agente
+    public void notificarAgente(String agentId, List<PrintJobDTO> jobs) {
+        if (pollingClients.containsKey(agentId)) {
+            pollingClients.get(agentId).setResult(jobs);
+        }
     }
 
     // --- MÉTODOS DE DEBUG E CONSULTA ---

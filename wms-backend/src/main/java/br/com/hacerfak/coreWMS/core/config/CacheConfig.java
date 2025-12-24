@@ -15,7 +15,7 @@ public class CacheConfig {
     public ConcurrentMapCacheManager cacheManager() {
         // Define os nomes dos caches que vamos usar
         ConcurrentMapCacheManager manager = new ConcurrentMapCacheManager();
-        manager.setCacheNames(List.of("produtos", "locais", "parceiros"));
+        manager.setCacheNames(List.of("produtos", "locais", "parceiros", "agentes-key"));
         return manager;
     }
 }

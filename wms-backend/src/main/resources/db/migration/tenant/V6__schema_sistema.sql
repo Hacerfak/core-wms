@@ -7,7 +7,8 @@ CREATE TABLE tb_sistema_config (
     data_finalizacao TIMESTAMP,
     chave VARCHAR(100) NOT NULL UNIQUE,
     valor VARCHAR(500),
-    descricao VARCHAR(255)
+    descricao VARCHAR(255),
+    tipo VARCHAR(50) -- Adicionado para corrigir o erro (STRING, BOOLEAN, etc)
 );
 CREATE TABLE tb_anexo (
     id BIGSERIAL PRIMARY KEY,

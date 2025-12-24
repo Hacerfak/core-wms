@@ -1,0 +1,16 @@
+server:
+  port: ${AGENT_PORT:8099} # Roda em porta diferente do backend
+
+spring:
+  application:
+    name: wms-print-agent
+
+agent:
+  id: ${AGENT_ID:HUB_DEFAULT}
+  backend-url: ${BACKEND_URL:http://localhost:8080/api/impressao/fila}
+  api-key: ${API_KEY:SEGREDO_PADRAO_HUB_2024} # A chave que vai no Header
+
+logging:
+  level:
+    root: INFO
+    br.com.hacerfak: DEBUG

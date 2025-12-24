@@ -10,7 +10,9 @@ import org.springframework.security.core.userdetails.UserDetails;
 import java.util.Collection;
 import java.util.List;
 
-@Table(name = "tb_usuario")
+// Adicionamos schema = "public" para fixar a tabela no master, 
+// impedindo que o Hibernate procure em 'tenant_xyz.tb_usuario'
+@Table(name = "tb_usuario", schema = "public")
 @Entity
 @Getter
 @Setter
