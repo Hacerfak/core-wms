@@ -1,19 +1,24 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
     Box, Typography, Paper, Table, TableBody, TableCell, TableContainer,
-    TableHead, TableRow, LinearProgress, TextField, InputAdornment, Chip, Button
+    TableHead, TableRow, LinearProgress, TextField, InputAdornment, Chip, Button, IconButton, Tooltip
 } from '@mui/material';
-import { Search, Box as BoxIcon, MapPin, RefreshCw, ArrowDownToLine } from 'lucide-react'; // Importei ArrowDownToLine
+import { Search, Box as BoxIcon, MapPin, RefreshCw, ArrowDownToLine, Printer } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { getEstoqueDetalhado } from '../../services/estoqueService';
 import { useNavigate } from 'react-router-dom';
 import Can from '../../components/Can';
+import PrintModal from '../../components/PrintModal'; // <--- Importe o Modal
 
 const EstoqueList = () => {
     const navigate = useNavigate();
     const [estoque, setEstoque] = useState([]);
     const [loading, setLoading] = useState(true);
     const [busca, setBusca] = useState('');
+
+    // Estado do Modal de Impressão
+    const [printModalOpen, setPrintModalOpen] = useState(false);
+    const [selectedLpn, setSelectedLpn] = useState(null); // { id, codigo }
 
     useEffect(() => { loadData(); }, []);
 
@@ -29,7 +34,6 @@ const EstoqueList = () => {
         }
     };
 
-    // Filtros no Front (Pode evoluir para o back se tiver muitos dados)
     const filteredData = useMemo(() => {
         const term = busca.toLowerCase();
         return estoque.filter(item =>
@@ -40,7 +44,6 @@ const EstoqueList = () => {
         );
     }, [estoque, busca]);
 
-    // Função para calcular status de validade (visual)
     const getValidadeStatus = (dataValidade) => {
         if (!dataValidade) return null;
         const hoje = new Date();
@@ -50,6 +53,19 @@ const EstoqueList = () => {
         if (diasRestantes < 0) return <Chip label="Vencido" color="error" size="small" />;
         if (diasRestantes < 30) return <Chip label={`Vence em ${diasRestantes}d`} color="warning" size="small" />;
         return <Typography variant="caption">{new Date(dataValidade).toLocaleDateString()}</Typography>;
+    };
+
+    // Ação ao clicar no botão de imprimir
+    const handleOpenPrint = (row) => {
+        // row.lpnId precisa vir do backend. Se o objeto row já tiver o ID da LPN:
+        // Caso seu endpoint getEstoqueDetalhado retorne o objeto LPN completo dentro, ajuste aqui.
+        // Assumindo que row tem { lpn: "LPN123", lpnId: 10, ... }
+        if (row.lpnId) {
+            setSelectedLpn({ id: row.lpnId, codigo: row.lpn });
+            setPrintModalOpen(true);
+        } else {
+            toast.warn("Item sem LPN associada ou ID não carregado.");
+        }
     };
 
     return (
@@ -68,7 +84,6 @@ const EstoqueList = () => {
                         Atualizar
                     </Button>
                     <Can I="ESTOQUE_ARMAZENAR">
-                        {/* Botão de Atalho para Armazenagem */}
                         <Button variant="contained" startIcon={<ArrowDownToLine size={18} />} onClick={() => navigate('/estoque/armazenagem')}>
                             Realizar Armazenagem
                         </Button>
@@ -76,7 +91,6 @@ const EstoqueList = () => {
                 </Box>
             </Box>
 
-            {/* Barra de Busca */}
             <Paper sx={{ mb: 2, p: 2 }}>
                 <TextField
                     fullWidth
@@ -104,6 +118,7 @@ const EstoqueList = () => {
                                 <TableCell align="right"><b>Qtd. Física</b></TableCell>
                                 <TableCell align="right"><b>Qtd. Reservada</b></TableCell>
                                 <TableCell align="right"><b>Disponível</b></TableCell>
+                                <TableCell align="center"><b>Ações</b></TableCell> {/* Nova Coluna */}
                             </TableRow>
                         </TableHead>
                         <TableBody>
@@ -133,15 +148,35 @@ const EstoqueList = () => {
                                     <TableCell align="right" sx={{ color: 'success.main', fontWeight: 'bold' }}>
                                         {row.quantidade - row.quantidadeReservada}
                                     </TableCell>
+                                    <TableCell align="center">
+                                        {/* Botão de Impressão - Só aparece se tiver LPN */}
+                                        {row.lpn && (
+                                            <Tooltip title="Imprimir Etiqueta LPN">
+                                                <IconButton size="small" color="primary" onClick={() => handleOpenPrint(row)}>
+                                                    <Printer size={18} />
+                                                </IconButton>
+                                            </Tooltip>
+                                        )}
+                                    </TableCell>
                                 </TableRow>
                             ))}
                             {!loading && filteredData.length === 0 && (
-                                <TableRow><TableCell colSpan={8} align="center" sx={{ py: 4 }}>Nenhum saldo encontrado.</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={9} align="center" sx={{ py: 4 }}>Nenhum saldo encontrado.</TableCell></TableRow>
                             )}
                         </TableBody>
                     </Table>
                 </TableContainer>
             </Paper>
+
+            {/* Modal de Impressão Injetado aqui */}
+            {selectedLpn && (
+                <PrintModal
+                    open={printModalOpen}
+                    onClose={() => { setPrintModalOpen(false); setSelectedLpn(null); }}
+                    lpnId={selectedLpn.id}
+                    lpnCodigo={selectedLpn.codigo}
+                />
+            )}
         </Box>
     );
 };
