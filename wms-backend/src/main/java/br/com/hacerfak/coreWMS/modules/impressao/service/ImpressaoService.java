@@ -24,12 +24,13 @@ public class ImpressaoService {
      * Enfileira um ZPL gerado para ser impresso pelo Agente.
      */
     @Transactional
-    public Long enviarParaFila(String zpl, String nomeImpressoraAlvo, String usuario, String origem) {
-        Impressora impressora = impressoraRepository.findByNome(nomeImpressoraAlvo)
-                .orElseThrow(() -> new EntityNotFoundException("Impressora não encontrada: " + nomeImpressoraAlvo));
+    public Long enviarParaFila(String zpl, Long impressoraId, String usuario, String origem) {
+        // Busca por ID (findById) em vez de Nome
+        Impressora impressora = impressoraRepository.findById(impressoraId)
+                .orElseThrow(() -> new EntityNotFoundException("Impressora não encontrada com ID: " + impressoraId));
 
         if (!impressora.isAtivo()) {
-            throw new IllegalArgumentException("A impressora '" + nomeImpressoraAlvo + "' está inativa no sistema.");
+            throw new IllegalArgumentException("A impressora '" + impressora.getNome() + "' está inativa no sistema.");
         }
 
         FilaImpressao item = FilaImpressao.builder()
