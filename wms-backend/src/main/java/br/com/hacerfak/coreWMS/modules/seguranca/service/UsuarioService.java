@@ -137,7 +137,6 @@ public class UsuarioService {
 
         Usuario logado = (Usuario) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         Long logadoId = logado.getId();
-        String logadoLogin = logado.getLogin();
 
         if ("master".equalsIgnoreCase(alvo.getLogin()) || alvo.getRole() == UserRole.ADMIN) {
             throw new IllegalArgumentException("O usuário MASTER não pode ser excluído.");
@@ -161,9 +160,8 @@ public class UsuarioService {
             new TransactionTemplate(transactionManager).execute(status -> {
                 // --- CORREÇÃO: REGISTRO MANUAL DE AUDITORIA ---
                 // Operações deleteBy... não disparam @PostRemove automaticamente no JPA
-                auditService.registrarLogManual("DELETE", "Usuario", String.valueOf(id),
-                        "Exclusão Global de Usuário: " + alvo.getNome() + " (" + alvo.getLogin() + ")",
-                        logadoLogin);
+                auditService.registrarLog("DELETE", "Usuario", String.valueOf(id),
+                        "Exclusão Global de Usuário: " + alvo.getNome() + " (" + alvo.getLogin() + ")");
 
                 usuarioEmpresaRepository.deleteByUsuarioId(id);
                 usuarioRepository.deleteById(id);

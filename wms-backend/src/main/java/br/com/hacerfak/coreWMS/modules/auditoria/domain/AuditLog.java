@@ -1,29 +1,56 @@
 package br.com.hacerfak.coreWMS.modules.auditoria.domain;
 
-import lombok.Builder;
-import lombok.Data;
-import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.mapping.Document;
+import jakarta.persistence.*;
+import lombok.*;
 
 import java.time.LocalDateTime;
 
-@Data
+@Entity
+@Table(name = "tb_audit_log", indexes = {
+        @Index(name = "idx_audit_entidade", columnList = "entidade, entidadeId"),
+        @Index(name = "idx_audit_data", columnList = "dataHora"),
+        @Index(name = "idx_audit_tenant", columnList = "tenantId") // Index para filtrar por empresa se exportado
+})
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
 @Builder
-@Document(collection = "audit_logs") // Coleção no Mongo
 public class AuditLog {
 
     @Id
-    private String id;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
-    private String entityName; // Ex: Produto, Parceiro
-    private String entityId; // ID do registro (1, 2, 100...)
-    private String action; // INSERT, UPDATE, DELETE
+    @Column(nullable = false)
+    private String tenantId; // <--- O Vínculo da Empresa (Ex: "tenant_cocacola")
 
-    private String tenantId; // De qual empresa foi essa alteração?
-    private String usuario; // Quem fez?
+    @Column(nullable = false)
+    private String evento; // CREATE, UPDATE, DELETE, LOGIN
 
-    private LocalDateTime dataHora;
+    @Column(nullable = false)
+    private String entidade; // Ex: "Produto"
 
-    // O "Snapshot" dos dados. O Mongo salva isso como um JSON flexível.
-    private Object conteudo;
+    private String entidadeId; // ID do registro alterado
+
+    private String usuario; // Quem fez (email)
+
+    // --- RASTREABILIDADE (Onde e Como) ---
+    private String ipOrigem;
+    private String userAgent; // Navegador/Dispositivo
+
+    @Builder.Default
+    private LocalDateTime dataHora = LocalDateTime.now();
+
+    // --- LOG INTELIGENTE (Apenas o que mudou) ---
+    @Column(columnDefinition = "TEXT")
+    private String dados; // JSON com o Diff: { "preco": { "de": 10, "para": 20 } }
+
+    // Mantendo legado temporariamente (opcional)
+    @Deprecated
+    @Column(columnDefinition = "TEXT")
+    private String dadosAntigos;
+    @Deprecated
+    @Column(columnDefinition = "TEXT")
+    private String dadosNovos;
 }

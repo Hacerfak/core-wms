@@ -1,109 +1,73 @@
 package br.com.hacerfak.coreWMS.core.listener;
 
-import br.com.hacerfak.coreWMS.core.multitenant.TenantContext;
 import br.com.hacerfak.coreWMS.core.util.BeanUtil;
-import br.com.hacerfak.coreWMS.modules.auditoria.domain.AuditLog;
 import br.com.hacerfak.coreWMS.modules.auditoria.service.AuditService;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import com.fasterxml.jackson.datatype.hibernate7.Hibernate7Module;
-import jakarta.persistence.*;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
+import jakarta.persistence.PostPersist;
+import jakarta.persistence.PostRemove;
+import jakarta.persistence.PostUpdate;
+import lombok.extern.slf4j.Slf4j;
 
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.util.HashMap;
-import java.util.Map;
-
+/**
+ * Listener JPA global para capturar mudanças nas entidades automaticamente.
+ * Refatorado para usar o AuditService centralizado.
+ */
+@Slf4j
 public class GlobalAuditListener {
 
-    private static final ObjectMapper mapper = new ObjectMapper();
-
-    static {
-        // Configurações para evitar erros de Lazy Loading e Datas
-        mapper.registerModule(new JavaTimeModule());
-        mapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
-        mapper.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
-
-        // --- CORREÇÃO: REGISTRO DO MÓDULO HIBERNATE ---
-        // Isso impede que o Jackson tente serializar proxies Lazy e entre em loop
-        // infinito
-        // ATENÇÃO: Se estiver usando Hibernate 7
-        Hibernate7Module hibernateModule = new Hibernate7Module();
-
-        // Configuração para não travar a auditoria com Lazy Loading
-        hibernateModule.configure(Hibernate7Module.Feature.FORCE_LAZY_LOADING, false);
-        mapper.registerModule(hibernateModule);
-    }
-
     @PostPersist
-    public void onPostPersist(Object entity) {
-        enviarLog("INSERT", entity);
+    public void onPersist(Object entity) {
+        // CREATE: Antigo = null, Novo = entity
+        enviarParaAuditoria("CREATE", null, entity);
     }
 
     @PostUpdate
-    public void onPostUpdate(Object entity) {
-        enviarLog("UPDATE", entity);
+    public void onUpdate(Object entity) {
+        // UPDATE: Limitação do JPA - Não temos acesso fácil ao estado "Antigo" aqui.
+        // Passamos 'null' como antigo, o que fará o DiffUtils gerar um snapshot
+        // completo do estado atual.
+        // Para Diffs precisos (De -> Para), prefira chamar
+        // auditService.registrarAuditoria() na camada de Service.
+        enviarParaAuditoria("UPDATE", null, entity);
     }
 
     @PostRemove
-    public void onPostRemove(Object entity) {
-        enviarLog("DELETE", entity);
+    public void onRemove(Object entity) {
+        // DELETE: Antigo = entity, Novo = null
+        enviarParaAuditoria("DELETE", entity, null);
     }
 
-    private void enviarLog(String action, Object entity) {
+    private void enviarParaAuditoria(String evento, Object antigo, Object novo) {
         try {
+            // Como EntityListeners não são gerenciados pelo Spring, usamos o BeanUtil para
+            // pegar o Service
             AuditService auditService = BeanUtil.getBean(AuditService.class);
-            if (auditService == null)
-                return;
 
-            String usuario = "SISTEMA";
-            Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-            if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getPrincipal())) {
-                usuario = auth.getName();
+            if (auditService == null) {
+                log.warn("AuditService não encontrado. Auditoria ignorada para: {}", evento);
+                return;
             }
 
-            String tenant = TenantContext.getTenant();
-            String entityId = safeGetId(entity);
+            Object alvo = (novo != null) ? novo : antigo;
+            String entidadeId = safeGetId(alvo);
 
-            // Conversão agora é segura graças ao HibernateModule
-            Object conteudoSeguro = converterParaMapSeguro(entity);
-
-            AuditLog log = AuditLog.builder()
-                    .entityName(entity.getClass().getSimpleName())
-                    .entityId(entityId)
-                    .action(action)
-                    .tenantId(tenant)
-                    .usuario(usuario)
-                    .dataHora(LocalDateTime.now(ZoneId.of("America/Sao_Paulo")))
-                    .conteudo(conteudoSeguro)
-                    .build();
-
-            auditService.registrarLog(log);
+            // Delega para o serviço que já cuida do Diff, Tenant, IP e User-Agent
+            auditService.registrarAuditoria(evento, alvo, entidadeId, antigo, novo);
 
         } catch (Exception e) {
-            System.err.println("ERRO AUDITORIA (" + entity.getClass().getSimpleName() + "): " + e.getMessage());
+            log.error("Erro ao processar auditoria automática para entidade: " +
+                    (novo != null ? novo.getClass().getSimpleName() : "Desconhecido"), e);
         }
     }
 
     private String safeGetId(Object entity) {
-        try {
-            return String.valueOf(entity.getClass().getMethod("getId").invoke(entity));
-        } catch (Exception e) {
+        if (entity == null)
             return "N/A";
-        }
-    }
-
-    private Object converterParaMapSeguro(Object entity) {
         try {
-            return mapper.convertValue(entity, Map.class);
+            // Tenta obter o ID via Reflection (assume método getId padrão)
+            Object id = entity.getClass().getMethod("getId").invoke(entity);
+            return String.valueOf(id);
         } catch (Exception e) {
-            Map<String, String> fallback = new HashMap<>();
-            fallback.put("erro_serializacao", e.getMessage());
-            fallback.put("dados_brutos", entity.toString());
-            return fallback;
+            return "ID_DESCONHECIDO";
         }
     }
 }
