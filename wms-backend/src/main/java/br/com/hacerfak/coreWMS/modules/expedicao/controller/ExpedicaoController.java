@@ -65,4 +65,19 @@ public class ExpedicaoController {
 
         return ResponseEntity.ok().build();
     }
+
+    // --- MELHORIA 3: CHECK-OUT (Carregamento) ---
+    /**
+     * Endpoint para bipar o volume na doca e confirmar o despacho.
+     * Ex: POST /api/expedicao/despachar/VOL-123456
+     */
+    @PostMapping("/despachar/{codigoRastreio}")
+    @PreAuthorize("hasAuthority('EXPEDICAO_DESPACHAR') or hasRole('ADMIN')")
+    public ResponseEntity<Void> confirmarDespachoVolume(
+            @PathVariable String codigoRastreio,
+            Authentication auth) {
+
+        outboundService.realizarConferenciaExpedicao(codigoRastreio, auth.getName());
+        return ResponseEntity.ok().build();
+    }
 }

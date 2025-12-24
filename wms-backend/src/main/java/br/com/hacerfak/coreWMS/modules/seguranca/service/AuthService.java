@@ -63,7 +63,7 @@ public class AuthService {
         Usuario usuario;
         try {
             String login = SecurityContextHolder.getContext().getAuthentication().getName();
-            usuario = usuarioRepository.findByLogin(login).orElseThrow();
+            usuario = usuarioRepository.findByLoginWithAcessos(login).orElseThrow();
 
             boolean temAcesso = usuario.getAcessos().stream()
                     .anyMatch(a -> a.getEmpresa().getTenantId().equals(tenantId) && a.getEmpresa().isAtivo());
@@ -109,7 +109,7 @@ public class AuthService {
         Usuario usuario;
         try {
             String login = SecurityContextHolder.getContext().getAuthentication().getName();
-            usuario = usuarioRepository.findByLogin(login).orElseThrow();
+            usuario = usuarioRepository.findByLoginWithAcessos(login).orElseThrow();
         } finally {
             TenantContext.setTenant(tenantAtual);
         }

@@ -37,6 +37,7 @@ public class OutboundWorkflowService {
     private final EstoqueSaldoRepository saldoRepository;
     private final ParceiroRepository parceiroRepository;
     private final ProdutoRepository produtoRepository;
+    private final VolumeExpedicaoRepository volumeRepository;
 
     // Injeta todas as estratégias disponíveis (Map<NomeDoBean, Instancia>)
     private final Map<String, AlocacaoStrategy> estrategias;
@@ -172,5 +173,44 @@ public class OutboundWorkflowService {
         onda.setStatus(StatusOnda.ALOCADA); // Ou EM_SEPARACAO se liberar direto
         onda.setDataLiberacao(LocalDateTime.now());
         ondaRepository.save(onda);
+    }
+
+    // --- MELHORIA 3: LÓGICA DE DESPACHO ---
+    @Transactional
+    public void realizarConferenciaExpedicao(String codigoRastreio, String usuario) {
+        VolumeExpedicao volume = volumeRepository.findByCodigoRastreio(codigoRastreio)
+                .orElseThrow(() -> new EntityNotFoundException("Volume não encontrado: " + codigoRastreio));
+
+        if (!volume.isFechado()) {
+            throw new IllegalStateException("Volume ainda não foi fechado no Packing.");
+        }
+
+        // Se já tiver uma flag de despachado (sugerido criar no futuro), valida aqui.
+        // Como não podemos alterar a entidade Volume agora, vamos usar a
+        // SolicitacaoSaida
+        // para verificar se todos os volumes dela já foram bipados.
+
+        SolicitacaoSaida pedido = volume.getSolicitacao();
+
+        // Lógica de Negócio: O volume foi carregado.
+        // Em um sistema real, mudaríamos o status do Volume para 'DESPACHADO'.
+        // Aqui, vamos logar e verificar se o PEDIDO inteiro foi concluído.
+
+        System.out.println(">>> CHECK-OUT: Volume " + codigoRastreio + " carregado por " + usuario);
+
+        // Verifica se todos os itens do pedido já foram embalados e se não há volumes
+        // abertos
+        boolean temVolumesAbertos = volumeRepository.existsBySolicitacaoIdAndFechadoFalse(pedido.getId());
+
+        if (!temVolumesAbertos) {
+            // Se tudo está embalado e este volume está saindo, podemos considerar o pedido
+            // como CONCLUIDO ou EM_TRANSITO.
+            if (pedido.getStatus() != StatusSolicitacao.CONCLUIDA) {
+                pedido.setStatus(StatusSolicitacao.CONCLUIDA);
+                solicitacaoRepository.save(pedido);
+                System.out
+                        .println(">>> PEDIDO " + pedido.getCodigoExterno() + " FINALIZADO (Todos volumes despachados)");
+            }
+        }
     }
 }

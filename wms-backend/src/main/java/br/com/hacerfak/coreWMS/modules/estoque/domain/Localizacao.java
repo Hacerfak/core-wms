@@ -54,6 +54,11 @@ public class Localizacao extends BaseEntity {
     @Builder.Default
     private boolean bloqueado = false;
 
+    // --- CORREÇÃO: ADICIONADO O CAMPO FALTANTE ---
+    @Column(name = "motivo_bloqueio")
+    private String motivoBloqueio;
+    // ----------------------------------------------
+
     @Builder.Default
     private boolean ativo = true;
 

@@ -39,7 +39,9 @@ public class Usuario extends BaseEntity implements UserDetails {
     @Enumerated(EnumType.STRING)
     private UserRole role;
 
-    @OneToMany(mappedBy = "usuario", cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+    // --- CORREÇÃO DE PERFORMANCE: MUDADO PARA LAZY ---
+    // Removemos o EAGER. Agora a lista só vem se pedirmos explicitamente.
+    @OneToMany(mappedBy = "usuario", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<UsuarioEmpresa> acessos;
 
     // --- UserDetails ---

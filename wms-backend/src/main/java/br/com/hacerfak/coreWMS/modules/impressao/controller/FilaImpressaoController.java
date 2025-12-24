@@ -11,13 +11,11 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.context.request.async.DeferredResult;
-import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-import java.util.Map;
+import java.time.Duration;
 import java.util.Collections;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/impressao/fila")
@@ -26,20 +24,77 @@ public class FilaImpressaoController {
 
     private final ImpressaoService impressaoService;
     private final FilaImpressaoRepository filaRepository;
-    private final Map<String, DeferredResult<List<PrintJobDTO>>> pollingClients = new ConcurrentHashMap<>();
     private final StringRedisTemplate redisTemplate;
+
+    private static final String REDIS_QUEUE_KEY = "wms:print:jobs:pending";
 
     // --- MÉTODOS PARA O AGENTE ---
 
     /**
-     * O Agente chama isso a cada N segundos para pegar trabalho.
-     * Idealmente, protegido por uma API Key ou Token de Serviço.
+     * Endpoint de Long Polling STATELESS e ESCALÁVEL.
+     * O Agente chama isso. A thread do Java fica "presa" aqui esperando o Redis
+     * (BLPOP),
+     * mas como usamos Redis, funciona em cluster.
+     * Se nada chegar em 20 segundos, retorna vazio (Heartbeat).
      */
-    @GetMapping("/pendentes")
-    public ResponseEntity<List<PrintJobDTO>> buscarPendentes() {
-        return ResponseEntity.ok(impressaoService.buscarTrabalhosPendentes());
+    @GetMapping("/poll")
+    public ResponseEntity<List<PrintJobDTO>> aguardarTrabalho(@RequestParam String agentId) {
+        // Bloqueia e espera por um item na lista do Redis por até 20 segundos
+        // Requer Spring Data Redis 2.6+ (SpringBoot 3/4 suportam nativamente)
+        String jobId = redisTemplate.opsForList().leftPop(REDIS_QUEUE_KEY, Duration.ofSeconds(20));
+
+        if (jobId == null) {
+            // Timeout: nenhum job chegou
+            return ResponseEntity.ok(Collections.emptyList());
+        }
+
+        // Se pegou um Job, busca os detalhes no banco
+        return filaRepository.findById(Long.valueOf(jobId))
+                .map(job -> {
+                    job.setStatus(StatusImpressao.EM_PROCESSAMENTO);
+                    filaRepository.save(job);
+
+                    PrintJobDTO dto = PrintJobDTO.builder()
+                            .id(job.getId())
+                            .zpl(job.getZplConteudo())
+                            .tipoConexao(job.getImpressoraAlvo().getTipoConexao().name())
+                            .ip(job.getImpressoraAlvo().getEnderecoIp())
+                            .porta(job.getImpressoraAlvo().getPorta())
+                            .caminhoCompartilhamento(job.getImpressoraAlvo().getCaminhoCompartilhamento())
+                            .build();
+                    return ResponseEntity.ok(List.of(dto));
+                })
+                .orElseGet(() -> ResponseEntity.ok(Collections.emptyList()));
     }
 
+    // --- Endpoint simplificado que o Agente já usava (mantido para
+    // compatibilidade, agora apontando para a lógica nova) ---
+    @GetMapping("/jobs/poll")
+    public ResponseEntity<List<PrintJobDTO>> buscarNovosTrabalhos(@RequestHeader("X-Agent-Key") String apiKey) {
+        // Reutiliza a lógica, mas com timeout menor se desejar resposta rápida
+        String jobId = redisTemplate.opsForList().leftPop(REDIS_QUEUE_KEY, Duration.ofSeconds(1));
+
+        if (jobId == null)
+            return ResponseEntity.ok(Collections.emptyList());
+
+        return filaRepository.findById(Long.valueOf(jobId))
+                .map(job -> {
+                    job.setStatus(StatusImpressao.EM_PROCESSAMENTO);
+                    filaRepository.save(job);
+                    // ... mapeamento DTO ...
+                    PrintJobDTO dto = PrintJobDTO.builder()
+                            .id(job.getId())
+                            .zpl(job.getZplConteudo())
+                            .ip(job.getImpressoraAlvo().getEnderecoIp())
+                            .porta(job.getImpressoraAlvo().getPorta())
+                            .caminhoCompartilhamento(job.getImpressoraAlvo().getCaminhoCompartilhamento())
+                            .build();
+                    return ResponseEntity.ok(List.of(dto));
+                })
+                .orElseGet(() -> ResponseEntity.ok(Collections.emptyList()));
+    }
+
+    // Endpoint de conclusão e erro mantidos...
     @PostMapping("/{id}/concluir")
     public ResponseEntity<Void> confirmarSucesso(@PathVariable Long id) {
         impressaoService.atualizarStatusFila(id, true, null);
@@ -50,65 +105,6 @@ public class FilaImpressaoController {
     public ResponseEntity<Void> reportarErro(@PathVariable Long id, @RequestBody String erro) {
         impressaoService.atualizarStatusFila(id, false, erro);
         return ResponseEntity.ok().build();
-    }
-
-    // O Agente chama este endpoint
-    @GetMapping("/poll")
-    public DeferredResult<List<PrintJobDTO>> aguardarTrabalho(@RequestParam String agentId) {
-        // Timeout de 30s. Se ninguém imprimir nada, retorna lista vazia (204 No
-        // Content)
-        DeferredResult<List<PrintJobDTO>> output = new DeferredResult<>(30000L, Collections.emptyList());
-
-        pollingClients.put(agentId, output);
-
-        output.onCompletion(() -> pollingClients.remove(agentId));
-        return output;
-    }
-
-    // No método que cria o job (ImpressaoService), você chama este método para
-    // "acordar" o agente
-    public void notificarAgente(String agentId, List<PrintJobDTO> jobs) {
-        if (pollingClients.containsKey(agentId)) {
-            pollingClients.get(agentId).setResult(jobs);
-        }
-    }
-
-    /**
-     * Endpoint otimizado: O Agente chama isso a cada 1s ou 500ms.
-     * Custo no Banco: ZERO.
-     * Custo no Redis: Baixíssimo (O(1)).
-     */
-    @GetMapping("/jobs/poll")
-    public ResponseEntity<List<PrintJobDTO>> buscarNovosTrabalhos(@RequestHeader("X-Agent-Key") String apiKey) {
-        // 1. Verifica autenticação (Cachear isso no Redis também seria ótimo!)
-
-        // 2. Busca o próximo Job ID no Redis
-        String redisKey = "wms:print:jobs:pending";
-        // Pop remove o item da lista e retorna. Garante que só 1 agente pegue (se tiver
-        // múltiplos).
-        String jobId = redisTemplate.opsForList().leftPop(redisKey);
-
-        if (jobId == null) {
-            return ResponseEntity.ok(Collections.emptyList()); // Nada para fazer
-        }
-
-        // 3. Se achou um ID no Redis, aí sim vai no Banco pegar os detalhes pesados
-        // (ZPL)
-        return filaRepository.findById(Long.valueOf(jobId))
-                .map(job -> {
-                    // Marca como processando para não pegar de novo se o Redis falhar
-                    job.setStatus(StatusImpressao.EM_PROCESSAMENTO);
-                    filaRepository.save(job);
-
-                    PrintJobDTO dto = PrintJobDTO.builder()
-                            .id(job.getId())
-                            .zpl(job.getZplConteudo())
-                            .ip(job.getImpressoraAlvo().getEnderecoIp())
-                            .porta(job.getImpressoraAlvo().getPorta())
-                            .build();
-                    return ResponseEntity.ok(List.of(dto));
-                })
-                .orElseGet(() -> ResponseEntity.ok(Collections.emptyList()));
     }
 
     // --- MÉTODOS DE DEBUG E CONSULTA ---

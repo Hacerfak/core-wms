@@ -2,6 +2,7 @@ package br.com.hacerfak.coreWMS.modules.estoque.service;
 
 import br.com.hacerfak.coreWMS.core.domain.workflow.StatusTarefa;
 import br.com.hacerfak.coreWMS.core.exception.EntityNotFoundException;
+import br.com.hacerfak.coreWMS.modules.cadastro.domain.Produto;
 import br.com.hacerfak.coreWMS.modules.estoque.domain.*;
 import br.com.hacerfak.coreWMS.modules.estoque.repository.*;
 import br.com.hacerfak.coreWMS.modules.expedicao.repository.SolicitacaoSaidaRepository;
@@ -57,6 +58,14 @@ public class ArmazenagemWorkflowService {
                     // Opcional: Marcar na tarefa ou Log que é Cross-Docking
                     System.out.println("CROSS-DOCKING DETECTADO PARA LPN: " + lpn.getCodigo());
                 }
+
+                // 3. --- MELHORIA 2: SLOTTING INTELIGENTE ---
+                if (destinoSugerido == null && !lpn.getItens().isEmpty()) {
+                    // Pega o produto principal da LPN (assumindo mono-produto ou predominante)
+                    Produto produtoPrincipal = lpn.getItens().get(0).getProduto();
+                    destinoSugerido = definirMelhorEndereco(produtoPrincipal);
+                }
+
             }
 
             // Se não for Avaria nem Cross-Docking, destinoSugerido fica null (sistema de
@@ -72,6 +81,22 @@ public class ArmazenagemWorkflowService {
             tarefa.setStatus(StatusTarefa.PENDENTE);
             tarefaRepository.save(tarefa);
         }
+    }
+
+    private Localizacao definirMelhorEndereco(Produto produto) {
+        // Estratégia 1: Consolidação (Encher locais que já têm esse produto)
+        List<Localizacao> consolidacao = localizacaoRepository.findLocaisComProduto(produto.getId());
+        if (!consolidacao.isEmpty()) {
+            return consolidacao.get(0); // Retorna o primeiro encontrado
+        }
+
+        // Estratégia 2: Endereço Vazio (Busca o primeiro livre)
+        List<Localizacao> vazios = localizacaoRepository.findLocaisVazios();
+        if (!vazios.isEmpty()) {
+            return vazios.get(0);
+        }
+
+        return null; // Sem sugestão (Operador decide)
     }
 
     /**

@@ -29,6 +29,10 @@ import Conferencia from './pages/Recebimento/Conferencia';
 import EstoqueList from './pages/Estoque/EstoqueList';
 import Armazenagem from './pages/Estoque/Armazenagem';
 
+// EXPEDIÇÃO
+import ExpedicaoMenu from './pages/Expedicao/ExpedicaoMenu';
+import Checkout from './pages/Expedicao/Checkout';
+
 // CONFIGURAÇÃO E ADMIN
 import UsuariosList from './pages/Usuarios/UsuariosList';
 import UsuarioForm from './pages/Usuarios/UsuarioForm';
@@ -142,9 +146,18 @@ function App() {
                 </Can>
               } />
 
+              {/* === EXPEDIÇÃO === */}
+              {/* Menu Principal da Expedição */}
               <Route path="/expedicao" element={
                 <Can I="PEDIDO_VISUALIZAR" elseShow={<Navigate to="/dashboard" />}>
-                  <div>Módulo de Expedição (Em breve)</div>
+                  <ExpedicaoMenu />
+                </Can>
+              } />
+
+              {/* Tela de Checkout (Carregamento) */}
+              <Route path="/expedicao/checkout" element={
+                <Can I="EXPEDICAO_DESPACHAR" elseShow={<Navigate to="/expedicao" />}>
+                  <Checkout />
                 </Can>
               } />
 
