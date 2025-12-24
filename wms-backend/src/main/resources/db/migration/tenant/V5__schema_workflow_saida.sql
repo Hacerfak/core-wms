@@ -1,5 +1,6 @@
 CREATE TABLE tb_onda_separacao (
     id BIGSERIAL PRIMARY KEY,
+    -- Auditoria
     criado_por VARCHAR(100),
     atualizado_por VARCHAR(100),
     data_criacao TIMESTAMP DEFAULT NOW(),
@@ -12,17 +13,20 @@ CREATE TABLE tb_onda_separacao (
 );
 CREATE TABLE tb_solicitacao_saida (
     id BIGSERIAL PRIMARY KEY,
+    -- Auditoria
     criado_por VARCHAR(100),
     atualizado_por VARCHAR(100),
     data_criacao TIMESTAMP DEFAULT NOW(),
     data_atualizacao TIMESTAMP,
     data_finalizacao TIMESTAMP,
-    codigo_externo VARCHAR(100) UNIQUE NOT NULL,
-    cliente_id BIGINT NOT NULL,
-    onda_id BIGINT,
+    -- Workflow
+    codigo_externo VARCHAR(100),
     status VARCHAR(30) NOT NULL,
     prioridade INTEGER DEFAULT 0,
     data_limite DATE,
+    -- Específico Saída
+    cliente_id BIGINT NOT NULL,
+    onda_id BIGINT,
     rota VARCHAR(50),
     sequencia_entrega INTEGER,
     CONSTRAINT fk_sol_saida_cli FOREIGN KEY (cliente_id) REFERENCES tb_parceiro(id),
@@ -41,6 +45,7 @@ CREATE TABLE tb_item_solicitacao_saida (
 );
 CREATE TABLE tb_tarefa_separacao (
     id BIGSERIAL PRIMARY KEY,
+    -- Auditoria
     criado_por VARCHAR(100),
     atualizado_por VARCHAR(100),
     data_criacao TIMESTAMP DEFAULT NOW(),
@@ -66,13 +71,14 @@ CREATE TABLE tb_tarefa_separacao (
 -- PACKING / CONFERÊNCIA
 CREATE TABLE tb_volume_expedicao (
     id BIGSERIAL PRIMARY KEY,
+    -- Auditoria
     criado_por VARCHAR(100),
     atualizado_por VARCHAR(100),
     data_criacao TIMESTAMP DEFAULT NOW(),
     data_atualizacao TIMESTAMP,
     data_finalizacao TIMESTAMP,
     solicitacao_id BIGINT NOT NULL,
-    codigo_rastreio VARCHAR(50) NOT NULL UNIQUE,
+    codigo_rastreio VARCHAR(50) UNIQUE,
     tipo_embalagem VARCHAR(30),
     peso_bruto NUMERIC(18, 4),
     fechado BOOLEAN DEFAULT FALSE,
@@ -80,6 +86,7 @@ CREATE TABLE tb_volume_expedicao (
 );
 CREATE TABLE tb_item_volume_expedicao (
     id BIGSERIAL PRIMARY KEY,
+    -- Auditoria
     criado_por VARCHAR(100),
     atualizado_por VARCHAR(100),
     data_criacao TIMESTAMP DEFAULT NOW(),

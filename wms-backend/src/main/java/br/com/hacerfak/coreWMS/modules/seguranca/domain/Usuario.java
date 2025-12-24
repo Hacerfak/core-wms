@@ -1,8 +1,11 @@
+// Arquivo: wms-backend/src/main/java/br/com/hacerfak/coreWMS/modules/seguranca/domain/Usuario.java
+
 package br.com.hacerfak.coreWMS.modules.seguranca.domain;
 
 import br.com.hacerfak.coreWMS.core.domain.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
+import lombok.experimental.SuperBuilder; // Importar SuperBuilder
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -10,18 +13,14 @@ import org.springframework.security.core.userdetails.UserDetails;
 import java.util.Collection;
 import java.util.List;
 
-// Adicionamos schema = "public" para fixar a tabela no master, 
-// impedindo que o Hibernate procure em 'tenant_xyz.tb_usuario'
 @Table(name = "tb_usuario", schema = "public")
 @Entity
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
+@SuperBuilder // <--- MUDANÇA: Use SuperBuilder em vez de Builder
 public class Usuario extends BaseEntity implements UserDetails {
-
-    // ID herdado de BaseEntity
 
     @Column(unique = true, nullable = false)
     private String login;
@@ -39,12 +38,10 @@ public class Usuario extends BaseEntity implements UserDetails {
     @Enumerated(EnumType.STRING)
     private UserRole role;
 
-    // --- CORREÇÃO DE PERFORMANCE: MUDADO PARA LAZY ---
-    // Removemos o EAGER. Agora a lista só vem se pedirmos explicitamente.
     @OneToMany(mappedBy = "usuario", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<UsuarioEmpresa> acessos;
 
-    // --- UserDetails ---
+    // ... (Mantenha os métodos da interface UserDetails inalterados) ...
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         if (this.role == UserRole.ADMIN) {

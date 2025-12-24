@@ -9,6 +9,7 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -23,23 +24,18 @@ public class AuthService {
     private final AuthenticationManager authenticationManager;
 
     public LoginResponseDTO login(AuthenticationDTO data) {
-        // 1. Autentica no Spring Security (Banco Master)
+        // A autenticação chama o AuthorizationService que já corrigimos acima.
+        // O objeto 'usuario' retornado aqui já terá a lista 'acessos' preenchida.
         var usernamePassword = new UsernamePasswordAuthenticationToken(data.login(), data.password());
         var auth = authenticationManager.authenticate(usernamePassword);
         Usuario usuario = (Usuario) auth.getPrincipal();
 
         List<EmpresaResumoDTO> acessos = new ArrayList<>();
 
-        // 2. Itera sobre as empresas (PERFORMANCE FIX: Sem abrir conexão com cada
-        // tenant)
         for (UsuarioEmpresa acesso : usuario.getAcessos()) {
             if (!acesso.getEmpresa().isAtivo())
                 continue;
 
-            // Retornamos o Role genérico (ADMIN/USER) que está na tabela de vínculo do
-            // Master.
-            // O nome específico do "Perfil" (ex: "Gerente de Estoque") será carregado
-            // apenas quando o usuário selecionar a empresa.
             String perfilExibicao = acesso.getRole() == UserRole.ADMIN ? "Administrador" : "Colaborador";
 
             acessos.add(new EmpresaResumoDTO(
@@ -51,11 +47,10 @@ public class AuthService {
         }
 
         var token = tokenService.generateToken(usuario, null, List.of());
-
-        // CORREÇÃO: Passando usuario.getId()
         return new LoginResponseDTO(token, usuario.getId(), usuario.getLogin(), usuario.getRole().name(), acessos);
     }
 
+    @Transactional(readOnly = true) // Adicione Transactional para garantir sessão aberta
     public LoginResponseDTO selecionarEmpresa(String tenantId) {
         String tenantAtual = TenantContext.getTenant();
         TenantContext.setTenant(TenantContext.DEFAULT_TENANT_ID);
@@ -63,6 +58,9 @@ public class AuthService {
         Usuario usuario;
         try {
             String login = SecurityContextHolder.getContext().getAuthentication().getName();
+
+            // CORREÇÃO: Usar findByLoginWithAcessos para evitar LazyException ao checar
+            // permissão
             usuario = usuarioRepository.findByLoginWithAcessos(login).orElseThrow();
 
             boolean temAcesso = usuario.getAcessos().stream()
@@ -103,12 +101,14 @@ public class AuthService {
                 List.of());
     }
 
+    @Transactional(readOnly = true)
     public LoginResponseDTO atualizarCredenciais() {
         String tenantAtual = TenantContext.getTenant();
         TenantContext.setTenant(TenantContext.DEFAULT_TENANT_ID);
         Usuario usuario;
         try {
             String login = SecurityContextHolder.getContext().getAuthentication().getName();
+            // CORREÇÃO: Carrega usuário completo
             usuario = usuarioRepository.findByLoginWithAcessos(login).orElseThrow();
         } finally {
             TenantContext.setTenant(tenantAtual);

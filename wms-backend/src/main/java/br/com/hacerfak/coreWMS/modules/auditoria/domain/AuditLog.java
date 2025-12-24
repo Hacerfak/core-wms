@@ -1,15 +1,20 @@
 package br.com.hacerfak.coreWMS.modules.auditoria.domain;
 
-import jakarta.persistence.*;
 import lombok.*;
+// IMPORTANTE: Use o Id do Spring Data, não do Jakarta Persistence
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
+import org.springframework.data.mongodb.core.index.CompoundIndexes;
+import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "tb_audit_log", indexes = {
-        @Index(name = "idx_audit_entidade", columnList = "entidade, entidadeId"),
-        @Index(name = "idx_audit_data", columnList = "dataHora"),
-        @Index(name = "idx_audit_tenant", columnList = "tenantId") // Index para filtrar por empresa se exportado
+@Document(collection = "tb_audit_log") // Define que é um Documento Mongo
+@CompoundIndexes({
+        // Índices compostos equivalentes aos que você tinha no JPA
+        @CompoundIndex(name = "idx_audit_entidade", def = "{'entidade': 1, 'entidadeId': 1}"),
+        @CompoundIndex(name = "idx_audit_tenant", def = "{'tenantId': 1}")
 })
 @Getter
 @Setter
@@ -19,16 +24,14 @@ import java.time.LocalDateTime;
 public class AuditLog {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private String id; // MUDANÇA CRÍTICA: Mongo usa String (ObjectId)
 
-    @Column(nullable = false)
-    private String tenantId; // <--- O Vínculo da Empresa (Ex: "tenant_cocacola")
+    @Indexed // Índice simples para busca rápida por tenant (opcional se já estiver no
+             // composto)
+    private String tenantId;
 
-    @Column(nullable = false)
     private String evento; // CREATE, UPDATE, DELETE, LOGIN
 
-    @Column(nullable = false)
     private String entidade; // Ex: "Produto"
 
     private String entidadeId; // ID do registro alterado
@@ -37,20 +40,20 @@ public class AuditLog {
 
     // --- RASTREABILIDADE (Onde e Como) ---
     private String ipOrigem;
-    private String userAgent; // Navegador/Dispositivo
+    private String userAgent;
 
     @Builder.Default
+    @Indexed(name = "idx_audit_data", direction = org.springframework.data.mongodb.core.index.IndexDirection.DESCENDING)
     private LocalDateTime dataHora = LocalDateTime.now();
 
-    // --- LOG INTELIGENTE (Apenas o que mudou) ---
-    @Column(columnDefinition = "TEXT")
-    private String dados; // JSON com o Diff: { "preco": { "de": 10, "para": 20 } }
+    // --- LOG INTELIGENTE ---
+    // No Mongo não precisamos de @Column(columnDefinition = "TEXT"), ele suporta
+    // Strings grandes nativamente
+    private String dados;
 
-    // Mantendo legado temporariamente (opcional)
+    // Campos legados
     @Deprecated
-    @Column(columnDefinition = "TEXT")
     private String dadosAntigos;
     @Deprecated
-    @Column(columnDefinition = "TEXT")
     private String dadosNovos;
 }

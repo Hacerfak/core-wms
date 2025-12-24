@@ -32,36 +32,43 @@ public class EmpresaController {
     private final UsuarioPerfilRepository usuarioPerfilRepository;
 
     @GetMapping("/meus-acessos")
-    public ResponseEntity<List<EmpresaResumoDTO>> listarMinhasEmpresas() {
+    public ResponseEntity<List<EmpresaResumoDTO>> listarMeusAcessos() {
         String tenantOriginal = TenantContext.getTenant();
         TenantContext.setTenant(TenantContext.DEFAULT_TENANT_ID);
+
         try {
             String login = SecurityContextHolder.getContext().getAuthentication().getName();
-            Usuario usuario = usuarioRepository.findByLogin(login).orElseThrow();
+
+            // --- CORREÇÃO CRÍTICA AQUI ---
+            // Usar 'findByLoginWithAcessos' (com JOIN FETCH) em vez de 'findByLogin'
+            // Isso evita o erro: org.hibernate.LazyInitializationException
+            Usuario usuario = usuarioRepository.findByLoginWithAcessos(login).orElseThrow();
+
             List<EmpresaResumoDTO> resultado = new ArrayList<>();
 
             for (UsuarioEmpresa acesso : usuario.getAcessos()) {
                 if (!acesso.getEmpresa().isAtivo())
                     continue;
-                String tenantId = acesso.getEmpresa().getTenantId();
-                String nomePerfil = "Carregando...";
 
-                // Descobre o perfil dentro do tenant
+                String tenantId = acesso.getEmpresa().getTenantId();
+                String nomePerfil = "Usuário";
+
                 try {
+                    // Troca contexto para buscar o nome do perfil específico daquela empresa
                     TenantContext.setTenant(tenantId);
-                    if (usuario.getRole() == UserRole.ADMIN) {
-                        nomePerfil = "MASTER";
-                    } else {
-                        List<UsuarioPerfil> perfis = usuarioPerfilRepository.findByUsuarioId(usuario.getId());
-                        nomePerfil = !perfis.isEmpty() ? perfis.get(0).getPerfil().getNome() : "Sem Perfil";
+                    List<UsuarioPerfil> perfis = usuarioPerfilRepository.findByUsuarioId(usuario.getId());
+                    if (!perfis.isEmpty()) {
+                        nomePerfil = perfis.get(0).getPerfil().getNome();
+                    } else if (acesso.getRole() == UserRole.ADMIN) {
+                        nomePerfil = "Administrador Global";
                     }
                 } catch (Exception e) {
-                    nomePerfil = "Erro leitura";
-                } finally {
-                    TenantContext.setTenant(TenantContext.DEFAULT_TENANT_ID);
+                    nomePerfil = "Erro ao carregar";
                 }
 
-                // CORREÇÃO: Passando todos os campos
+                // Restaura para Master para continuar o loop e adicionar ao DTO
+                TenantContext.setTenant(TenantContext.DEFAULT_TENANT_ID);
+
                 resultado.add(new EmpresaResumoDTO(
                         acesso.getEmpresa().getId(),
                         acesso.getEmpresa().getRazaoSocial(),
@@ -71,6 +78,7 @@ public class EmpresaController {
             }
             return ResponseEntity.ok(resultado);
         } finally {
+            // Garante que o contexto original (ou limpeza) ocorra
             if (tenantOriginal != null)
                 TenantContext.setTenant(tenantOriginal);
             else
@@ -87,7 +95,6 @@ public class EmpresaController {
             List<Empresa> empresas = empresaRepository.findAll();
             return ResponseEntity.ok(empresas.stream()
                     .filter(Empresa::isAtivo)
-                    // CORREÇÃO: Passando todos os campos
                     .map(e -> new EmpresaResumoDTO(
                             e.getId(),
                             e.getRazaoSocial(),

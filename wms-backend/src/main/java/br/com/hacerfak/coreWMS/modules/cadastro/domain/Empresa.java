@@ -1,3 +1,5 @@
+// Arquivo: wms-backend/src/main/java/br/com/hacerfak/coreWMS/modules/cadastro/domain/Empresa.java
+
 package br.com.hacerfak.coreWMS.modules.cadastro.domain;
 
 import br.com.hacerfak.coreWMS.core.domain.BaseEntity;
@@ -5,16 +7,16 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
 import lombok.*;
-
-import java.time.LocalDate;
+import lombok.experimental.SuperBuilder;
 
 @Entity
-@Table(name = "tb_empresa")
+// CORREÇÃO: Adicionado schema = "public"
+@Table(name = "tb_empresa", schema = "public")
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
+@SuperBuilder // <--- MUDANÇA: Use SuperBuilder
 public class Empresa extends BaseEntity {
 
     @Column(nullable = false)
@@ -23,13 +25,11 @@ public class Empresa extends BaseEntity {
     @Column(nullable = false, unique = true)
     private String cnpj;
 
-    // Identificador interno do banco (ex: "tenant_00191")
     @Column(nullable = false, unique = true, name = "tenant_id")
     private String tenantId;
 
-    // Metadados do Certificado (Preparamos o terreno para o onboarding)
     private String nomeCertificado;
-    private LocalDate validadeCertificado;
+    private java.time.LocalDate validadeCertificado;
 
     @Builder.Default
     private boolean ativo = true;

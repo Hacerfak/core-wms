@@ -20,6 +20,7 @@ CREATE TABLE tb_perfil_permissoes (
 -- Tabela de junção Usuario <-> Perfil
 -- (Geralmente necessária se a relação for @ManyToMany na classe Usuario)
 CREATE TABLE tb_usuario_perfil (
+    id BIGSERIAL PRIMARY KEY,
     usuario_id BIGINT NOT NULL,
     perfil_id BIGINT NOT NULL,
     -- Campos de Auditoria (herdados de BaseEntity)
@@ -28,7 +29,7 @@ CREATE TABLE tb_usuario_perfil (
     atualizado_por VARCHAR(100),
     data_atualizacao TIMESTAMP,
     data_finalizacao TIMESTAMP,
-    PRIMARY KEY (usuario_id, perfil_id),
+    CONSTRAINT uk_usuario_perfil UNIQUE (usuario_id, perfil_id),
     CONSTRAINT fk_up_perfil FOREIGN KEY (perfil_id) REFERENCES tb_perfil(id)
 );
 -- SEEDS

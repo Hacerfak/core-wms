@@ -3,6 +3,7 @@ package br.com.hacerfak.coreWMS.modules.cadastro.domain;
 import br.com.hacerfak.coreWMS.core.domain.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
+import lombok.experimental.SuperBuilder; // Importante
 import java.time.LocalDateTime;
 
 @Entity
@@ -11,10 +12,8 @@ import java.time.LocalDateTime;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
+@SuperBuilder // <--- MUDANÇA: Use SuperBuilder
 public class EmpresaDados extends BaseEntity {
-
-    // ID herdado
 
     // --- DADOS CADASTRAIS ---
     private String razaoSocial;

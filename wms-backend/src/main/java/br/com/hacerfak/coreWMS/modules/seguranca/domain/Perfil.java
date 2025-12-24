@@ -3,6 +3,7 @@ package br.com.hacerfak.coreWMS.modules.seguranca.domain;
 import br.com.hacerfak.coreWMS.core.domain.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
+import lombok.experimental.SuperBuilder; // Importante
 
 import java.util.HashSet;
 import java.util.Set;
@@ -13,7 +14,7 @@ import java.util.Set;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
+@SuperBuilder // <--- MUDANÇA: Use SuperBuilder
 public class Perfil extends BaseEntity {
 
     @Column(nullable = false)

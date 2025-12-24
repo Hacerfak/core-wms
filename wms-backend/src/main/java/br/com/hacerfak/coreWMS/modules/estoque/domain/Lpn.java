@@ -3,6 +3,7 @@ package br.com.hacerfak.coreWMS.modules.estoque.domain;
 import br.com.hacerfak.coreWMS.core.domain.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
+import lombok.experimental.SuperBuilder;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -13,7 +14,7 @@ import java.util.List;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
+@SuperBuilder
 public class Lpn extends BaseEntity {
 
     @Column(nullable = false, unique = true, length = 50)

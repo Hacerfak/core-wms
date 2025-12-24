@@ -84,7 +84,7 @@ public class OnboardingController {
             empresaRepository.save(novaEmpresa);
 
             String loginUsuario = SecurityContextHolder.getContext().getAuthentication().getName();
-            Usuario usuario = usuarioRepository.findByLogin(loginUsuario).orElseThrow();
+            Usuario usuario = usuarioRepository.findByLoginWithAcessos(loginUsuario).orElseThrow();
 
             UsuarioEmpresa vinculo = UsuarioEmpresa.builder()
                     .usuario(usuario)

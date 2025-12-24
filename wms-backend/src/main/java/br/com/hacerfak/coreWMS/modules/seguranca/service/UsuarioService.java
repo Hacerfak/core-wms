@@ -94,11 +94,11 @@ public class UsuarioService {
                         isSelf = true;
 
                     if (!usuario.getLogin().equals(req.login())
-                            && usuarioRepository.findByLogin(req.login()).isPresent()) {
+                            && usuarioRepository.findByLoginWithAcessos(req.login()).isPresent()) {
                         throw new IllegalArgumentException("Login já em uso.");
                     }
                 } else {
-                    if (usuarioRepository.findByLogin(req.login()).isPresent())
+                    if (usuarioRepository.findByLoginWithAcessos(req.login()).isPresent())
                         throw new IllegalArgumentException("Login já existe.");
                     usuario = new Usuario();
                     usuario.setRole(UserRole.USER);
@@ -158,10 +158,25 @@ public class UsuarioService {
 
         runAsMaster(() -> {
             new TransactionTemplate(transactionManager).execute(status -> {
-                // --- CORREÇÃO: REGISTRO MANUAL DE AUDITORIA ---
-                // Operações deleteBy... não disparam @PostRemove automaticamente no JPA
-                auditService.registrarLog("DELETE", "Usuario", String.valueOf(id),
-                        "Exclusão Global de Usuário: " + alvo.getNome() + " (" + alvo.getLogin() + ")");
+                // --- CAPTURA CONTEXTO ANTES ---
+                String usuarioLogado = SecurityContextHolder.getContext().getAuthentication().getName();
+                // IP e UA podem ser nulos aqui se não estivermos num contexto Web, ou
+                // capturamos via helpers se possível
+                // Como é um service, simplificamos ou injetamos HttpServletRequest se
+                // necessário.
+                // Para simplicidade, passamos valores fixos ou nulos (o AuditService tratará)
+
+                // CORREÇÃO: Passando os novos parâmetros
+                auditService.registrarLog(
+                        "DELETE",
+                        "Usuario",
+                        String.valueOf(id),
+                        "Exclusão Global de Usuário: " + alvo.getNome() + " (" + alvo.getLogin() + ")",
+                        TenantContext.DEFAULT_TENANT_ID, // Estamos no master
+                        usuarioLogado,
+                        "MANUAL", // IP
+                        "BACKEND" // UserAgent
+                );
 
                 usuarioEmpresaRepository.deleteByUsuarioId(id);
                 usuarioRepository.deleteById(id);
@@ -190,7 +205,18 @@ public class UsuarioService {
         String originalTenant = TenantContext.getTenant();
         TenantContext.setTenant(TenantContext.DEFAULT_TENANT_ID);
         try {
-            Usuario usuario = usuarioRepository.findById(usuarioId).orElseThrow();
+            // CORREÇÃO: Usar findById NÃO resolve pois findById padrão é LAZY nos acessos.
+            // Precisamos buscar via login ou criar um findByIdWithAcessos.
+            // Como já temos o ID, vamos buscar o usuário e forçar a inicialização ou usar
+            // query.
+
+            // Opção 1 (Simples): findById + Hibernate.initialize (dentro de @Transactional)
+            // Opção 2 (Performance): Criar findByIdWithAcessos no repository.
+
+            // Vamos usar a opção existente via Login para aproveitar o método criado:
+            Usuario uSimples = usuarioRepository.findById(usuarioId).orElseThrow();
+            Usuario usuario = usuarioRepository.findByLoginWithAcessos(uSimples.getLogin()).orElseThrow();
+
             List<EmpresaResumoDTO> lista = new ArrayList<>();
 
             for (UsuarioEmpresa vinculo : usuario.getAcessos()) {

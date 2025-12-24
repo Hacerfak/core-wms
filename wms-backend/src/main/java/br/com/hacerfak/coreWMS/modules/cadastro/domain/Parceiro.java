@@ -2,6 +2,7 @@ package br.com.hacerfak.coreWMS.modules.cadastro.domain;
 
 import jakarta.persistence.*;
 import lombok.*;
+import lombok.experimental.SuperBuilder;
 import br.com.hacerfak.coreWMS.core.domain.BaseEntity;
 
 @Entity
@@ -12,7 +13,7 @@ import br.com.hacerfak.coreWMS.core.domain.BaseEntity;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
+@SuperBuilder
 @EqualsAndHashCode(callSuper = true)
 public class Parceiro extends BaseEntity {
 

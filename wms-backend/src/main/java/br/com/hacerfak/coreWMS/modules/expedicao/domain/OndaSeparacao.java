@@ -3,6 +3,7 @@ package br.com.hacerfak.coreWMS.modules.expedicao.domain;
 import br.com.hacerfak.coreWMS.core.domain.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
+import lombok.experimental.SuperBuilder;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -14,7 +15,7 @@ import java.util.List;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
+@SuperBuilder
 public class OndaSeparacao extends BaseEntity {
 
     @Column(nullable = false, length = 50)

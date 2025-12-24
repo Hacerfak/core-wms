@@ -39,7 +39,7 @@ public class SecurityFilter extends OncePerRequestFilter {
 
             if (!login.isEmpty()) {
                 try {
-                    Usuario usuario = usuarioRepository.findByLogin(login)
+                    Usuario usuario = usuarioRepository.findByLoginWithAcessos(login)
                             .orElseThrow(() -> new RuntimeException("Usuário não encontrado: " + login));
 
                     String tenantId = tokenService.getTenantFromToken(token);

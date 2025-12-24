@@ -36,6 +36,7 @@ public class AuditController {
             @RequestParam(required = false) String entidade,
             @RequestParam(required = false) String acao,
             @PageableDefault(sort = "dataHora", direction = Sort.Direction.DESC, size = 20) Pageable pageable) {
+
         Query query = new Query().with(pageable);
         List<Criteria> criteria = new ArrayList<>();
 
@@ -49,15 +50,17 @@ public class AuditController {
             criteria.add(Criteria.where("dataHora").gte(inicio));
         }
 
-        // 3. Filtros Opcionais
+        // 3. Filtros Opcionais (CORRIGIDOS OS NOMES DOS CAMPOS)
         if (usuario != null && !usuario.isBlank()) {
-            criteria.add(Criteria.where("usuario").regex(usuario, "i")); // Case insensitive
+            criteria.add(Criteria.where("usuario").regex(usuario, "i"));
         }
         if (entidade != null && !entidade.isBlank()) {
-            criteria.add(Criteria.where("entityName").is(entidade));
+            // CORREÇÃO: "entityName" -> "entidade"
+            criteria.add(Criteria.where("entidade").is(entidade));
         }
         if (acao != null && !acao.isBlank()) {
-            criteria.add(Criteria.where("action").is(acao));
+            // CORREÇÃO: "action" -> "evento"
+            criteria.add(Criteria.where("evento").is(acao));
         }
 
         // Monta a query final
@@ -65,10 +68,7 @@ public class AuditController {
             query.addCriteria(new Criteria().andOperator(criteria.toArray(new Criteria[0])));
         }
 
-        // Executa com paginação otimizada
         List<AuditLog> list = mongoTemplate.find(query, AuditLog.class);
-
-        // Count separado para paginação correta no Mongo
         long count = mongoTemplate.count(Query.of(query).limit(-1).skip(-1), AuditLog.class);
 
         return ResponseEntity.ok(PageableExecutionUtils.getPage(list, pageable, () -> count));

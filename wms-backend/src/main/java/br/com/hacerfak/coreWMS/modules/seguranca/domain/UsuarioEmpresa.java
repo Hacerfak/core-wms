@@ -1,3 +1,5 @@
+// Arquivo: wms-backend/src/main/java/br/com/hacerfak/coreWMS/modules/seguranca/domain/UsuarioEmpresa.java
+
 package br.com.hacerfak.coreWMS.modules.seguranca.domain;
 
 import br.com.hacerfak.coreWMS.core.domain.BaseEntity;
@@ -5,14 +7,16 @@ import br.com.hacerfak.coreWMS.modules.cadastro.domain.Empresa;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
+import lombok.experimental.SuperBuilder;
 
 @Entity
-@Table(name = "tb_usuario_empresa")
+// CORREÇÃO: Adicionado schema = "public" para evitar busca no tenant errado
+@Table(name = "tb_usuario_empresa", schema = "public")
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
+@SuperBuilder // <--- MUDANÇA: Use SuperBuilder
 public class UsuarioEmpresa extends BaseEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -26,5 +30,5 @@ public class UsuarioEmpresa extends BaseEntity {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private UserRole role; // Ex: ADMIN (dono da empresa), OPERADOR
+    private UserRole role;
 }

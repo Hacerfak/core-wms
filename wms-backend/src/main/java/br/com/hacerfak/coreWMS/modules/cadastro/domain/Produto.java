@@ -2,6 +2,8 @@ package br.com.hacerfak.coreWMS.modules.cadastro.domain;
 
 import jakarta.persistence.*;
 import lombok.*;
+import lombok.experimental.SuperBuilder;
+
 import java.math.BigDecimal;
 import br.com.hacerfak.coreWMS.core.domain.BaseEntity;
 
@@ -17,7 +19,7 @@ import br.com.hacerfak.coreWMS.core.domain.BaseEntity;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
+@SuperBuilder
 @EqualsAndHashCode(callSuper = true)
 public class Produto extends BaseEntity {
 

@@ -96,7 +96,7 @@ services:
       TZ: America/Sao_Paulo
       
       # Banco Relacional
-      SPRING_DATASOURCE_URL: jdbc:postgresql://wms-db-main:5432/core_wms
+      SPRING_DATASOURCE_URL: jdbc:postgresql://wms-db-main:5432/wms_master
       SPRING_DATASOURCE_USERNAME: wms_user
       SPRING_DATASOURCE_PASSWORD: wms_password
       

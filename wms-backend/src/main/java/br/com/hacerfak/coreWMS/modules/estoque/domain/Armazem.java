@@ -3,6 +3,7 @@ package br.com.hacerfak.coreWMS.modules.estoque.domain;
 import br.com.hacerfak.coreWMS.core.domain.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
+import lombok.experimental.SuperBuilder;
 
 @Entity
 @Table(name = "tb_armazem")
@@ -10,7 +11,7 @@ import lombok.*;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
+@SuperBuilder
 public class Armazem extends BaseEntity {
 
     @Column(nullable = false, unique = true, length = 10)

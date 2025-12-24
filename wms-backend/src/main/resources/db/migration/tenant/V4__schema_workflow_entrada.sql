@@ -1,22 +1,27 @@
 CREATE TABLE tb_solicitacao_entrada (
     id BIGSERIAL PRIMARY KEY,
+    -- Auditoria BaseEntity
     criado_por VARCHAR(100),
     atualizado_por VARCHAR(100),
     data_criacao TIMESTAMP DEFAULT NOW(),
     data_atualizacao TIMESTAMP,
     data_finalizacao TIMESTAMP,
+    -- Workflow Solicitacao
     codigo_externo VARCHAR(100),
-    -- Nfe ou Pedido
-    fornecedor_id BIGINT NOT NULL,
     status VARCHAR(30) NOT NULL,
     data_previsao DATE,
+    -- Específico Entrada
+    fornecedor_id BIGINT,
+    -- Pode ser null se for devolução? Melhor deixar nullable ou checar regra
     tipo_recebimento VARCHAR(30),
     nota_fiscal VARCHAR(50),
-    chave_acesso VARCHAR(100),
+    chave_acesso VARCHAR(44),
+    data_emissao TIMESTAMP,
+    -- CORREÇÃO: Adicionado
     CONSTRAINT fk_sol_ent_forn FOREIGN KEY (fornecedor_id) REFERENCES tb_parceiro(id)
 );
 CREATE INDEX idx_sol_ent_nfe ON tb_solicitacao_entrada(nota_fiscal);
--- Agora podemos adicionar a FK na LPN (Circularidade resolvida)
+-- FK da LPN (Circularidade)
 ALTER TABLE tb_lpn
 ADD CONSTRAINT fk_lpn_solicitacao FOREIGN KEY (solicitacao_entrada_id) REFERENCES tb_solicitacao_entrada(id);
 CREATE TABLE tb_item_solicitacao_entrada (
@@ -30,6 +35,7 @@ CREATE TABLE tb_item_solicitacao_entrada (
 );
 CREATE TABLE tb_agendamento (
     id BIGSERIAL PRIMARY KEY,
+    -- Auditoria
     criado_por VARCHAR(100),
     atualizado_por VARCHAR(100),
     data_criacao TIMESTAMP DEFAULT NOW(),
@@ -53,6 +59,7 @@ CREATE TABLE tb_agendamento (
 );
 CREATE TABLE tb_tarefa_conferencia (
     id BIGSERIAL PRIMARY KEY,
+    -- Auditoria
     criado_por VARCHAR(100),
     atualizado_por VARCHAR(100),
     data_criacao TIMESTAMP DEFAULT NOW(),
@@ -69,6 +76,7 @@ CREATE TABLE tb_tarefa_conferencia (
 );
 CREATE TABLE tb_tarefa_divergencia (
     id BIGSERIAL PRIMARY KEY,
+    -- Auditoria
     criado_por VARCHAR(100),
     atualizado_por VARCHAR(100),
     data_criacao TIMESTAMP DEFAULT NOW(),
@@ -89,6 +97,7 @@ CREATE TABLE tb_tarefa_divergencia (
 );
 CREATE TABLE tb_tarefa_armazenagem (
     id BIGSERIAL PRIMARY KEY,
+    -- Auditoria
     criado_por VARCHAR(100),
     atualizado_por VARCHAR(100),
     data_criacao TIMESTAMP DEFAULT NOW(),

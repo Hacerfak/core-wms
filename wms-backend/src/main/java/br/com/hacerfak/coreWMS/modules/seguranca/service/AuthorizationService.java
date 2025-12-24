@@ -15,7 +15,8 @@ public class AuthorizationService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        return repository.findByLogin(username)
+        // CORREÇÃO: Usar o método que faz o JOIN FETCH
+        return repository.findByLoginWithAcessos(username)
                 .orElseThrow(() -> new UsernameNotFoundException("Usuário não encontrado"));
     }
 }
