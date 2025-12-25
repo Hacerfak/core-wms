@@ -7,7 +7,8 @@ CREATE TABLE tb_armazem (
     data_finalizacao TIMESTAMP,
     nome VARCHAR(100) NOT NULL,
     codigo VARCHAR(50) NOT NULL UNIQUE,
-    endereco_completo VARCHAR(255)
+    endereco_completo VARCHAR(255),
+    ativo BOOLEAN DEFAULT TRUE
 );
 CREATE TABLE tb_area (
     id BIGSERIAL PRIMARY KEY,

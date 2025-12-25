@@ -1,17 +1,21 @@
 package br.com.hacerfak.printagent.worker;
 
 import br.com.hacerfak.printagent.dto.PrintJobDTO;
+import br.com.hacerfak.printagent.service.AgentConfigService; // <--- NOVO
 import br.com.hacerfak.printagent.service.AgentLogStore;
+import br.com.hacerfak.printagent.service.AgentStatusService;
 import br.com.hacerfak.printagent.service.NetworkPrinterService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.beans.factory.annotation.Value;
 
 @Component
 @Slf4j
@@ -20,80 +24,92 @@ public class PrintJobWorker {
 
     private final RestTemplate restTemplate;
     private final NetworkPrinterService printerService;
-    private final AgentLogStore logStore; // <--- Injeção
+    private final AgentLogStore logStore;
+    private final AgentStatusService statusService;
+    private final AgentConfigService configService;
 
-    @Value("${agent.backend-url}")
-    private String backendUrl;
+    @Value("${info.app.version:dev}")
+    private String agentVersion;
 
-    @Value("${agent.api-key}")
-    private String apiKey;
-
-    @Value("${agent.id}")
-    private String agentId;
-
+    @Scheduled(fixedDelayString = "${agent.poll-interval:5000}", initialDelay = 3000)
     public void processarFila() {
-        try {
-            // ... (Código de Long Polling que fizemos antes) ...
-            HttpHeaders headers = new HttpHeaders();
-            headers.set("X-API-KEY", apiKey);
-            HttpEntity<String> entity = new HttpEntity<>(headers);
+        // Validação se está configurado
+        if (!configService.isConfigurado()) {
+            statusService.updateStatus(false, "Aguardando Configuração...");
+            return;
+        }
 
-            // Exemplo usando Long Polling (ou GET simples dependendo do que implementou)
+        try {
+            // Pega dados dinâmicos do serviço
+            String urlCompleta = configService.getBackendUrl() + "/poll?agentId=" + configService.getAgentId();
+
+            HttpEntity<String> entity = new HttpEntity<>(getHeaders());
+
             ResponseEntity<PrintJobDTO[]> response = restTemplate.exchange(
-                    backendUrl + "/poll?agentId=" + agentId,
+                    urlCompleta,
                     HttpMethod.GET,
                     entity,
                     PrintJobDTO[].class);
 
-            PrintJobDTO[] jobsArray = response.getBody();
+            statusService.updateStatus(true, "Conectado: " + configService.getTenantId());
 
+            PrintJobDTO[] jobsArray = response.getBody();
             if (jobsArray != null && jobsArray.length > 0) {
-                logStore.addLog("Recebidos " + jobsArray.length + " jobs.", false); // Log GUI
+                logStore.addLog("Recebidos " + jobsArray.length + " jobs.", false);
                 for (PrintJobDTO job : jobsArray) {
                     executarJob(job);
                 }
             }
+        } catch (ResourceAccessException e) {
+            statusService.updateStatus(false, "Falha conexão: " + configService.getServidorDominio());
         } catch (Exception e) {
-            log.warn("Erro conexão: {}", e.getMessage());
-            // Opcional: Não poluir a GUI com erros de conexão repetitivos, ou logar apenas
-            // 1x
+            String msg = "Erro: " + e.getMessage();
+            log.error(msg);
+            statusService.updateStatus(false, msg);
+            logStore.addLog(msg, true);
         }
     }
 
     private void executarJob(PrintJobDTO job) {
         try {
-            log.info("Processando Job #{}", job.getId());
-
+            log.info("Job #{}", job.getId());
             if ("REDE".equalsIgnoreCase(job.getTipoConexao())) {
                 printerService.imprimirViaSocket(job.getIp(), job.getPorta(), job.getZpl());
-            } else if ("COMPARTILHAMENTO".equalsIgnoreCase(job.getTipoConexao()) ||
-                    "USB_LOCAL".equalsIgnoreCase(job.getTipoConexao())) {
-                printerService.imprimirViaCompartilhamento(job.getCaminhoCompartilhamento(), job.getZpl());
             } else {
-                throw new IllegalArgumentException(
-                        "Tipo de conexão não suportado pelo Agente: " + job.getTipoConexao());
+                printerService.imprimirViaCompartilhamento(job.getCaminhoCompartilhamento(), job.getZpl());
             }
 
-            // 2. Reportar SUCESSO ao Backend para tirar da fila
-            // POST http://localhost:8080/api/impressao/fila/{id}/concluir
-            restTemplate.postForLocation(backendUrl + "/" + job.getId() + "/concluir", null);
-            log.info("Job #{} impresso e confirmado.", job.getId());
+            // --- CONFIRMAR ---
+            // Agora enviamos os headers também na confirmação
+            String confirmUrl = configService.getBackendUrl() + "/" + job.getId() + "/concluir";
+            HttpEntity<Void> entity = new HttpEntity<>(getHeaders());
 
-            // LOG GUI
-            logStore.addLog("Job #" + job.getId() + " IMPRESSO com sucesso na " + job.getTipoConexao(), false);
+            // Usamos 'exchange' ou 'postForLocation' passando a entity com headers
+            restTemplate.postForLocation(confirmUrl, entity);
 
+            logStore.addLog("Job #" + job.getId() + " OK", false);
         } catch (Exception e) {
-            log.error("Falha ao imprimir Job #{}", job.getId(), e);
-
-            // LOG GUI ERRO
+            log.error("Falha job #{}", job.getId(), e);
             logStore.addLog("ERRO Job #" + job.getId() + ": " + e.getMessage(), true);
-
-            // 3. Reportar ERRO ao Backend
             try {
-                restTemplate.postForLocation(backendUrl + "/" + job.getId() + "/erro", e.getMessage());
-            } catch (Exception reportEx) {
-                log.error("Falha ao reportar erro ao backend", reportEx);
+                // Enviamos headers também no endpoint de erro
+                String erroUrl = configService.getBackendUrl() + "/" + job.getId() + "/erro";
+
+                // O corpo da requisição é a mensagem de erro, e os headers vão junto
+                HttpEntity<String> entity = new HttpEntity<>(e.getMessage(), getHeaders());
+                restTemplate.postForLocation(erroUrl, entity);
+            } catch (Exception ignored) {
             }
         }
+    }
+
+    // Método auxiliar para garantir que TODAS as requisições tenham os dados do
+    // Tenant
+    private HttpHeaders getHeaders() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-Agent-Key", configService.getApiKey());
+        headers.set("X-Tenant-ID", configService.getTenantId());
+        headers.set("X-Agent-Version", agentVersion);
+        return headers;
     }
 }

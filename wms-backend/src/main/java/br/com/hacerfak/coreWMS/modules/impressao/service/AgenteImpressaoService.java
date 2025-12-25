@@ -38,7 +38,9 @@ public class AgenteImpressaoService {
     }
 
     @Transactional
-    @CacheEvict(value = "agentes-key", allEntries = true) // Limpa cache se revogar
+    // IMPORTANTE: Limpa o cache se revogar, forçando o sistema a ir no banco e
+    // descobrir que está inativo
+    @CacheEvict(value = "agentes-key", allEntries = true)
     public void revogarAcesso(Long id) {
         AgenteImpressao agente = repository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Agente não encontrado"));
@@ -48,13 +50,14 @@ public class AgenteImpressaoService {
     }
 
     // Método chamado pelo Filtro para registrar heartbeat (sem transaction pesada)
-    public void registrarHeartbeat(AgenteImpressao agente) {
-        // Otimização: Só atualiza no banco se passou mais de 1 min para não spammar
+    public void registrarHeartbeat(AgenteImpressao agente, String versao) {
+        // Otimização: Só atualiza no banco se passou mais de 15 min para não spammar
         // update
         if (agente.getUltimoHeartbeat() == null ||
-                agente.getUltimoHeartbeat().isBefore(java.time.LocalDateTime.now().minusMinutes(1))) {
+                agente.getUltimoHeartbeat().isBefore(java.time.LocalDateTime.now().minusMinutes(15))) {
 
-            agente.registrarAtividade("1.0.0"); // Versão pode vir do header depois
+            String versaoFinal = (versao != null && !versao.isBlank()) ? versao : "1.0.0";
+            agente.registrarAtividade(versaoFinal);
             repository.save(agente);
         }
     }

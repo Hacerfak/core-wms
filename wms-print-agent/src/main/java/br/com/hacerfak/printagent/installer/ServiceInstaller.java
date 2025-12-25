@@ -1,22 +1,22 @@
 package br.com.hacerfak.printagent.installer;
 
+import br.com.hacerfak.printagent.service.AgentConfigService;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.system.ApplicationHome;
 import org.springframework.stereotype.Component;
 
 import java.io.File;
 import java.io.FileWriter;
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class ServiceInstaller {
 
+    private final AgentConfigService configService;
     private static final String SERVICE_NAME = "WmsPrintAgent";
     private static final String DISPLAY_NAME = "WMS Print Agent Hub";
 
@@ -28,10 +28,11 @@ public class ServiceInstaller {
             } else if (os.contains("nix") || os.contains("nux")) {
                 installLinux();
             } else {
-                log.error("Sistema operacional não suportado para instalação automática: " + os);
+                throw new UnsupportedOperationException("SO não suportado para instalação automática: " + os);
             }
         } catch (Exception e) {
-            log.error("Erro fatal ao instalar serviço", e);
+            log.error("Erro ao instalar serviço", e);
+            throw new RuntimeException("Falha na instalação: " + e.getMessage());
         }
     }
 
@@ -39,37 +40,70 @@ public class ServiceInstaller {
         String os = System.getProperty("os.name").toLowerCase();
         try {
             if (os.contains("win")) {
-                runCommand("sc", "stop", SERVICE_NAME);
-                runCommand("sc", "delete", SERVICE_NAME);
-                log.info("Serviço Windows removido com sucesso.");
+                uninstallWindows();
             } else if (os.contains("nix") || os.contains("nux")) {
-                runCommand("systemctl", "stop", SERVICE_NAME);
-                runCommand("systemctl", "disable", SERVICE_NAME);
-                Files.deleteIfExists(Path.of("/etc/systemd/system/" + SERVICE_NAME + ".service"));
-                runCommand("systemctl", "daemon-reload");
-                log.info("Serviço Linux removido com sucesso.");
+                uninstallLinux();
+            } else {
+                throw new UnsupportedOperationException("SO não suportado para desinstalação: " + os);
             }
         } catch (Exception e) {
             log.error("Erro ao desinstalar serviço", e);
+            throw new RuntimeException("Falha na desinstalação: " + e.getMessage());
         }
     }
 
-    private void installLinux() throws IOException, InterruptedException {
-        log.info("Iniciando instalação no Linux (Systemd)...");
+    // --- WINDOWS ---
 
-        File jarFile = getJarFile();
-        File envFile = new File(jarFile.getParent(), ".env");
-        String jarPath = jarFile.getAbsolutePath();
+    private void installWindows() throws Exception {
+        String javaExe = System.getProperty("java.home") + "\\bin\\javaw.exe";
+        File jarFile = new ApplicationHome(getClass()).getSource();
+
+        // Monta os argumentos JVM com as configs atuais
+        String args = String.format(
+                "-Dagent.id=%s -Dagent.cnpj=%s -Dagent.domain=%s -Dagent.key=%s -Dserver.port=%s -jar \"%s\"",
+                configService.getAgentId(),
+                configService.getCnpjEmpresa(),
+                configService.getServidorDominio(),
+                configService.getApiKey(),
+                configService.getServerPort(),
+                jarFile.getAbsolutePath());
+
+        String binPath = "\"" + javaExe + "\" " + args;
+
+        log.info("Instalando serviço Windows...");
+        // 1. Cria
+        runCommand("sc", "create", SERVICE_NAME, "binPath=", binPath, "start=", "auto", "DisplayName=", DISPLAY_NAME);
+        // 2. Descrição
+        runCommand("sc", "description", SERVICE_NAME, "Agente de Impressão e Conexão WMS");
+        // 3. Inicia
+        runCommand("sc", "start", SERVICE_NAME);
+
+        log.info("Serviço Windows instalado e iniciado.");
+    }
+
+    private void uninstallWindows() throws Exception {
+        log.info("Parando serviço Windows...");
+        runCommand("sc", "stop", SERVICE_NAME);
+
+        log.info("Removendo serviço Windows...");
+        runCommand("sc", "delete", SERVICE_NAME);
+
+        log.info("Serviço Windows removido.");
+    }
+
+    // --- LINUX (Systemd) ---
+
+    private void installLinux() throws Exception {
+        File jarFile = new ApplicationHome(getClass()).getSource();
         String javaPath = ProcessHandle.current().info().command().orElse("/usr/bin/java");
 
-        // Verifica se existe .env para adicionar a diretiva EnvironmentFile
-        String envDirective = "";
-        if (envFile.exists()) {
-            envDirective = "EnvironmentFile=" + envFile.getAbsolutePath();
-            log.info("Arquivo .env detectado: " + envFile.getAbsolutePath());
-        } else {
-            log.warn("Arquivo .env não encontrado. Usando variáveis padrão.");
-        }
+        String jvmArgs = String.format(
+                "-Dagent.id=%s -Dagent.cnpj=%s -Dagent.domain=%s -Dagent.key=%s -Dserver.port=%s",
+                configService.getAgentId(),
+                configService.getCnpjEmpresa(),
+                configService.getServidorDominio(),
+                configService.getApiKey(),
+                configService.getServerPort());
 
         String serviceContent = """
                 [Unit]
@@ -79,115 +113,42 @@ public class ServiceInstaller {
                 [Service]
                 User=root
                 Type=simple
-                ExecStart=%s -jar %s
+                ExecStart=%s %s -jar %s
                 Restart=always
                 RestartSec=10
-                %s
 
                 [Install]
                 WantedBy=multi-user.target
-                """.formatted(DISPLAY_NAME, javaPath, jarPath, envDirective);
+                """.formatted(DISPLAY_NAME, javaPath, jvmArgs, jarFile.getAbsolutePath());
 
         File serviceFile = new File("/etc/systemd/system/" + SERVICE_NAME + ".service");
-
         try (FileWriter writer = new FileWriter(serviceFile)) {
             writer.write(serviceContent);
         }
 
-        log.info("Arquivo de serviço criado em: " + serviceFile.getAbsolutePath());
-
-        // Habilita e inicia
         runCommand("systemctl", "daemon-reload");
         runCommand("systemctl", "enable", SERVICE_NAME);
         runCommand("systemctl", "start", SERVICE_NAME);
-
-        log.info("Serviço Linux INSTALADO e INICIADO com sucesso! 🐧");
+        log.info("Serviço Linux instalado.");
     }
 
-    private void installWindows() throws IOException, InterruptedException {
-        log.info("Iniciando instalação no Windows...");
+    private void uninstallLinux() throws Exception {
+        log.info("Parando serviço Linux...");
+        runCommand("systemctl", "stop", SERVICE_NAME);
+        runCommand("systemctl", "disable", SERVICE_NAME);
 
-        File jarFile = getJarFile();
-        File envFile = new File(jarFile.getParent(), ".env");
-        String jarPath = jarFile.getAbsolutePath();
-        String javaExe = System.getProperty("java.home") + "\\bin\\javaw.exe";
+        Files.deleteIfExists(Path.of("/etc/systemd/system/" + SERVICE_NAME + ".service"));
 
-        // Monta os argumentos JVM baseados no .env
-        StringBuilder jvmArgs = new StringBuilder();
-        if (envFile.exists()) {
-            log.info("Lendo variáveis do arquivo .env...");
-            Map<String, String> envVars = parseEnvFile(envFile);
-
-            // Converte KEY=VALUE em -DKEY=VALUE para o Java
-            envVars.forEach((k, v) -> {
-                jvmArgs.append(" -D").append(k).append("=\"").append(v).append("\"");
-            });
-        }
-
-        // binPath = "C:\...\javaw.exe -DAGENT_ID=HUB1 -DAPI_KEY=123 -jar
-        // C:\...\app.jar"
-        String binPath = "\"" + javaExe + "\"" + jvmArgs.toString() + " -jar \"" + jarPath + "\"";
-
-        log.info("BinPath gerado: " + binPath);
-
-        // 1. Cria o serviço
-        int result = runCommand("sc", "create", SERVICE_NAME,
-                "binPath=", binPath,
-                "start=", "auto",
-                "DisplayName=", DISPLAY_NAME);
-
-        if (result == 0 || result == 1073) { // 0=OK, 1073=Já existe
-            // 2. Configura descrição
-            runCommand("sc", "description", SERVICE_NAME, "Hub de Impressão para CoreWMS");
-            // 3. Inicia
-            runCommand("sc", "start", SERVICE_NAME);
-            log.info("Serviço Windows INSTALADO e INICIADO com sucesso! 🪟");
-            log.info("Nota: Se falhou, certifique-se de rodar o CMD/PowerShell como ADMINISTRADOR.");
-        } else {
-            log.error("Falha ao criar serviço Windows via SC. Código: " + result);
-        }
+        runCommand("systemctl", "daemon-reload");
+        log.info("Serviço Linux removido.");
     }
 
-    private File getJarFile() {
-        // Pega o caminho real onde o .jar está rodando
-        ApplicationHome home = new ApplicationHome(ServiceInstaller.class);
-        return home.getSource();
-    }
-
-    private int runCommand(String... command) throws IOException, InterruptedException {
+    private void runCommand(String... command) throws Exception {
         ProcessBuilder pb = new ProcessBuilder(command);
-        pb.inheritIO(); // Mostra a saída no console do usuário
+        pb.inheritIO();
         Process p = pb.start();
-        return p.waitFor();
-    }
-
-    /**
-     * Helper simples para ler arquivo .env (chave=valor)
-     */
-    private Map<String, String> parseEnvFile(File file) {
-        Map<String, String> vars = new HashMap<>();
-        try {
-            List<String> lines = Files.readAllLines(file.toPath());
-            for (String line : lines) {
-                line = line.trim();
-                // Ignora comentários e linhas vazias
-                if (line.isEmpty() || line.startsWith("#"))
-                    continue;
-
-                String[] parts = line.split("=", 2);
-                if (parts.length == 2) {
-                    String key = parts[0].trim();
-                    String value = parts[1].trim();
-                    // Remove aspas se houver
-                    if (value.startsWith("\"") && value.endsWith("\"")) {
-                        value = value.substring(1, value.length() - 1);
-                    }
-                    vars.put(key, value);
-                }
-            }
-        } catch (IOException e) {
-            log.error("Erro ao ler arquivo .env", e);
-        }
-        return vars;
+        // Não validamos exitCode estritamente no uninstall pois o serviço pode já não
+        // existir
+        p.waitFor();
     }
 }

@@ -6,8 +6,8 @@ import {
 import {
     Home, PackagePlus, Box as BoxIcon, Truck, Settings, Users,
     Contact, Package, MapPin, ChevronDown, ChevronRight, Building2, Shield, History,
-    LayoutDashboard, ClipboardCheck, FileText, // <--- Novos Ícones
-    LayoutList
+    LayoutDashboard, ClipboardCheck, FileText,
+    LayoutList, Printer
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../contexts/AuthContext';
@@ -73,6 +73,7 @@ const Sidebar = () => {
                 { text: 'Minha Empresa', icon: <Building2 size={20} />, path: '/config/empresa', permission: 'CONFIG_GERENCIAR' },
                 { text: 'Usuários', icon: <Users size={20} />, path: '/usuarios', permission: 'USUARIO_LISTAR' },
                 { text: 'Perfis de Acesso', icon: <Shield size={20} />, path: '/perfis', permission: 'PERFIL_GERENCIAR' },
+                { text: 'Impressão', icon: <Printer size={20} />, path: '/config/impressao', permission: 'CONFIG_SISTEMA' },
             ]
         }
     ];

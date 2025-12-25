@@ -1,77 +1,87 @@
 package br.com.hacerfak.printagent.gui;
 
-import br.com.hacerfak.printagent.service.AgentLogStore;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import javax.swing.*;
+import javax.swing.SwingUtilities;
 import java.awt.*;
+import java.net.URI;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class AgentTrayIcon {
 
-    private final AgentLogStore logStore;
+    @Value("${server.port:8099}")
+    private String serverPort;
 
     @PostConstruct
     public void init() {
+        // Verifica se o ambiente suporta interface gráfica (não é headless)
         if (GraphicsEnvironment.isHeadless() || !SystemTray.isSupported()) {
+            log.info("SystemTray não suportado ou ambiente Headless. TrayIcon ignorado.");
             return;
         }
 
+        // Garante que a GUI rode na Thread de Eventos do AWT (evita travamentos no
+        // Linux)
         SwingUtilities.invokeLater(this::createTray);
     }
 
     private void createTray() {
         try {
             SystemTray tray = SystemTray.getSystemTray();
-            // Certifique-se de ter um icon.png em src/main/resources
+
+            // Carrega a imagem (certifique-se de usar a versão em alta resolução)
             Image image = Toolkit.getDefaultToolkit().createImage(getClass().getResource("/icon.png"));
 
             PopupMenu popup = new PopupMenu();
 
-            MenuItem statusItem = new MenuItem("Status: Rodando 🟢");
-            statusItem.setEnabled(true);
+            MenuItem statusItem = new MenuItem("WMS Agent: Rodando");
+            statusItem.setEnabled(false);
 
-            MenuItem logItem = new MenuItem("Ver Logs em Tempo Real");
-            logItem.addActionListener(e -> showLogWindow());
+            MenuItem openWebItem = new MenuItem("Abrir Painel Web");
+            openWebItem.addActionListener(e -> openBrowser());
 
-            MenuItem exitItem = new MenuItem("Sair");
+            MenuItem exitItem = new MenuItem("Encerrar Agente");
             exitItem.addActionListener(e -> System.exit(0));
 
-            popup.add(logItem);
+            popup.add(statusItem);
+            popup.addSeparator();
+            popup.add(openWebItem);
             popup.addSeparator();
             popup.add(exitItem);
 
             TrayIcon trayIcon = new TrayIcon(image, "WMS Print Agent", popup);
-            trayIcon.setImageAutoSize(false);
+
+            // Corrige o tamanho do ícone no Linux/Gnome
+            trayIcon.setImageAutoSize(true);
+
+            // Duplo clique abre o navegador
+            trayIcon.addActionListener(e -> openBrowser());
+
             tray.add(trayIcon);
 
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("Erro ao criar TrayIcon", e);
         }
     }
 
-    private void showLogWindow() {
-        JDialog dialog = new JDialog((Frame) null, "Logs do Agente", false); // false = não modal
-        dialog.setSize(500, 400);
-
-        JTextArea textArea = new JTextArea();
-        textArea.setEditable(false);
-        textArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
-        textArea.setText(logStore.getLogsAsString());
-
-        JScrollPane scrollPane = new JScrollPane(textArea);
-        dialog.add(scrollPane, BorderLayout.CENTER);
-
-        JButton btnRefresh = new JButton("Atualizar / Limpar");
-        btnRefresh.addActionListener(e -> textArea.setText(logStore.getLogsAsString()));
-
-        dialog.add(btnRefresh, BorderLayout.SOUTH);
-
-        // Centraliza na tela
-        dialog.setLocationRelativeTo(null);
-        dialog.setVisible(true);
+    private void openBrowser() {
+        try {
+            String url = "http://localhost:" + serverPort;
+            if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+                Desktop.getDesktop().browse(new URI(url));
+            } else {
+                // Fallback para Linux usando ProcessBuilder (Substitui o Runtime.exec
+                // depreciado)
+                new ProcessBuilder("xdg-open", url).start();
+            }
+        } catch (Exception e) {
+            log.error("Não foi possível abrir o navegador", e);
+        }
     }
 }

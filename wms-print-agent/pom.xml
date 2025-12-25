@@ -11,7 +11,7 @@
 	</parent>
 	<groupId>br.com.hacerfak</groupId>
 	<artifactId>wms-print-agent</artifactId>
-	<version>1.0.0</version>
+	<version>1.0.2</version>
 	<name>wms-print-agent</name>
 	<description>Agente de Impressão Remota para CoreWMS</description>
 	<url />

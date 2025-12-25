@@ -9,7 +9,7 @@ import java.util.stream.Collectors;
 @Component
 public class AgentLogStore {
 
-    private static final int MAX_LOGS = 50; // Guarda as últimas 50 linhas
+    private static final int MAX_LOGS = 100; // Guarda as últimas 100 linhas
     private final ConcurrentLinkedDeque<String> logBuffer = new ConcurrentLinkedDeque<>();
     private final DateTimeFormatter dtf = DateTimeFormatter.ofPattern("HH:mm:ss");
 

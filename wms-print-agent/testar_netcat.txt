@@ -1,0 +1,5 @@
+Linux (bash)
+while true; do nc -l -v -p 9100; done
+
+Windows (PowerShell)
+while ($true) { ncat -l -v -p 9100 }

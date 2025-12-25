@@ -43,7 +43,11 @@ const Onboarding = () => {
         formData.append('uf', uf);
 
         try {
-            await api.post('/onboarding/upload-certificado', formData);
+            await api.post('/onboarding/upload-certificado', formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data'
+                }
+            });
 
             setStatusMsg('Finalizando configurações...');
 

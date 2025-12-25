@@ -5,7 +5,7 @@ import {
 } from '@mui/material';
 import { Printer } from 'lucide-react';
 import { toast } from 'react-toastify';
-import { getImpressoras, imprimirLpn } from '../services/impressaoService';
+import { getImpressorasAtivas, imprimirLpn } from '../services/printHubService';
 
 const PrintModal = ({ open, onClose, lpnId, lpnCodigo }) => {
     const [impressoras, setImpressoras] = useState([]);
@@ -17,7 +17,7 @@ const PrintModal = ({ open, onClose, lpnId, lpnCodigo }) => {
     useEffect(() => {
         if (open) {
             setLoading(true);
-            getImpressoras()
+            getImpressorasAtivas()
                 .then(data => {
                     setImpressoras(data);
                     // Seleciona a primeira automaticamente se houver

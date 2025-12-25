@@ -13,7 +13,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/impressao/templates")
 @RequiredArgsConstructor
-public class ImpressaoController {
+public class EtiquetaTemplateController {
 
     private final EtiquetaTemplateRepository templateRepository;
 

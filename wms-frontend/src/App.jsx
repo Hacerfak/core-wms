@@ -40,6 +40,7 @@ import UsuarioForm from './pages/Usuarios/UsuarioForm';
 import PerfisList from './pages/Usuarios/PerfisList';
 import MinhaEmpresa from './pages/Configuracao/MinhaEmpresa';
 import GestaoEmpresas from './pages/Admin/GestaoEmpresas';
+import PrintHubView from './pages/Configuracao/PrintHub/PrintHubView';
 
 // RELATÓRIOS
 import AuditoriaList from './pages/Relatorios/AuditoriaList';
@@ -166,6 +167,13 @@ function App() {
               <Route path="/admin/empresas" element={
                 <Can permissions="ADMIN" elseShow={<Navigate to="/dashboard" />}>
                   <GestaoEmpresas />
+                </Can>
+              } />
+
+              {/* --- NOVA ROTA: CENTRAL DE IMPRESSÃO --- */}
+              <Route path="/config/impressao" element={
+                <Can permissions={PERMISSIONS.CONFIG_SISTEMA} elseShow={<Navigate to="/dashboard" />}>
+                  <PrintHubView />
                 </Can>
               } />
 

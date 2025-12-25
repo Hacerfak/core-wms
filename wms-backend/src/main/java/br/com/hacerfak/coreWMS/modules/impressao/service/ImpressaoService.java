@@ -32,7 +32,10 @@ public class ImpressaoService {
         Impressora impressora = impressoraRepository.findById(impressoraId)
                 .orElseThrow(() -> new EntityNotFoundException("Impressora não encontrada com ID: " + impressoraId));
 
+        System.out.println(">>> DEBUG SERVICE: Impressora encontrada: " + impressoraId);
+
         if (!impressora.isAtivo()) {
+            System.out.println(">>> DEBUG SERVICE: Impressora não está ativa: " + impressoraId);
             throw new IllegalArgumentException("A impressora '" + impressora.getNome() + "' está inativa no sistema.");
         }
 
@@ -71,7 +74,15 @@ public class ImpressaoService {
         // OU, melhor: O Controller do Agente busca direto no Redis.
 
         // Vamos gravar o ID do Job na lista de tarefas pendentes
-        String redisKey = "wms:print:jobs:pending";
+        // --- CORREÇÃO MULTI-TENANT ---
+        // Usa o Tenant atual para criar uma fila exclusiva
+        String tenantId = br.com.hacerfak.coreWMS.core.multitenant.TenantContext.getTenant();
+        String redisKey = "wms:print:jobs:pending:" + tenantId;
+
+        System.out
+                .println(
+                        ">>> DEBUG SERVICE | Tenant: " + tenantId + " | Key: " + redisKey + " | Job: " + salvo.getId());
+
         redisTemplate.opsForList().rightPush(redisKey, String.valueOf(salvo.getId()));
 
         return salvo.getId();

@@ -10,8 +10,10 @@ import java.util.Optional;
 @Repository
 public interface AgenteImpressaoRepository extends JpaRepository<AgenteImpressao, Long> {
 
-    // Cacheia a busca por API Key para não ir no banco a cada 3 segundos
-    // O nome do cache "agentes-key" deve ser limpo se o admin revogar a chave
+    /// --- OTIMIZAÇÃO DE PERFORMANCE ---
+    // Cacheia o resultado. Se o agente chamar 1000x, 999x serão respondidas pela
+    /// memória RAM (Redis)
+    // O nome "agentes-key" é a chave do cache
     @Cacheable(value = "agentes-key", key = "#apiKey", unless = "#result == null")
     Optional<AgenteImpressao> findByApiKeyAndAtivoTrue(String apiKey);
 

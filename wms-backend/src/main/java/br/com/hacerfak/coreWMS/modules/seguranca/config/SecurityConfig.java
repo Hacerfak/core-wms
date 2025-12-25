@@ -27,34 +27,34 @@ public class SecurityConfig {
     @Autowired
     SecurityFilter securityFilter;
 
+    @Autowired
+    ApiKeyAuthFilter apiKeyAuthFilter;
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity) throws Exception {
         return httpSecurity
                 .csrf(csrf -> csrf.disable())
-                // Mantém sua configuração de CORS
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
-
-                        // Permite OPTIONS (Preflight) explicitamente para evitar 403
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-
-                        // Rotas Públicas (Login inicial)
                         .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, "/auth/register").permitAll()
 
-                        // Swagger
+                        // Endpoints do Agente
+                        .requestMatchers(HttpMethod.GET, "/api/impressao/fila/poll").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/impressao/fila/*/concluir").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/impressao/fila/*/erro").permitAll()
+
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
-
-                        // Onboarding precisa estar logado, mas qualquer usuário autenticado pode tentar
-                        // (A lógica de validação fica dentro do Controller)
                         .requestMatchers("/onboarding/**").hasRole("ADMIN")
-
-                        // Todo o resto precisa de autenticação (incluindo selecionar-empresa)
                         .anyRequest().authenticated())
 
+                // ADICIONAR O FILTRO NA CADEIA
+                // Colocamos antes do filtro de JWT padrão
+                .addFilterBefore(apiKeyAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(securityFilter, UsernamePasswordAuthenticationFilter.class)
+
                 .build();
     }
 

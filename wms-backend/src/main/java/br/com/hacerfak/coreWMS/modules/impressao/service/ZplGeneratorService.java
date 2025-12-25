@@ -2,6 +2,8 @@ package br.com.hacerfak.coreWMS.modules.impressao.service;
 
 import br.com.hacerfak.coreWMS.core.exception.EntityNotFoundException;
 import br.com.hacerfak.coreWMS.modules.cadastro.domain.Parceiro;
+import br.com.hacerfak.coreWMS.modules.cadastro.domain.Produto;
+import br.com.hacerfak.coreWMS.modules.estoque.domain.Localizacao;
 import br.com.hacerfak.coreWMS.modules.estoque.domain.Lpn;
 import br.com.hacerfak.coreWMS.modules.expedicao.domain.VolumeExpedicao;
 import br.com.hacerfak.coreWMS.modules.impressao.domain.EtiquetaTemplate;
@@ -28,13 +30,11 @@ public class ZplGeneratorService {
         variaveis.put("LPN_CODIGO", lpn.getCodigo());
         variaveis.put("TIPO", lpn.getTipo().name());
 
-        // Se for pallet mono-produto, pega dados do primeiro item
         if (!lpn.getItens().isEmpty()) {
             var item = lpn.getItens().get(0);
             variaveis.put("SKU", item.getProduto().getSku());
             variaveis.put("DESC", item.getProduto().getNome());
 
-            // Soma total se for o mesmo produto, ou "VÁRIOS" se mix
             boolean mix = lpn.getItens().stream().map(i -> i.getProduto().getId()).distinct().count() > 1;
 
             if (mix) {
@@ -70,11 +70,8 @@ public class ZplGeneratorService {
         variaveis.put("DESTINATARIO", cliente.getNome());
         variaveis.put("PESO", volume.getPesoBruto() != null ? volume.getPesoBruto().toString() : "0.00");
 
-        // --- Endereço Completo ---
         String enderecoCompleto = montarEnderecoCompleto(cliente);
         variaveis.put("ENDERECO_COMPLETO", enderecoCompleto);
-
-        // Campos individuais caso o ZPL precise separado
         variaveis.put("CIDADE", cliente.getCidade() != null ? cliente.getCidade() : "");
         variaveis.put("UF", cliente.getUf() != null ? cliente.getUf() : "");
         variaveis.put("CEP", cliente.getCep() != null ? cliente.getCep() : "");
@@ -82,8 +79,47 @@ public class ZplGeneratorService {
         return substituirVariaveis(template.getZplCodigo(), variaveis);
     }
 
+    // --- NOVO: Etiqueta de Produto ---
+    @Transactional(readOnly = true)
+    public String gerarZplParaProduto(Long templateId, Produto produto) {
+        EtiquetaTemplate template = resolverTemplate(templateId, TipoFinalidadeEtiqueta.PRODUTO);
+
+        Map<String, String> variaveis = new HashMap<>();
+        variaveis.put("SKU", produto.getSku());
+        variaveis.put("NOME", produto.getNome());
+        variaveis.put("EAN", produto.getEan13() != null ? produto.getEan13() : "");
+        variaveis.put("DUN", produto.getDun14() != null ? produto.getDun14() : "");
+        variaveis.put("UN", produto.getUnidadeMedida());
+        variaveis.put("DEPOSITANTE", produto.getDepositante().getNome());
+
+        // Exemplo: formatar preço se necessário, aqui passando bruto
+        variaveis.put("PRECO",
+                produto.getValorUnitarioPadrao() != null ? produto.getValorUnitarioPadrao().toString() : "");
+
+        return substituirVariaveis(template.getZplCodigo(), variaveis);
+    }
+
+    // --- NOVO: Etiqueta de Localização ---
+    @Transactional(readOnly = true)
+    public String gerarZplParaLocalizacao(Long templateId, Localizacao local) {
+        EtiquetaTemplate template = resolverTemplate(templateId, TipoFinalidadeEtiqueta.LOCALIZACAO);
+
+        Map<String, String> variaveis = new HashMap<>();
+        variaveis.put("CODIGO", local.getCodigo()); // Ex: 01-02-03
+        variaveis.put("ENDERECO_COMPLETO", local.getEnderecoCompleto()); // Ex: CD1-RUA1-01-02-03
+        variaveis.put("AREA", local.getArea().getNome());
+        variaveis.put("ARMAZEM", local.getArea().getArmazem().getNome());
+        variaveis.put("TIPO", local.getTipo().name());
+
+        // Verifica digito verificador se tiver lógica customizada (opcional)
+        // variaveis.put("DIGITO", calcularDigito(local.getId()));
+
+        return substituirVariaveis(template.getZplCodigo(), variaveis);
+    }
+
+    // --- Métodos Auxiliares ---
+
     private String montarEnderecoCompleto(Parceiro p) {
-        // Ex: Av. Brasil, 1500 - Galpão B - Centro, São Paulo/SP - CEP: 01000-000
         StringBuilder sb = new StringBuilder();
         if (p.getLogradouro() != null)
             sb.append(p.getLogradouro());
@@ -93,16 +129,13 @@ public class ZplGeneratorService {
             sb.append(" - ").append(p.getComplemento());
         if (p.getBairro() != null)
             sb.append(" - ").append(p.getBairro());
-
         if (p.getCidade() != null) {
             sb.append(", ").append(p.getCidade());
             if (p.getUf() != null)
                 sb.append("/").append(p.getUf());
         }
-
         if (p.getCep() != null)
             sb.append(" - CEP: ").append(p.getCep());
-
         return sb.toString();
     }
 

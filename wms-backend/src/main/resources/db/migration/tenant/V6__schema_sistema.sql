@@ -25,17 +25,6 @@ CREATE TABLE tb_anexo (
     descricao VARCHAR(255)
 );
 CREATE INDEX idx_anexo_entidade ON tb_anexo(entidade_id, entidade_tipo);
-CREATE TABLE tb_audit_log (
-    id BIGSERIAL PRIMARY KEY,
-    evento VARCHAR(100) NOT NULL,
-    entidade VARCHAR(100) NOT NULL,
-    entidade_id VARCHAR(50),
-    usuario VARCHAR(100),
-    data_hora TIMESTAMP DEFAULT NOW(),
-    dados_antigos TEXT,
-    dados_novos TEXT
-);
-CREATE INDEX idx_audit_entidade ON tb_audit_log(entidade, entidade_id);
 CREATE TABLE tb_inventario (
     id BIGSERIAL PRIMARY KEY,
     criado_por VARCHAR(100),

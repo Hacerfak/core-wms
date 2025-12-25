@@ -1,12 +1,19 @@
 server:
-  port: ${AGENT_PORT:8099} # Roda em porta diferente do backend
+  port: ${AGENT_PORT:8090} # Roda em porta diferente do backend
 
 spring:
   application:
     name: wms-print-agent
+  
+info:
+  app:
+    name: @project.name@
+    description: @project.description@
+    version: @project.version@
 
 agent:
   id: ${AGENT_ID:HUB_DEFAULT}
+  tenant-id: ${AGENT_TENANT_ID:wms_master}
   backend-url: ${BACKEND_URL:http://localhost:8080/api/impressao/fila}
   api-key: ${API_KEY:SEGREDO_PADRAO_HUB_2024} # A chave que vai no Header
 

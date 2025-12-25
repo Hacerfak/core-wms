@@ -11,6 +11,7 @@ import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
+import java.io.Serializable;
 
 @MappedSuperclass
 @EntityListeners({ AuditingEntityListener.class, GlobalAuditListener.class })
@@ -19,7 +20,9 @@ import java.time.LocalDateTime;
 @SuperBuilder // <--- MUDANÇA: Permite herança no builder
 @NoArgsConstructor // Necessário para o JPA
 @AllArgsConstructor
-public abstract class BaseEntity {
+public abstract class BaseEntity implements Serializable {
+
+    private static final long serialVersionUID = 1L;
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

@@ -1,10 +1,11 @@
 package br.com.hacerfak.printagent;
 
 import br.com.hacerfak.printagent.installer.ServiceInstaller;
+import br.com.hacerfak.printagent.service.AgentConfigService;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.restclient.RestTemplateBuilder; // Import correto Spring Boot 4
-import org.springframework.boot.system.ApplicationHome; // Importante para achar o .env
+import org.springframework.boot.restclient.RestTemplateBuilder;
+import org.springframework.boot.system.ApplicationHome;
 import org.springframework.context.annotation.Bean;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.web.client.RestTemplate;
@@ -67,13 +68,10 @@ public class WmsPrintAgentApplication {
 
 						// Injeta no sistema como se fosse -Dkey=value
 						System.setProperty(key, value);
-						// Opcional: Logar chave (sem valor por segurança)
-						// System.out.println(" > Carregado: " + key);
 					}
 				}
 			} else {
-				System.out.println(">>> [INIT] Nenhum arquivo .env encontrado em: " + jarDir.getAbsolutePath());
-				System.out.println(">>> [INIT] Usando configurações padrão do application.yaml");
+				// System.out.println(">>> [INIT] Usando configurações padrão...");
 			}
 		} catch (Exception e) {
 			System.err.println("!!! Erro crítico ao ler arquivo .env: " + e.getMessage());
@@ -82,7 +80,15 @@ public class WmsPrintAgentApplication {
 	}
 
 	private static void handleCliCommands(String[] args) {
-		ServiceInstaller installer = new ServiceInstaller();
+		// --- CORREÇÃO AQUI ---
+		// Como o Spring não iniciou, instanciamos as dependências manualmente
+		AgentConfigService configService = new AgentConfigService();
+		configService.init(); // Força o carregamento do arquivo agent.properties
+
+		// Agora passamos o configService para o instalador
+		ServiceInstaller installer = new ServiceInstaller(configService);
+		// ---------------------
+
 		String command = args[0];
 
 		if ("--install".equalsIgnoreCase(command)) {

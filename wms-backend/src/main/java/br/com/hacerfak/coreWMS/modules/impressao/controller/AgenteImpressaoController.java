@@ -54,6 +54,7 @@ public class AgenteImpressaoController {
                 a.getId(),
                 a.getNome(),
                 a.getDescricao(),
+                a.getHostname(),
                 a.getApiKey(), // Em produção real, talvez ocultar parte da chave
                 a.isAtivo(),
                 a.getUltimoHeartbeat(),
