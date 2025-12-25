@@ -37,47 +37,52 @@ public class AuditController {
             @RequestParam(required = false) String acao,
             @PageableDefault(sort = "dataHora", direction = Sort.Direction.DESC, size = 20) Pageable pageable) {
 
-        Query query = new Query().with(pageable);
-        List<Criteria> criteria = new ArrayList<>();
+        // 1. CONSTRUÇÃO DOS FILTROS (Criteria)
+        List<Criteria> criteriaList = new ArrayList<>();
 
-        // --- MUDANÇA 1: Visualizar Tenant Atual OU Master ---
-        // Isso permite ver alterações globais (como criação de usuário no master)
+        // Filtro de Tenant
         String currentTenant = TenantContext.getTenant();
-
         Criteria tenantCriteria = new Criteria().orOperator(
                 Criteria.where("tenantId").is(currentTenant),
-                Criteria.where("tenantId").is("wms_master"), // Pega logs globais
-                Criteria.where("tenantId").is(TenantContext.DEFAULT_TENANT_ID) // Garante compatibilidade
-        );
-        criteria.add(tenantCriteria);
+                Criteria.where("tenantId").is("wms_master"),
+                Criteria.where("tenantId").is(TenantContext.DEFAULT_TENANT_ID));
+        criteriaList.add(tenantCriteria);
 
-        // 2. Filtro de Data (Range)
-        // Nota: O MongoDB armazena em UTC. O LocalDateTime que chega aqui já considera
-        // o TZ do servidor se configurado corretamente.
+        // Filtro de Data
         if (inicio != null && fim != null) {
-            criteria.add(Criteria.where("dataHora").gte(inicio).lte(fim));
+            criteriaList.add(Criteria.where("dataHora").gte(inicio).lte(fim));
         } else if (inicio != null) {
-            criteria.add(Criteria.where("dataHora").gte(inicio));
+            criteriaList.add(Criteria.where("dataHora").gte(inicio));
         }
 
-        // 3. Filtros Opcionais
+        // Filtros Opcionais
         if (usuario != null && !usuario.isBlank()) {
-            criteria.add(Criteria.where("usuario").regex(usuario, "i"));
+            criteriaList.add(Criteria.where("usuario").regex(usuario, "i"));
         }
         if (entidade != null && !entidade.isBlank()) {
-            criteria.add(Criteria.where("entidade").is(entidade));
+            criteriaList.add(Criteria.where("entidade").is(entidade));
         }
         if (acao != null && !acao.isBlank()) {
-            criteria.add(Criteria.where("evento").is(acao));
+            criteriaList.add(Criteria.where("evento").is(acao));
         }
 
-        if (!criteria.isEmpty()) {
-            query.addCriteria(new Criteria().andOperator(criteria.toArray(new Criteria[0])));
+        // Consolida os filtros
+        Criteria finalCriteria = new Criteria();
+        if (!criteriaList.isEmpty()) {
+            finalCriteria.andOperator(criteriaList.toArray(new Criteria[0]));
         }
 
-        List<AuditLog> list = mongoTemplate.find(query, AuditLog.class);
-        long count = mongoTemplate.count(Query.of(query).limit(-1).skip(-1), AuditLog.class);
+        // 2. QUERY DE CONTAGEM (Total Real)
+        // CRÍTICO: Criamos uma query nova SEM paginação (.with(pageable))
+        Query countQuery = new Query(finalCriteria);
+        long count = mongoTemplate.count(countQuery, AuditLog.class);
 
+        // 3. QUERY DE LISTAGEM (Paginada)
+        // Agora aplicamos a paginação apenas para buscar os dados
+        Query listQuery = new Query(finalCriteria).with(pageable);
+        List<AuditLog> list = mongoTemplate.find(listQuery, AuditLog.class);
+
+        // O PageableExecutionUtils usa o 'count' real para calcular o totalPages
         return ResponseEntity.ok(PageableExecutionUtils.getPage(list, pageable, () -> count));
     }
 }

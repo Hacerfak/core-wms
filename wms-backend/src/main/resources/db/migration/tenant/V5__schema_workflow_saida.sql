@@ -1,6 +1,5 @@
 CREATE TABLE tb_onda_separacao (
     id BIGSERIAL PRIMARY KEY,
-    -- Auditoria
     criado_por VARCHAR(100),
     atualizado_por VARCHAR(100),
     data_criacao TIMESTAMP DEFAULT NOW(),
@@ -13,18 +12,15 @@ CREATE TABLE tb_onda_separacao (
 );
 CREATE TABLE tb_solicitacao_saida (
     id BIGSERIAL PRIMARY KEY,
-    -- Auditoria
     criado_por VARCHAR(100),
     atualizado_por VARCHAR(100),
     data_criacao TIMESTAMP DEFAULT NOW(),
     data_atualizacao TIMESTAMP,
     data_finalizacao TIMESTAMP,
-    -- Workflow
     codigo_externo VARCHAR(100),
     status VARCHAR(30) NOT NULL,
     prioridade INTEGER DEFAULT 0,
     data_limite DATE,
-    -- Específico Saída
     cliente_id BIGINT NOT NULL,
     onda_id BIGINT,
     rota VARCHAR(50),
@@ -39,13 +35,14 @@ CREATE TABLE tb_item_solicitacao_saida (
     produto_id BIGINT NOT NULL,
     quantidade_solicitada NUMERIC(18, 4) NOT NULL,
     quantidade_alocada NUMERIC(18, 4) DEFAULT 0,
+    -- Campo Adicionado
+    quantidade_separada NUMERIC(18, 4) DEFAULT 0,
     quantidade_cortada NUMERIC(18, 4) DEFAULT 0,
     CONSTRAINT fk_item_sol_saida_pai FOREIGN KEY (solicitacao_id) REFERENCES tb_solicitacao_saida(id),
     CONSTRAINT fk_item_sol_saida_prod FOREIGN KEY (produto_id) REFERENCES tb_produto(id)
 );
 CREATE TABLE tb_tarefa_separacao (
     id BIGSERIAL PRIMARY KEY,
-    -- Auditoria
     criado_por VARCHAR(100),
     atualizado_por VARCHAR(100),
     data_criacao TIMESTAMP DEFAULT NOW(),
@@ -59,7 +56,6 @@ CREATE TABLE tb_tarefa_separacao (
     produto_id BIGINT NOT NULL,
     origem_id BIGINT NOT NULL,
     destino_id BIGINT,
-    -- Stage/Doca
     lote_solicitado VARCHAR(50),
     quantidade_planejada NUMERIC(18, 4) NOT NULL,
     quantidade_executada NUMERIC(18, 4),
@@ -68,10 +64,8 @@ CREATE TABLE tb_tarefa_separacao (
     CONSTRAINT fk_pick_origem FOREIGN KEY (origem_id) REFERENCES tb_localizacao(id),
     CONSTRAINT fk_pick_destino FOREIGN KEY (destino_id) REFERENCES tb_localizacao(id)
 );
--- PACKING / CONFERÊNCIA
 CREATE TABLE tb_volume_expedicao (
     id BIGSERIAL PRIMARY KEY,
-    -- Auditoria
     criado_por VARCHAR(100),
     atualizado_por VARCHAR(100),
     data_criacao TIMESTAMP DEFAULT NOW(),
@@ -86,7 +80,6 @@ CREATE TABLE tb_volume_expedicao (
 );
 CREATE TABLE tb_item_volume_expedicao (
     id BIGSERIAL PRIMARY KEY,
-    -- Auditoria
     criado_por VARCHAR(100),
     atualizado_por VARCHAR(100),
     data_criacao TIMESTAMP DEFAULT NOW(),

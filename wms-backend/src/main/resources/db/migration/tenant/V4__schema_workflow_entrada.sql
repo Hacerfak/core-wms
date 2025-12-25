@@ -1,41 +1,36 @@
 CREATE TABLE tb_solicitacao_entrada (
     id BIGSERIAL PRIMARY KEY,
-    -- Auditoria BaseEntity
     criado_por VARCHAR(100),
     atualizado_por VARCHAR(100),
     data_criacao TIMESTAMP DEFAULT NOW(),
     data_atualizacao TIMESTAMP,
     data_finalizacao TIMESTAMP,
-    -- Workflow Solicitacao
     codigo_externo VARCHAR(100),
     status VARCHAR(30) NOT NULL,
-    data_previsao DATE,
-    -- Específico Entrada
+    data_limite DATE,
+    -- Corrigido de data_previsao
     fornecedor_id BIGINT,
-    -- Pode ser null se for devolução? Melhor deixar nullable ou checar regra
     tipo_recebimento VARCHAR(30),
     nota_fiscal VARCHAR(50),
     chave_acesso VARCHAR(44),
     data_emissao TIMESTAMP,
-    -- CORREÇÃO: Adicionado
     CONSTRAINT fk_sol_ent_forn FOREIGN KEY (fornecedor_id) REFERENCES tb_parceiro(id)
 );
 CREATE INDEX idx_sol_ent_nfe ON tb_solicitacao_entrada(nota_fiscal);
--- FK da LPN (Circularidade)
 ALTER TABLE tb_lpn
 ADD CONSTRAINT fk_lpn_solicitacao FOREIGN KEY (solicitacao_entrada_id) REFERENCES tb_solicitacao_entrada(id);
 CREATE TABLE tb_item_solicitacao_entrada (
     id BIGSERIAL PRIMARY KEY,
     solicitacao_id BIGINT NOT NULL,
     produto_id BIGINT NOT NULL,
-    quantidade_esperada NUMERIC(18, 4) NOT NULL,
-    quantidade_recebida NUMERIC(18, 4) DEFAULT 0,
+    -- Nomes corrigidos para bater com a Entity
+    quantidade_prevista NUMERIC(18, 4) NOT NULL,
+    quantidade_conferida NUMERIC(18, 4) DEFAULT 0,
     CONSTRAINT fk_item_sol_ent_pai FOREIGN KEY (solicitacao_id) REFERENCES tb_solicitacao_entrada(id),
     CONSTRAINT fk_item_sol_ent_prod FOREIGN KEY (produto_id) REFERENCES tb_produto(id)
 );
 CREATE TABLE tb_agendamento (
     id BIGSERIAL PRIMARY KEY,
-    -- Auditoria
     criado_por VARCHAR(100),
     atualizado_por VARCHAR(100),
     data_criacao TIMESTAMP DEFAULT NOW(),
@@ -59,7 +54,6 @@ CREATE TABLE tb_agendamento (
 );
 CREATE TABLE tb_tarefa_conferencia (
     id BIGSERIAL PRIMARY KEY,
-    -- Auditoria
     criado_por VARCHAR(100),
     atualizado_por VARCHAR(100),
     data_criacao TIMESTAMP DEFAULT NOW(),
@@ -71,12 +65,12 @@ CREATE TABLE tb_tarefa_conferencia (
     fim_execucao TIMESTAMP,
     solicitacao_id BIGINT NOT NULL,
     doca_id BIGINT,
+    cega BOOLEAN DEFAULT FALSE,
     CONSTRAINT fk_conf_solicitacao FOREIGN KEY (solicitacao_id) REFERENCES tb_solicitacao_entrada(id),
     CONSTRAINT fk_conf_doca FOREIGN KEY (doca_id) REFERENCES tb_localizacao(id)
 );
 CREATE TABLE tb_tarefa_divergencia (
     id BIGSERIAL PRIMARY KEY,
-    -- Auditoria
     criado_por VARCHAR(100),
     atualizado_por VARCHAR(100),
     data_criacao TIMESTAMP DEFAULT NOW(),
@@ -89,7 +83,6 @@ CREATE TABLE tb_tarefa_divergencia (
     solicitacao_id BIGINT NOT NULL,
     produto_id BIGINT NOT NULL,
     tipo VARCHAR(30) NOT NULL,
-    -- FALTA, SOBRA, AVARIA
     quantidade_divergente NUMERIC(18, 4),
     resolucao VARCHAR(500),
     CONSTRAINT fk_div_solicitacao FOREIGN KEY (solicitacao_id) REFERENCES tb_solicitacao_entrada(id),
@@ -97,7 +90,6 @@ CREATE TABLE tb_tarefa_divergencia (
 );
 CREATE TABLE tb_tarefa_armazenagem (
     id BIGSERIAL PRIMARY KEY,
-    -- Auditoria
     criado_por VARCHAR(100),
     atualizado_por VARCHAR(100),
     data_criacao TIMESTAMP DEFAULT NOW(),
@@ -108,7 +100,7 @@ CREATE TABLE tb_tarefa_armazenagem (
     inicio_execucao TIMESTAMP,
     fim_execucao TIMESTAMP,
     lpn_id BIGINT NOT NULL,
-    origem_id BIGINT NOT NULL,
+    origem_id BIGINT,
     destino_sugerido_id BIGINT,
     solicitacao_entrada_id BIGINT,
     CONSTRAINT fk_arm_lpn FOREIGN KEY (lpn_id) REFERENCES tb_lpn(id),

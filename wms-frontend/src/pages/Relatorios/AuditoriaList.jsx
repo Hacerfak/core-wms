@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
     Box, Typography, Paper, Table, TableBody, TableCell, TableContainer,
     TableHead, TableRow, Chip, IconButton, Tooltip, TextField, Button,
@@ -34,23 +34,20 @@ const AuditoriaList = () => {
     const [selectedLog, setSelectedLog] = useState(null);
     const [parsedData, setParsedData] = useState(null);
 
-    // --- CARGA DE DADOS ---
-    useEffect(() => {
-        loadData();
-    }, [page]);
-
-    const loadData = async () => {
+    // --- CARGA DE DADOS (CALLBACK) ---
+    // Esta função recebe a página explicitamente para evitar erros de estado antigo
+    const fetchLogs = useCallback(async (pageIndex) => {
         setLoading(true);
         try {
             const filtrosApi = {
                 ...filtros,
-                // Envia para o backend no formato ISO simples (sem Z no final, para o Java assumir o local time)
                 inicio: filtros.inicio ? dayjs(filtros.inicio).format('YYYY-MM-DDTHH:mm:ss') : null,
                 fim: filtros.fim ? dayjs(filtros.fim).format('YYYY-MM-DDTHH:mm:ss') : null,
                 acao: filtros.acao === 'TODAS' ? '' : filtros.acao
             };
 
-            const data = await getAuditLogs(filtrosApi, page, 20);
+            const data = await getAuditLogs(filtrosApi, pageIndex, 20);
+
             setLogs(data.content || []);
             setTotalPages(data.totalPages || 0);
         } catch (error) {
@@ -59,30 +56,35 @@ const AuditoriaList = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [filtros]);
 
+    // --- EFFECT: Monitora mudança de página ---
+    useEffect(() => {
+        fetchLogs(page);
+    }, [page, fetchLogs]);
+
+    // --- HANDLERS ---
     const handleFilterChange = (e) => {
         setFiltros({ ...filtros, [e.target.name]: e.target.value });
     };
 
     const handleSearch = () => {
-        setPage(0);
-        loadData();
+        if (page === 0) {
+            // Se já estamos na página 0, forçamos a busca manualmente
+            fetchLogs(0);
+        } else {
+            // Se estamos em outra página, voltamos para a 0
+            // O useEffect vai detectar a mudança e chamar fetchLogs(0)
+            setPage(0);
+        }
     };
 
-    // --- MANIPULAÇÃO DE JSON (CORREÇÃO DO BUG DO DIFF) ---
-
-    // Função recursiva para tentar extrair o objeto JSON real
+    // --- MANIPULAÇÃO DE JSON ---
     const tryParseJSON = (jsonString) => {
-        if (typeof jsonString === 'object' && jsonString !== null) {
-            return jsonString; // Já é objeto
-        }
+        if (typeof jsonString === 'object' && jsonString !== null) return jsonString;
         try {
             const o = JSON.parse(jsonString);
-            // Se o resultado ainda for uma string (double stringified), tenta de novo
-            if (o && typeof o === 'string') {
-                return tryParseJSON(o);
-            }
+            if (o && typeof o === 'string') return tryParseJSON(o);
             return o;
         } catch (e) {
             return jsonString;
@@ -107,16 +109,56 @@ const AuditoriaList = () => {
         }
     };
 
-    // --- FORMATAÇÃO DE DATA ---
     const formatarData = (dataIso) => {
         if (!dataIso) return '-';
-        // Remove o 'Z' final se existir para forçar a interpretação como "Local Time" (sem shift de fuso)
-        // Isso faz com que 22:00 no banco apareça como 22:00 na tela, independente do fuso do navegador
         const dataSemZ = dataIso.endsWith('Z') ? dataIso.slice(0, -1) : dataIso;
         return dayjs(dataSemZ).format('DD/MM/YYYY HH:mm:ss');
     };
 
-    // --- RENDERIZAÇÃO DO CONTEÚDO (VISUALIZAÇÃO INTELIGENTE) ---
+    const formatVal = (val) => {
+        if (val === null || val === undefined) return <span style={{ color: '#ccc' }}>(vazio)</span>;
+        if (typeof val === 'boolean') return <Chip label={val ? "Sim" : "Não"} size="small" color={val ? "success" : "default"} variant="outlined" sx={{ height: 20, fontSize: '0.7rem' }} />;
+        if (String(val).trim() === '') return <span style={{ color: '#ccc' }}>(string vazia)</span>;
+        return String(val);
+    };
+
+    // --- RENDERIZAÇÃO DO DIFF ---
+    const renderObjectTable = (data) => {
+        if (!data || typeof data !== 'object') return null;
+        return (
+            <TableContainer component={Paper} variant="outlined" sx={{ mt: 1 }}>
+                <Table size="small">
+                    <TableHead sx={{ bgcolor: '#f8fafc' }}>
+                        <TableRow>
+                            <TableCell sx={{ width: '30%' }}><b>Campo</b></TableCell>
+                            <TableCell><b>Valor Registrado</b></TableCell>
+                        </TableRow>
+                    </TableHead>
+                    <TableBody>
+                        {Object.keys(data).map((key) => {
+                            const val = data[key];
+                            const isComplex = typeof val === 'object' && val !== null;
+                            return (
+                                <TableRow key={key} hover>
+                                    <TableCell sx={{ fontWeight: 500, color: 'text.secondary', textTransform: 'capitalize', verticalAlign: 'top' }}>
+                                        {key.replace(/([A-Z])/g, ' $1').trim()}
+                                    </TableCell>
+                                    <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                                        {isComplex ? (
+                                            <Box sx={{ bgcolor: '#f1f5f9', p: 1, borderRadius: 1, maxHeight: 200, overflow: 'auto' }}>
+                                                <pre style={{ margin: 0 }}>{JSON.stringify(val, null, 2)}</pre>
+                                            </Box>
+                                        ) : formatVal(val)}
+                                    </TableCell>
+                                </TableRow>
+                            );
+                        })}
+                    </TableBody>
+                </Table>
+            </TableContainer>
+        );
+    };
+
     const renderDiffContent = () => {
         if (!parsedData || typeof parsedData !== 'object') {
             return (
@@ -128,8 +170,6 @@ const AuditoriaList = () => {
             );
         }
 
-        // --- CASO 1: DIFF REAL (Update com "de" / "para") ---
-        // Verifica se é uma estrutura de diff gerada pelo backend
         const chaves = Object.keys(parsedData);
         const ehDiffReal = chaves.some(key => {
             const val = parsedData[key];
@@ -152,19 +192,14 @@ const AuditoriaList = () => {
                             {chaves.map((campo) => {
                                 const change = parsedData[campo];
                                 if (!change || typeof change !== 'object' || (!('de' in change) && !('para' in change))) return null;
-
                                 return (
                                     <TableRow key={campo} hover>
                                         <TableCell sx={{ fontWeight: 'bold', textTransform: 'capitalize' }}>
                                             {campo.replace(/([A-Z])/g, ' $1').trim()}
                                         </TableCell>
-                                        <TableCell sx={{ color: 'text.secondary', fontFamily: 'monospace', fontSize: '0.85rem' }}>
-                                            {formatVal(change.de)}
-                                        </TableCell>
+                                        <TableCell sx={{ color: 'text.secondary', fontFamily: 'monospace', fontSize: '0.85rem' }}>{formatVal(change.de)}</TableCell>
                                         <TableCell align="center"><ArrowRight size={14} color="#cbd5e1" /></TableCell>
-                                        <TableCell sx={{ fontWeight: 600, fontFamily: 'monospace', fontSize: '0.85rem' }}>
-                                            {formatVal(change.para)}
-                                        </TableCell>
+                                        <TableCell sx={{ fontWeight: 600, fontFamily: 'monospace', fontSize: '0.85rem' }}>{formatVal(change.para)}</TableCell>
                                     </TableRow>
                                 );
                             })}
@@ -174,74 +209,16 @@ const AuditoriaList = () => {
             );
         }
 
-        // --- CASO 2: BACKUP DE EXCLUSÃO (Delete) ---
-        // O Backend envia { "BACKUP_EXCLUSAO": { ...objeto... } }
         if (parsedData.BACKUP_EXCLUSAO) {
             return (
                 <Box>
-                    <Alert severity="warning" sx={{ mb: 2 }}>
-                        Registro dos dados que foram excluídos permanentemente.
-                    </Alert>
-                    {/* Renderiza o objeto interno do backup de forma recursiva/limpa */}
+                    <Alert severity="warning" sx={{ mb: 2 }}>Registro dos dados que foram excluídos permanentemente.</Alert>
                     {renderObjectTable(parsedData.BACKUP_EXCLUSAO)}
                 </Box>
             );
         }
 
-        // --- CASO 3: SNAPSHOT SIMPLES (Create) ---
-        // Renderiza o objeto plano como tabela
         return renderObjectTable(parsedData);
-    };
-
-    // Função auxiliar para renderizar objetos (Create/Delete) em tabela
-    const renderObjectTable = (data) => {
-        if (!data || typeof data !== 'object') return null;
-
-        return (
-            <TableContainer component={Paper} variant="outlined" sx={{ mt: 1 }}>
-                <Table size="small">
-                    <TableHead sx={{ bgcolor: '#f8fafc' }}>
-                        <TableRow>
-                            <TableCell sx={{ width: '30%' }}><b>Campo</b></TableCell>
-                            <TableCell><b>Valor Registrado</b></TableCell>
-                        </TableRow>
-                    </TableHead>
-                    <TableBody>
-                        {Object.keys(data).map((key) => {
-                            const val = data[key];
-                            // Se for objeto aninhado complexo (ex: endereços, listas), 
-                            // mostra como JSON formatado dentro da célula para não quebrar o layout
-                            const isComplex = typeof val === 'object' && val !== null;
-
-                            return (
-                                <TableRow key={key} hover>
-                                    <TableCell sx={{ fontWeight: 500, color: 'text.secondary', textTransform: 'capitalize', verticalAlign: 'top' }}>
-                                        {key.replace(/([A-Z])/g, ' $1').trim()}
-                                    </TableCell>
-                                    <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>
-                                        {isComplex ? (
-                                            <Box sx={{ bgcolor: '#f1f5f9', p: 1, borderRadius: 1, maxHeight: 200, overflow: 'auto' }}>
-                                                <pre style={{ margin: 0 }}>{JSON.stringify(val, null, 2)}</pre>
-                                            </Box>
-                                        ) : (
-                                            formatVal(val)
-                                        )}
-                                    </TableCell>
-                                </TableRow>
-                            );
-                        })}
-                    </TableBody>
-                </Table>
-            </TableContainer>
-        );
-    };
-
-    // Helper de formatação de valor
-    const formatVal = (val) => {
-        if (val === null || val === undefined) return <span style={{ color: '#ccc' }}>(vazio)</span>;
-        if (typeof val === 'boolean') return <Chip label={val ? "Sim" : "Não"} size="small" color={val ? "success" : "default"} variant="outlined" sx={{ height: 20, fontSize: '0.7rem' }} />;
-        if (String(val).trim() === '') return <span style={{ color: '#ccc' }}>(string vazia)</span>;
-        return String(val);
     };
 
     return (
@@ -255,27 +232,18 @@ const AuditoriaList = () => {
                         Rastreabilidade de eventos e alterações (Logs).
                     </Typography>
                 </Box>
-                <Button variant="outlined" startIcon={<RefreshCw size={18} />} onClick={loadData} disabled={loading}>
+                <Button variant="outlined" startIcon={<RefreshCw size={18} />} onClick={() => fetchLogs(page)} disabled={loading}>
                     Atualizar
                 </Button>
             </Box>
 
-            {/* FILTROS */}
             <Paper sx={{ p: 2, mb: 3 }}>
                 <Grid container spacing={2} alignItems="center">
                     <Grid item xs={12} sm={6} md={2}>
-                        <TextField
-                            label="Início" type="datetime-local" fullWidth size="small"
-                            name="inicio" value={filtros.inicio} onChange={handleFilterChange}
-                            InputLabelProps={{ shrink: true }}
-                        />
+                        <TextField label="Início" type="datetime-local" fullWidth size="small" name="inicio" value={filtros.inicio} onChange={handleFilterChange} InputLabelProps={{ shrink: true }} />
                     </Grid>
                     <Grid item xs={12} sm={6} md={2}>
-                        <TextField
-                            label="Fim" type="datetime-local" fullWidth size="small"
-                            name="fim" value={filtros.fim} onChange={handleFilterChange}
-                            InputLabelProps={{ shrink: true }}
-                        />
+                        <TextField label="Fim" type="datetime-local" fullWidth size="small" name="fim" value={filtros.fim} onChange={handleFilterChange} InputLabelProps={{ shrink: true }} />
                     </Grid>
                     <Grid item xs={12} sm={6} md={2}>
                         <TextField label="Usuário" fullWidth size="small" name="usuario" value={filtros.usuario} onChange={handleFilterChange} placeholder="Ex: admin" />
@@ -292,14 +260,11 @@ const AuditoriaList = () => {
                         <TextField label="Entidade" fullWidth size="small" name="entidade" value={filtros.entidade} onChange={handleFilterChange} placeholder="Ex: Produto" />
                     </Grid>
                     <Grid item xs={12} md={2}>
-                        <Button variant="contained" fullWidth onClick={handleSearch} startIcon={<Search size={18} />}>
-                            Filtrar
-                        </Button>
+                        <Button variant="contained" fullWidth onClick={handleSearch} startIcon={<Search size={18} />}>Filtrar</Button>
                     </Grid>
                 </Grid>
             </Paper>
 
-            {/* TABELA */}
             <Paper sx={{ width: '100%', mb: 2, overflow: 'hidden', borderRadius: 2 }}>
                 <TableContainer>
                     <Table size="small">
@@ -316,29 +281,17 @@ const AuditoriaList = () => {
                         <TableBody>
                             {logs.map((log) => (
                                 <TableRow key={log.id} hover>
-                                    <TableCell>
-                                        <Typography variant="body2" fontWeight="bold" color="primary.main">{log.usuario}</Typography>
-                                    </TableCell>
+                                    <TableCell><Typography variant="body2" fontWeight="bold" color="primary.main">{log.usuario}</Typography></TableCell>
                                     <TableCell>{formatarData(log.dataHora)}</TableCell>
                                     <TableCell>{log.ipOrigem || '-'}</TableCell>
-                                    <TableCell>
-                                        <Chip
-                                            label={log.evento}
-                                            color={getActionColor(log.evento)}
-                                            size="small"
-                                            variant="outlined"
-                                            sx={{ fontWeight: 'bold', minWidth: 80 }}
-                                        />
-                                    </TableCell>
+                                    <TableCell><Chip label={log.evento} color={getActionColor(log.evento)} size="small" variant="outlined" sx={{ fontWeight: 'bold', minWidth: 80 }} /></TableCell>
                                     <TableCell>
                                         <Typography variant="body2">{log.entidade}</Typography>
                                         <Typography variant="caption" color="text.secondary">ID: {log.entidadeId}</Typography>
                                     </TableCell>
                                     <TableCell align="center">
                                         <Tooltip title="Ver Alterações">
-                                            <IconButton size="small" onClick={() => handleOpenDetails(log)}>
-                                                <Eye size={18} color="#475569" />
-                                            </IconButton>
+                                            <IconButton size="small" onClick={() => handleOpenDetails(log)}><Eye size={18} color="#475569" /></IconButton>
                                         </Tooltip>
                                     </TableCell>
                                 </TableRow>
@@ -358,52 +311,30 @@ const AuditoriaList = () => {
                         color="primary"
                         showFirstButton
                         showLastButton
+                        disabled={loading} // <--- CORREÇÃO: Removido check de totalPages <= 1
                     />
                 </Box>
             </Paper>
 
-            {/* MODAL DE DETALHES */}
             <Dialog open={!!selectedLog} onClose={() => setSelectedLog(null)} maxWidth="md" fullWidth>
                 <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                    <FileJson size={24} color="#475569" />
-                    Detalhes da Auditoria
+                    <FileJson size={24} color="#475569" />Detalhes da Auditoria
                 </DialogTitle>
-
                 <DialogContent sx={{ mt: 2 }}>
                     {selectedLog && (
                         <Box>
                             <Grid container spacing={2} mb={3}>
-                                <Grid item xs={3}>
-                                    <Typography variant="caption" color="text.secondary">Responsável</Typography>
-                                    <Typography variant="body2" fontWeight="bold">{selectedLog.usuario}</Typography>
-                                </Grid>
-                                <Grid item xs={3}>
-                                    <Typography variant="caption" color="text.secondary">Data</Typography>
-                                    <Typography variant="body2">{formatarData(selectedLog.dataHora)}</Typography>
-                                </Grid>
-                                <Grid item xs={3}>
-                                    <Typography variant="caption" color="text.secondary">Origem (IP)</Typography>
-                                    <Typography variant="body2">{selectedLog.ipOrigem || 'Não registrado'}</Typography>
-                                </Grid>
-                                <Grid item xs={3}>
-                                    <Typography variant="caption" color="text.secondary">Ação</Typography>
-                                    <Typography variant="body2">
-                                        {selectedLog.evento} em <b>{selectedLog.entidade}</b> (ID: {selectedLog.entidadeId})
-                                    </Typography>
-                                </Grid>
+                                <Grid item xs={3}><Typography variant="caption" color="text.secondary">Responsável</Typography><Typography variant="body2" fontWeight="bold">{selectedLog.usuario}</Typography></Grid>
+                                <Grid item xs={3}><Typography variant="caption" color="text.secondary">Data</Typography><Typography variant="body2">{formatarData(selectedLog.dataHora)}</Typography></Grid>
+                                <Grid item xs={3}><Typography variant="caption" color="text.secondary">Origem (IP)</Typography><Typography variant="body2">{selectedLog.ipOrigem || 'Não registrado'}</Typography></Grid>
+                                <Grid item xs={3}><Typography variant="caption" color="text.secondary">Ação</Typography><Typography variant="body2">{selectedLog.evento} em <b>{selectedLog.entidade}</b> (ID: {selectedLog.entidadeId})</Typography></Grid>
                             </Grid>
-
-                            <Divider textAlign="left" sx={{ mb: 2 }}>
-                                <Typography variant="caption" color="text.secondary">CONTEÚDO REGISTRADO</Typography>
-                            </Divider>
-
+                            <Divider textAlign="left" sx={{ mb: 2 }}><Typography variant="caption" color="text.secondary">CONTEÚDO REGISTRADO</Typography></Divider>
                             {renderDiffContent()}
                         </Box>
                     )}
                 </DialogContent>
-                <DialogActions>
-                    <Button onClick={() => setSelectedLog(null)}>Fechar</Button>
-                </DialogActions>
+                <DialogActions><Button onClick={() => setSelectedLog(null)}>Fechar</Button></DialogActions>
             </Dialog>
         </Box>
     );

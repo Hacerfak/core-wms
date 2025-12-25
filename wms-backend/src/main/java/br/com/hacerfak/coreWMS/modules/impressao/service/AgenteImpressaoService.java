@@ -9,6 +9,7 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Service
@@ -51,14 +52,14 @@ public class AgenteImpressaoService {
 
     // Método chamado pelo Filtro para registrar heartbeat (sem transaction pesada)
     public void registrarHeartbeat(AgenteImpressao agente, String versao) {
+        LocalDateTime agora = LocalDateTime.now();
         // Otimização: Só atualiza no banco se passou mais de 15 min para não spammar
         // update
         if (agente.getUltimoHeartbeat() == null ||
                 agente.getUltimoHeartbeat().isBefore(java.time.LocalDateTime.now().minusMinutes(15))) {
 
             String versaoFinal = (versao != null && !versao.isBlank()) ? versao : "1.0.0";
-            agente.registrarAtividade(versaoFinal);
-            repository.save(agente);
+            repository.registrarHeartbeatSemAuditoria(agente.getId(), agora, versaoFinal);
         }
     }
 }
