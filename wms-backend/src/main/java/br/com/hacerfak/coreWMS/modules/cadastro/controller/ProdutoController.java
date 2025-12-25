@@ -68,8 +68,14 @@ public class ProdutoController {
                 .controlaLote(dto.controlaLote() != null ? dto.controlaLote() : false)
                 .controlaValidade(dto.controlaValidade() != null ? dto.controlaValidade() : false)
                 .controlaSerie(dto.controlaSerie() != null ? dto.controlaSerie() : false)
+
+                // Conversão & Logística
                 .unidadeArmazenagem(dto.unidadeArmazenagem())
                 .fatorConversao(dto.fatorConversao() != null ? dto.fatorConversao() : 1)
+
+                // --- CORREÇÃO AQUI ---
+                .fatorEmpilhamento(dto.fatorEmpilhamento() != null ? dto.fatorEmpilhamento() : 1)
+
                 .depositante(depositante)
                 .build();
 
@@ -102,6 +108,10 @@ public class ProdutoController {
             produto.setUnidadeArmazenagem(dto.unidadeArmazenagem());
             if (dto.fatorConversao() != null)
                 produto.setFatorConversao(dto.fatorConversao());
+
+            // --- CORREÇÃO AQUI ---
+            if (dto.fatorEmpilhamento() != null)
+                produto.setFatorEmpilhamento(dto.fatorEmpilhamento());
 
             return ResponseEntity.ok(repository.save(produto));
         }).orElse(ResponseEntity.notFound().build());

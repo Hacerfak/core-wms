@@ -18,13 +18,15 @@ const ProdutoForm = () => {
     const navigate = useNavigate();
 
     const [loading, setLoading] = useState(false);
-    const [activeTab, setActiveTab] = useState(0); // Controle da Aba
-    const [searchTerm, setSearchTerm] = useState(''); // Controle da Busca
+    const [activeTab, setActiveTab] = useState(0);
+    const [searchTerm, setSearchTerm] = useState('');
     const [depositantes, setDepositantes] = useState([]);
 
     const [form, setForm] = useState({
         depositanteId: '', sku: '', nome: '', ean13: '', dun14: '',
-        unidadeMedida: 'UN', unidadeArmazenagem: 'UN', fatorConversao: 1,
+        unidadeMedida: 'UN', unidadeArmazenagem: 'UN',
+        fatorConversao: 1,
+        fatorEmpilhamento: 1, // <--- NOVO CAMPO (Padrão 1 = Não empilha)
         pesoBrutoKg: '', ncm: '', cest: '', valorUnitarioPadrao: '',
         controlaLote: false, controlaValidade: false, controlaSerie: false, ativo: true
     });
@@ -34,22 +36,19 @@ const ProdutoForm = () => {
     const loadData = async () => {
         setLoading(true);
         try {
-            // 1. Carrega lista de depositantes para o select
             const listaParceiros = await getParceiros();
             const opts = listaParceiros.map(p => ({ value: p.id, label: p.nome }));
             setDepositantes(opts);
 
             if (id) {
-                // 2. Se for edição, busca o produto
                 const data = await getProdutoById(id);
-
-                // CORREÇÃO AQUI: Mapeia o objeto depositante para o ID que o form espera
                 setForm({
                     ...data,
-                    depositanteId: data.depositante?.id || data.depositanteId || ''
+                    depositanteId: data.depositante?.id || data.depositanteId || '',
+                    // Garante valor padrão se vier nulo do banco antigo
+                    fatorEmpilhamento: data.fatorEmpilhamento || 1
                 });
             } else if (listaParceiros.length > 0) {
-                // Se for novo, define o primeiro parceiro como padrão (opcional)
                 setForm(prev => ({ ...prev, depositanteId: listaParceiros[0].id }));
             }
         } catch (error) {
@@ -78,11 +77,10 @@ const ProdutoForm = () => {
         }
     };
 
-    // --- DEFINIÇÃO DOS CAMPOS E GRUPOS (Mapeados por Tab) ---
     const sections = useMemo(() => [
         {
             id: 'geral',
-            tabIndex: 0, // Aba 0: Geral
+            tabIndex: 0,
             title: 'Identificação & Geral',
             icon: <Package size={20} />,
             color: 'primary.main',
@@ -111,7 +109,7 @@ const ProdutoForm = () => {
         },
         {
             id: 'logistica',
-            tabIndex: 1, // Aba 1: Logística e Fiscal
+            tabIndex: 1,
             title: 'Logística & Medidas',
             icon: <Truck size={20} />,
             color: 'info.main',
@@ -128,15 +126,28 @@ const ProdutoForm = () => {
                     key: 'un_arm', label: 'Unidade Armazenagem', cols: 4,
                     component: <TextField label="Un. Armazenagem (Ex: CX)" fullWidth value={form.unidadeArmazenagem} onChange={e => handleChange('unidadeArmazenagem', e.target.value)} InputLabelProps={{ shrink: true }} />
                 },
+                // --- MUDANÇA AQUI: Dividimos a linha para caber o Empilhamento ---
                 {
-                    key: 'fator', label: 'Fator de Conversão', cols: 12,
+                    key: 'fator', label: 'Fator de Conversão', cols: 6,
                     component: <TextField label="Fator Conversão" type="number" fullWidth value={form.fatorConversao} onChange={e => handleChange('fatorConversao', e.target.value)} helperText="Qtd Base na Un. Armazenagem" InputLabelProps={{ shrink: true }} />
+                },
+                {
+                    key: 'empilhamento', label: 'Fator Empilhamento', cols: 6,
+                    component: <TextField
+                        label="Empilhamento Máximo"
+                        type="number"
+                        fullWidth
+                        value={form.fatorEmpilhamento}
+                        onChange={e => handleChange('fatorEmpilhamento', e.target.value)}
+                        helperText="Quantas alturas (1 = Não empilha)"
+                        InputLabelProps={{ shrink: true }}
+                    />
                 }
             ]
         },
         {
             id: 'fiscal',
-            tabIndex: 1, // Aba 1: Logística e Fiscal (Compartilha a mesma aba visualmente, mas é outro card)
+            tabIndex: 1,
             title: 'Dados Fiscais',
             icon: <FileText size={20} />,
             color: 'warning.main',
@@ -157,7 +168,7 @@ const ProdutoForm = () => {
         },
         {
             id: 'controles',
-            tabIndex: 2, // Aba 2: Controles
+            tabIndex: 2,
             title: 'Rastreabilidade',
             icon: <Settings size={20} />,
             color: 'error.main',
@@ -178,10 +189,8 @@ const ProdutoForm = () => {
         }
     ], [form, depositantes]);
 
-    // --- LÓGICA HÍBRIDA (Busca vs Abas) ---
     const visibleSections = useMemo(() => {
         if (searchTerm) {
-            // MODO BUSCA: Ignora abas e traz tudo que combina
             const term = searchTerm.toLowerCase();
             return sections.map(section => ({
                 ...section,
@@ -191,15 +200,12 @@ const ProdutoForm = () => {
                 )
             })).filter(section => section.fields.length > 0);
         } else {
-            // MODO ABA: Traz apenas a seção da aba ativa
             return sections.filter(section => section.tabIndex === activeTab);
         }
     }, [sections, searchTerm, activeTab]);
 
     return (
         <Box sx={{ width: '100%', pb: 5 }}>
-
-            {/* HEADER FIXO */}
             <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
                 <Box display="flex" alignItems="center" gap={2}>
                     <Button startIcon={<ArrowLeft />} onClick={() => navigate('/cadastros/produtos')} color="inherit" sx={{ borderColor: 'divider' }} variant="outlined">
@@ -214,8 +220,6 @@ const ProdutoForm = () => {
                         </Typography>
                     </Box>
                 </Box>
-
-                {/* Switch Ativo e Botão Salvar no Topo */}
                 <Box display="flex" alignItems="center" gap={2} bgcolor="background.paper" p={1} borderRadius={2} border={1} borderColor="divider">
                     <FormControlLabel
                         control={<Switch color="success" checked={form.ativo} onChange={() => handleSwitchChange('ativo')} />}
@@ -230,11 +234,7 @@ const ProdutoForm = () => {
             </Box>
 
             <Paper sx={{ width: '100%', mb: 2, borderRadius: 2, overflow: 'hidden' }}>
-
-                {/* BARRA DE FERRAMENTAS (BUSCA + ABAS) */}
                 <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: '#f8fafc', px: 2, pt: 2 }}>
-
-                    {/* CAMPO DE BUSCA */}
                     <TextField
                         fullWidth
                         placeholder="Pesquisar campo (ex: NCM, Peso, Lote)..."
@@ -251,8 +251,6 @@ const ProdutoForm = () => {
                             sx: { bgcolor: 'white', mb: 2 }
                         }}
                     />
-
-                    {/* ABAS (Só aparecem se NÃO estiver buscando) */}
                     {!searchTerm && (
                         <Tabs value={activeTab} onChange={(e, v) => setActiveTab(v)}>
                             <Tab label="Geral" icon={<Package size={18} />} iconPosition="start" />
@@ -260,7 +258,6 @@ const ProdutoForm = () => {
                             <Tab label="Controles" icon={<Settings size={18} />} iconPosition="start" />
                         </Tabs>
                     )}
-
                     {searchTerm && (
                         <Typography variant="caption" color="primary" sx={{ mb: 1, display: 'block', fontWeight: 600 }}>
                             Exibindo resultados da pesquisa em todas as seções:
@@ -268,7 +265,6 @@ const ProdutoForm = () => {
                     )}
                 </Box>
 
-                {/* CONTEÚDO */}
                 <Box sx={{ p: 4, bgcolor: '#fff' }}>
                     <Grid container spacing={3} alignItems="flex-start">
                         {visibleSections.map((section) => (
@@ -289,7 +285,6 @@ const ProdutoForm = () => {
                                             {section.icon}
                                             <Typography variant="subtitle1" fontWeight="bold">{section.title}</Typography>
                                         </Box>
-
                                         <Box sx={{ p: 3 }}>
                                             <Grid container spacing={2}>
                                                 {section.fields.map((field) => (
@@ -303,7 +298,6 @@ const ProdutoForm = () => {
                                 </Fade>
                             </Grid>
                         ))}
-
                         {visibleSections.length === 0 && (
                             <Grid item xs={12}>
                                 <Box textAlign="center" py={5}>

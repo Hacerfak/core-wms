@@ -17,6 +17,7 @@ export const salvarProduto = async (dados) => {
     if (payload.pesoBrutoKg) payload.pesoBrutoKg = parseFloat(payload.pesoBrutoKg);
     if (payload.valorUnitarioPadrao) payload.valorUnitarioPadrao = parseFloat(payload.valorUnitarioPadrao);
     if (payload.fatorConversao) payload.fatorConversao = parseInt(payload.fatorConversao);
+    if (payload.fatorEmpilhamento) payload.fatorEmpilhamento = parseInt(payload.fatorEmpilhamento);
 
     if (dados.id) {
         await api.put(`/api/produtos/${dados.id}`, payload);

@@ -142,7 +142,6 @@ public class MapeamentoService {
 
         Localizacao local;
 
-        // --- LÓGICA DE EDIÇÃO ---
         if (dto.id() != null) {
             local = localizacaoRepository.findById(dto.id())
                     .orElseThrow(() -> new EntityNotFoundException("Localização não encontrada"));
@@ -154,18 +153,25 @@ public class MapeamentoService {
         local.setCodigo(dto.codigo());
         local.setDescricao(dto.descricao());
 
-        // Se o tipo não for informado, herda da área
+        // Tipos
         local.setTipo(dto.tipo() != null ? dto.tipo() : area.getTipo());
 
+        // --- CORREÇÃO AQUI: Salvando tipoEstrutura e capacidadeMaxima ---
+        local.setTipoEstrutura(dto.tipoEstrutura() != null ? dto.tipoEstrutura() : TipoEstrutura.PORTA_PALLET);
+        local.setCapacidadeMaxima(dto.capacidadeMaxima() != null ? dto.capacidadeMaxima() : 1);
+        // ----------------------------------------------------------------
+
+        // Regras
         local.setVirtual(dto.virtual() != null ? dto.virtual() : false);
         local.setPermiteMultiLpn(dto.permiteMultiLpn() != null ? dto.permiteMultiLpn() : true);
+
+        // Capacidades
         local.setCapacidadeLpn(dto.capacidadeLpn() != null ? dto.capacidadeLpn() : 1);
         local.setCapacidadePesoKg(dto.capacidadePesoKg());
+
+        // Status
         local.setBloqueado(dto.bloqueado() != null ? dto.bloqueado() : false);
         local.setAtivo(dto.ativo() != null ? dto.ativo() : true);
-
-        // O endereço completo é recalculado automaticamente pelo @PrePersist/@PreUpdate
-        // na Entidade
 
         return localizacaoRepository.save(local);
     }
