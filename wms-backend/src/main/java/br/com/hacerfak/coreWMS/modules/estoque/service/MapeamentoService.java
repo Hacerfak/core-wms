@@ -186,4 +186,11 @@ public class MapeamentoService {
         return localizacaoRepository.findByEnderecoCompleto(endereco)
                 .orElseThrow(() -> new EntityNotFoundException("Endereço não encontrado: " + endereco));
     }
+
+    public List<Localizacao> listarTodosLocais(TipoLocalizacao tipoFiltro) {
+        if (tipoFiltro != null) {
+            return localizacaoRepository.findByTipoAndAtivoTrue(tipoFiltro);
+        }
+        return localizacaoRepository.findByAtivoTrue();
+    }
 }

@@ -68,6 +68,14 @@ public class MapeamentoController {
         return ResponseEntity.ok(service.listarLocais(areaId));
     }
 
+    // NOVO ENDPOINT: Listagem Global com Filtro
+    @GetMapping("/locais")
+    @PreAuthorize("hasAuthority('LOCALIZACAO_VISUALIZAR') or hasRole('ADMIN')")
+    public ResponseEntity<List<Localizacao>> listarLocaisGlobal(
+            @RequestParam(required = false) TipoLocalizacao tipo) {
+        return ResponseEntity.ok(service.listarTodosLocais(tipo));
+    }
+
     @PostMapping("/locais")
     @PreAuthorize("hasAuthority('LOCALIZACAO_GERENCIAR') or hasRole('ADMIN')")
     @CacheEvict(value = "locais", allEntries = true)

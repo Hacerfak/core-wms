@@ -32,4 +32,11 @@ public interface SolicitacaoSaidaRepository extends JpaRepository<SolicitacaoSai
                AND (i.quantidadeSolicitada - i.quantidadeAlocada) > 0
             """)
     boolean existeDemandaPendenteParaProduto(@Param("produtoId") Long produtoId);
+
+    @Query("""
+                SELECT s FROM SolicitacaoSaida s
+                WHERE s.status IN ('CRIADA', 'EM_PROCESSAMENTO', 'CONCLUIDA')
+                AND NOT EXISTS (SELECT a FROM Agendamento a WHERE a.solicitacaoSaida = s AND a.status != 'CANCELADO')
+            """)
+    List<SolicitacaoSaida> findPendentesDeAgendamento();
 }

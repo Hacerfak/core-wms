@@ -21,6 +21,12 @@ import ProdutoList from './pages/Cadastros/ProdutoList';
 import ProdutoForm from './pages/Cadastros/ProdutoForm';
 import MapeamentoView from './pages/Cadastros/Mapeamento/MapeamentoView';
 
+//PORTARIA
+import PortariaMenu from './pages/Portaria/PortariaMenu';
+import TurnoList from './pages/Portaria/Turnos/TurnoList';
+import AgendamentoList from './pages/Portaria/Agendamento/AgendamentoList';
+import OperacaoPortaria from './pages/Portaria/Operacao/OperacaoPortaria';
+
 // OPERAÇÃO
 import RecebimentoList from './pages/Recebimento/RecebimentoList';
 import Recebimento from './pages/Recebimento/Recebimento';
@@ -93,101 +99,48 @@ function App() {
               <Route path="/cadastros/parceiros/novo" element={<ProtectedRoute permission={PERMISSIONS.PARCEIRO_GERENCIAR}><ParceiroForm /></ProtectedRoute>} />
               <Route path="/cadastros/parceiros/:id" element={<ProtectedRoute permission={PERMISSIONS.PARCEIRO_GERENCIAR}><ParceiroForm /></ProtectedRoute>} />
 
-              <Route path="/cadastros/locais" element={
-                <Can permissions="LOCALIZACAO_VISUALIZAR" elseShow={<Navigate to="/dashboard" />}>
-                  <MapeamentoView />
-                </Can>
-              } />
+              <Route path="/cadastros/locais" element={<ProtectedRoute permission={PERMISSIONS.LOCALIZACAO_VISUALIZAR}><MapeamentoView /></ProtectedRoute>} />
+
+
+              {/* PORTARIA */}
+              <Route path="/portaria" element={<ProtectedRoute permission="PORTARIA_AGENDAR"><PortariaMenu /></ProtectedRoute>} />
+              <Route path="/portaria/agenda" element={<ProtectedRoute permission="PORTARIA_AGENDAR"><AgendamentoList /></ProtectedRoute>} />
+              <Route path="/portaria/operacao" element={<ProtectedRoute permission="PORTARIA_OPERAR"><OperacaoPortaria /></ProtectedRoute>} />
+              <Route path="/portaria/turnos" element={<ProtectedRoute permission="CONFIG_GERENCIAR"><TurnoList /></ProtectedRoute>} />
+
+              {/* Alias para vínculo de XML (reusa a lista de agenda) */}
+              <Route path="/portaria/vinculo-xml" element={<ProtectedRoute permission="RECEBIMENTO_IMPORTAR_XML"><AgendamentoList /></ProtectedRoute>} />
 
               {/* OPERAÇÃO */}
-              <Route path="/recebimento" element={
-                <Can permissions="RECEBIMENTO_VISUALIZAR" elseShow={<Navigate to="/dashboard" />}>
-                  <RecebimentoList />
-                </Can>
-              } />
-              <Route path="/recebimento/:id" element={
-                <Can permissions="RECEBIMENTO_VISUALIZAR" elseShow={<Navigate to="/dashboard" />}>
-                  <Recebimento />
-                </Can>
-              } />
-              <Route path="/recebimento/:id/conferencia" element={
-                <Can permissions="RECEBIMENTO_CONFERIR" elseShow={<Navigate to="/dashboard" />}>
-                  <Conferencia />
-                </Can>
-              } />
+              <Route path="/recebimento" element={<ProtectedRoute permission={PERMISSIONS.RECEBIMENTO_VISUALIZAR}><RecebimentoList /></ProtectedRoute>} />
+              <Route path="/recebimento/:id" element={<ProtectedRoute permission={PERMISSIONS.RECEBIMENTO_VISUALIZAR}><Recebimento /></ProtectedRoute>} />
+              <Route path="/recebimento/:id/conferencia" element={<ProtectedRoute permission={PERMISSIONS.RECEBIMENTO_OPERAR}><Conferencia /></ProtectedRoute>} />
 
-              <Route path="/estoque" element={
-                <Can permissions="ESTOQUE_VISUALIZAR" elseShow={<Navigate to="/dashboard" />}>
-                  <EstoqueList />
-                </Can>
-              } />
-              <Route path="/estoque/armazenagem" element={
-                <Can permissions="ESTOQUE_ARMAZENAR" elseShow={<Navigate to="/dashboard" />}>
-                  <Armazenagem />
-                </Can>
-              } />
+              <Route path="/estoque" element={<ProtectedRoute permission={PERMISSIONS.ESTOQUE_VISUALIZAR}><EstoqueList /></ProtectedRoute>} />
+              <Route path="/estoque/armazenagem" element={<ProtectedRoute permission={PERMISSIONS.ESTOQUE_OPERAR}><Armazenagem /></ProtectedRoute>} />
 
               {/* EXPEDIÇÃO */}
-              <Route path="/expedicao" element={
-                <Can permissions="PEDIDO_VISUALIZAR" elseShow={<Navigate to="/dashboard" />}>
-                  <ExpedicaoMenu />
-                </Can>
-              } />
-              <Route path="/expedicao/checkout" element={
-                <Can permissions="EXPEDICAO_DESPACHAR" elseShow={<Navigate to="/expedicao" />}>
-                  <Checkout />
-                </Can>
-              } />
+              <Route path="/expedicao" element={<ProtectedRoute permission={PERMISSIONS.EXPEDICAO_VISUALIZAR}><ExpedicaoMenu /></ProtectedRoute>} />
+              <Route path="/expedicao/checkout" element={<ProtectedRoute permission={PERMISSIONS.EXPEDICAO_OPERAR}><Checkout /></ProtectedRoute>} />
 
-              {/* CONFIGURAÇÃO & ADMIN */}
-              <Route path="/usuarios" element={
-                <Can permissions="USUARIO_LISTAR" elseShow={<Navigate to="/dashboard" />}>
-                  <UsuariosList />
-                </Can>
-              } />
-              <Route path="/usuarios/novo" element={
-                <Can permissions="USUARIO_CRIAR" elseShow={<Navigate to="/dashboard" />}>
-                  <UsuarioForm />
-                </Can>
-              } />
-              <Route path="/usuarios/:id" element={<UsuarioForm />} />
+              {/* ADMIN & CONFIG */}
+              <Route path="/usuarios" element={<ProtectedRoute permission={PERMISSIONS.USUARIO_GERENCIAR}><UsuariosList /></ProtectedRoute>} />
+              <Route path="/usuarios/novo" element={<ProtectedRoute permission={PERMISSIONS.USUARIO_GERENCIAR}><UsuarioForm /></ProtectedRoute>} />
+              <Route path="/usuarios/:id" element={<ProtectedRoute permission={PERMISSIONS.USUARIO_GERENCIAR}><UsuarioForm /></ProtectedRoute>} />
 
-              <Route path="/perfis" element={
-                <Can permissions="PERFIL_GERENCIAR" elseShow={<Navigate to="/dashboard" />}>
-                  <PerfisList />
-                </Can>
-              } />
+              <Route path="/perfis" element={<ProtectedRoute permission={PERMISSIONS.PERFIL_GERENCIAR}><PerfisList /></ProtectedRoute>} />
+              <Route path="/config/empresa" element={<ProtectedRoute permission={PERMISSIONS.CONFIG_EMPRESA}><MinhaEmpresa /></ProtectedRoute>} />
+              <Route path="/admin/empresas" element={<ProtectedRoute permission="ADMIN"><GestaoEmpresas /></ProtectedRoute>} />
 
-              <Route path="/config/empresa" element={
-                <Can permissions="CONFIG_GERENCIAR" elseShow={<Navigate to="/dashboard" />}>
-                  <MinhaEmpresa />
-                </Can>
-              } />
-
-              <Route path="/admin/empresas" element={
-                <Can permissions="ADMIN" elseShow={<Navigate to="/dashboard" />}>
-                  <GestaoEmpresas />
-                </Can>
-              } />
-
-              {/* --- NOVA ROTA: CENTRAL DE IMPRESSÃO --- */}
-              <Route path="/config/impressao" element={
-                <Can permissions={PERMISSIONS.CONFIG_SISTEMA} elseShow={<Navigate to="/dashboard" />}>
-                  <PrintHubView />
-                </Can>
-              } />
+              <Route path="/config/impressao" element={<ProtectedRoute permission={PERMISSIONS.CONFIG_SISTEMA}><PrintHubView /></ProtectedRoute>} />
 
               {/* RELATÓRIOS */}
-              <Route path="/auditoria" element={
-                <Can permissions="AUDITORIA_VISUALIZAR" elseShow={<Navigate to="/dashboard" />}>
-                  <AuditoriaList />
-                </Can>
-              } />
-            </Route>
+              <Route path="/auditoria" element={<ProtectedRoute permission={PERMISSIONS.AUDITORIA_VER}><AuditoriaList /></ProtectedRoute>} />
 
-            {/* Redirecionamento Padrão */}
-            <Route path="/" element={<Navigate to="/dashboard" />} />
-            <Route path="*" element={<Navigate to="/dashboard" />} />
+              {/* Redirecionamento Padrão */}
+              <Route path="/" element={<Navigate to="/dashboard" />} />
+              <Route path="*" element={<Navigate to="/dashboard" />} />
+            </Route>
           </Routes>
         </AuthProvider>
       </BrowserRouter>

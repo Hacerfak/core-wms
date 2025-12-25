@@ -133,7 +133,7 @@ public class NfeImportService {
         String ie = getTagValue("IE", emit);
         String crt = getTagValue("CRT", emit);
 
-        Optional<Parceiro> existente = parceiroRepository.findByDocumento(cnpj);
+        Optional<Parceiro> existente = parceiroRepository.findByCpfCnpj(cnpj);
         Parceiro parceiro = existente.orElse(new Parceiro());
 
         if (parceiro.getId() == null) {

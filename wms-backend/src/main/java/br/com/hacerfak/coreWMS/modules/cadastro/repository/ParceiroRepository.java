@@ -5,5 +5,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.Optional;
 
 public interface ParceiroRepository extends JpaRepository<Parceiro, Long> {
-    Optional<Parceiro> findByDocumento(String documento);
+    Optional<Parceiro> findByCpfCnpj(String cpfCnpj);
 }

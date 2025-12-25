@@ -1,4 +1,4 @@
-package br.com.hacerfak.coreWMS.modules.operacao.domain;
+package br.com.hacerfak.coreWMS.modules.portaria.domain;
 
 public enum StatusAgendamento {
     AGENDADO,

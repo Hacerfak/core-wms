@@ -7,7 +7,9 @@ import {
     Home, PackagePlus, Box as BoxIcon, Truck, Settings, Users,
     Contact, Package, MapPin, ChevronDown, ChevronRight, Building2, Shield, History,
     LayoutDashboard, ClipboardCheck, FileText,
-    LayoutList, Printer
+    LayoutList, Printer,
+    Construction,
+    CalendarClock
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../contexts/AuthContext';
@@ -35,6 +37,15 @@ const Sidebar = () => {
             groupIcon: <Home size={18} />, // Ícone do Grupo Principal
             items: [
                 { text: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/dashboard', permission: null }
+            ]
+        },
+        {
+            id: 'portaria',
+            title: 'Portaria',
+            groupIcon: <Construction size={18} />,
+            items: [
+                { text: 'Visão Geral', icon: <CalendarClock size={20} />, path: '/portaria', permission: 'PORTARIA_VISUALIZAR' },
+                // Outros sub-itens se quiser acesso rápido, mas o Menu de Cards já resolve
             ]
         },
         {

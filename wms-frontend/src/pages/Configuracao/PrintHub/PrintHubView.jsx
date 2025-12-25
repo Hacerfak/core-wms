@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { Box, Typography, Paper, Tabs, Tab } from '@mui/material';
 import { Printer, Server, FileCode, ListVideo } from 'lucide-react';
-import AgentesTab from './components/AgentesTab';
-import ImpressorasTab from './components/ImpressorasTab';
-import TemplatesTab from './components/TemplatesTab';
-import FilaTab from './components/FilaTab';
+import AgentesTab from './Components/AgentesTab';
+import ImpressorasTab from './Components/ImpressorasTab';
+import TemplatesTab from './Components/TemplatesTab';
+import FilaTab from './Components/FilaTab';
 
 const PrintHubView = () => {
     const [tabIndex, setTabIndex] = useState(0);
