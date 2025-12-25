@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import {
-    Box, Button, Paper, TextField, MenuItem, Grid, Typography,
+    Box, Button, Paper, TextField, MenuItem, Typography,
     IconButton, Chip, Tooltip, FormControlLabel, Checkbox, Divider,
-    Card, CardContent, CardActions
+    Card, CardContent, CardActions, Grid
 } from '@mui/material';
 import {
     Save, Plus, Trash2, Code, Copy, FileText, Ruler, Settings,
@@ -11,7 +11,6 @@ import {
 import { toast } from 'react-toastify';
 import { getTemplates, salvarTemplate, excluirTemplate } from '../../../../services/printHubService';
 
-// Objeto de Configuração das Variáveis
 const VARIAVEIS_HELP = {
     'LPN': [
         { var: '{{LPN_CODIGO}}', desc: 'Código LPN' },
@@ -182,7 +181,7 @@ const TemplatesTab = () => {
                             <Box display="flex" flexDirection="column" alignItems="center" justifyContent="center" py={6} bgcolor="#f8fafc" borderRadius={2} border="2px dashed #e2e8f0">
                                 <Printer size={40} color="#94a3b8" />
                                 <Typography variant="body1" color="text.secondary" mt={2}>Nenhum modelo cadastrado</Typography>
-                                <Button onClick={handleNew} sx={{ mt: 1, ml: 1, mb: 1, mr: 1 }}>Criar o primeiro modelo</Button>
+                                <Button onClick={handleNew} sx={{ mt: 1 }}>Criar o primeiro modelo</Button>
                             </Box>
                         </Grid>
                     )}
@@ -191,7 +190,7 @@ const TemplatesTab = () => {
         );
     }
 
-    // --- VIEW: FORMULÁRIO ---
+    // --- VIEW: FORMULÁRIO (LAYOUT FLEXBOX) ---
     return (
         <Box sx={{ height: 'calc(100vh - 180px)', minHeight: 500, display: 'flex', flexDirection: 'column' }}>
             {/* Header Form */}
@@ -203,10 +202,11 @@ const TemplatesTab = () => {
                 <Button variant="contained" startIcon={<Save size={18} />} onClick={handleSave} sx={{ px: 4 }}>Salvar</Button>
             </Box>
 
-            <Grid container spacing={2} sx={{ flex: 1, overflow: 'hidden' }}>
+            {/* CONTAINER PRINCIPAL FLEX */}
+            <Box sx={{ flex: 1, display: 'flex', gap: 2, overflow: 'hidden' }}>
 
-                {/* COLUNA ESQUERDA: CONFIGURAÇÕES */}
-                <Grid item xs={12} md={3} sx={{ height: '100%', overflowY: 'auto' }}>
+                {/* 1. COLUNA ESQUERDA: Largura Fixa (280px) */}
+                <Box sx={{ width: 280, flexShrink: 0, height: '100%', overflowY: 'auto' }}>
                     <Paper sx={{ p: 2, height: '100%', border: '1px solid #e2e8f0' }}>
                         <Typography variant="overline" color="text.secondary" fontWeight="bold" display="flex" alignItems="center" gap={1}>
                             <Settings size={14} /> Dados Básicos
@@ -238,10 +238,10 @@ const TemplatesTab = () => {
                             <FormControlLabel control={<Checkbox checked={form.padrao} onChange={e => setForm({ ...form, padrao: e.target.checked })} />} label={<Typography variant="body2">Definir como Padrão</Typography>} />
                         </Box>
                     </Paper>
-                </Grid>
+                </Box>
 
-                {/* COLUNA DIREITA: EDITOR ZPL */}
-                <Grid item xs={12} md={9} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                {/* 2. COLUNA DIREITA: Ocupa todo o resto (Flex 1) */}
+                <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', minWidth: 0 }}>
                     <Paper sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', border: '1px solid #e2e8f0', bgcolor: '#1e293b' }}>
 
                         {/* Toolbar do Editor */}
@@ -252,7 +252,7 @@ const TemplatesTab = () => {
                             <Chip label="RAW ZPL" size="small" sx={{ bgcolor: '#334155', color: 'white', height: 20, fontSize: '0.65rem' }} />
                         </Box>
 
-                        {/* Área de Texto - FIX: Adicionado minHeight para evitar colapso */}
+                        {/* Área de Texto */}
                         <TextField
                             multiline
                             fullWidth
@@ -260,7 +260,7 @@ const TemplatesTab = () => {
                             onChange={e => setForm({ ...form, zplCodigo: e.target.value })}
                             sx={{
                                 flex: 1,
-                                minHeight: 200, // <--- Proteção contra colapso
+                                minHeight: 200,
                                 '& .MuiInputBase-root': { height: '100%', alignItems: 'flex-start', p: 2 },
                                 '& textarea': {
                                     color: '#a5b4fc',
@@ -275,7 +275,7 @@ const TemplatesTab = () => {
                             placeholder="Cole seu código ^XA ... ^XZ aqui"
                         />
 
-                        {/* Rodapé Variáveis - FIX: FlexWrap e Scroll se necessário */}
+                        {/* Rodapé Variáveis */}
                         <Box sx={{ p: 2, bgcolor: '#ffffff', borderTop: '1px solid #e2e8f0', flexShrink: 0, maxHeight: '30%', overflowY: 'auto' }}>
                             <Typography variant="subtitle2" fontWeight="bold" color="primary" mb={1} display="flex" alignItems="center" gap={1}>
                                 <FileText size={16} /> Variáveis Disponíveis ({form.tipoFinalidade})
@@ -300,8 +300,8 @@ const TemplatesTab = () => {
                             </Box>
                         </Box>
                     </Paper>
-                </Grid>
-            </Grid>
+                </Box>
+            </Box>
         </Box>
     );
 };
