@@ -2,16 +2,24 @@ import { useState, useEffect } from 'react';
 import {
     Box, Typography, Paper, Table, TableBody, TableCell, TableContainer,
     TableHead, TableRow, Chip, IconButton, Tooltip, TextField, Button,
-    Grid, MenuItem, Pagination, Dialog, DialogTitle, DialogContent, DialogActions
+    Grid, MenuItem, Pagination, Dialog, DialogTitle, DialogContent, DialogActions,
+    Divider, Alert
 } from '@mui/material';
-import { Search, Eye, RefreshCw, History as HistoryIcon, FileJson } from 'lucide-react';
+import { Search, Eye, RefreshCw, History as HistoryIcon, ArrowRight, FileJson } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { getAuditLogs } from '../../services/auditService';
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
+
+// Configura Plugins de Data
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 const AuditoriaList = () => {
+    // --- ESTADOS ---
     const [filtros, setFiltros] = useState({
-        inicio: dayjs().subtract(1, 'hour').format('YYYY-MM-DDTHH:mm'),
+        inicio: dayjs().subtract(24, 'hour').format('YYYY-MM-DDTHH:mm'),
         fim: dayjs().format('YYYY-MM-DDTHH:mm'),
         usuario: '',
         entidade: '',
@@ -22,8 +30,11 @@ const AuditoriaList = () => {
     const [page, setPage] = useState(0);
     const [totalPages, setTotalPages] = useState(0);
     const [loading, setLoading] = useState(false);
-    const [selectedLog, setSelectedLog] = useState(null);
 
+    const [selectedLog, setSelectedLog] = useState(null);
+    const [parsedData, setParsedData] = useState(null);
+
+    // --- CARGA DE DADOS ---
     useEffect(() => {
         loadData();
     }, [page]);
@@ -33,14 +44,15 @@ const AuditoriaList = () => {
         try {
             const filtrosApi = {
                 ...filtros,
+                // Envia para o backend no formato ISO simples (sem Z no final, para o Java assumir o local time)
                 inicio: filtros.inicio ? dayjs(filtros.inicio).format('YYYY-MM-DDTHH:mm:ss') : null,
                 fim: filtros.fim ? dayjs(filtros.fim).format('YYYY-MM-DDTHH:mm:ss') : null,
                 acao: filtros.acao === 'TODAS' ? '' : filtros.acao
             };
 
             const data = await getAuditLogs(filtrosApi, page, 20);
-            setLogs(data.content);
-            setTotalPages(data.totalPages);
+            setLogs(data.content || []);
+            setTotalPages(data.totalPages || 0);
         } catch (error) {
             console.error(error);
             toast.error("Erro ao carregar logs de auditoria.");
@@ -58,28 +70,178 @@ const AuditoriaList = () => {
         loadData();
     };
 
-    // CORREÇÃO 1: Mapeamento correto dos eventos do Backend (CREATE, UPDATE, DELETE)
+    // --- MANIPULAÇÃO DE JSON (CORREÇÃO DO BUG DO DIFF) ---
+
+    // Função recursiva para tentar extrair o objeto JSON real
+    const tryParseJSON = (jsonString) => {
+        if (typeof jsonString === 'object' && jsonString !== null) {
+            return jsonString; // Já é objeto
+        }
+        try {
+            const o = JSON.parse(jsonString);
+            // Se o resultado ainda for uma string (double stringified), tenta de novo
+            if (o && typeof o === 'string') {
+                return tryParseJSON(o);
+            }
+            return o;
+        } catch (e) {
+            return jsonString;
+        }
+    };
+
+    const handleOpenDetails = (log) => {
+        let dadosLimpos = null;
+        if (log.dados) {
+            dadosLimpos = tryParseJSON(log.dados);
+        }
+        setParsedData(dadosLimpos);
+        setSelectedLog(log);
+    };
+
     const getActionColor = (evento) => {
         switch (evento) {
-            case 'CREATE': // Backend envia CREATE, não INSERT
-            case 'INSERT': return 'success';
+            case 'CREATE': return 'success';
             case 'UPDATE': return 'info';
             case 'DELETE': return 'error';
-            case 'LOGIN': return 'warning';
             default: return 'default';
         }
     };
 
-    // Helper para formatar o JSON que vem como String do backend
-    const formatarDados = (dados) => {
-        if (!dados) return "{}";
-        try {
-            // Se já for objeto, stringify direto. Se for string, parse primeiro.
-            const obj = typeof dados === 'string' ? JSON.parse(dados) : dados;
-            return JSON.stringify(obj, null, 2);
-        } catch (e) {
-            return dados; // Retorna como texto simples se não for JSON válido
+    // --- FORMATAÇÃO DE DATA ---
+    const formatarData = (dataIso) => {
+        if (!dataIso) return '-';
+        // Remove o 'Z' final se existir para forçar a interpretação como "Local Time" (sem shift de fuso)
+        // Isso faz com que 22:00 no banco apareça como 22:00 na tela, independente do fuso do navegador
+        const dataSemZ = dataIso.endsWith('Z') ? dataIso.slice(0, -1) : dataIso;
+        return dayjs(dataSemZ).format('DD/MM/YYYY HH:mm:ss');
+    };
+
+    // --- RENDERIZAÇÃO DO CONTEÚDO (VISUALIZAÇÃO INTELIGENTE) ---
+    const renderDiffContent = () => {
+        if (!parsedData || typeof parsedData !== 'object') {
+            return (
+                <Box p={2} bgcolor="#f8fafc" borderRadius={1} border="1px solid #e2e8f0">
+                    <Typography variant="body2" fontFamily="monospace" color="text.secondary">
+                        {String(parsedData || 'Sem detalhes técnicos.')}
+                    </Typography>
+                </Box>
+            );
         }
+
+        // --- CASO 1: DIFF REAL (Update com "de" / "para") ---
+        // Verifica se é uma estrutura de diff gerada pelo backend
+        const chaves = Object.keys(parsedData);
+        const ehDiffReal = chaves.some(key => {
+            const val = parsedData[key];
+            return val && typeof val === 'object' && ('de' in val || 'para' in val);
+        });
+
+        if (ehDiffReal) {
+            return (
+                <TableContainer component={Paper} variant="outlined" sx={{ mt: 1 }}>
+                    <Table size="small">
+                        <TableHead sx={{ bgcolor: '#f1f5f9' }}>
+                            <TableRow>
+                                <TableCell><b>Campo Alterado</b></TableCell>
+                                <TableCell sx={{ color: 'error.main', width: '40%' }}><b>Valor Antigo</b></TableCell>
+                                <TableCell align="center" sx={{ width: '5%' }}><ArrowRight size={16} /></TableCell>
+                                <TableCell sx={{ color: 'success.main', width: '40%' }}><b>Valor Novo</b></TableCell>
+                            </TableRow>
+                        </TableHead>
+                        <TableBody>
+                            {chaves.map((campo) => {
+                                const change = parsedData[campo];
+                                if (!change || typeof change !== 'object' || (!('de' in change) && !('para' in change))) return null;
+
+                                return (
+                                    <TableRow key={campo} hover>
+                                        <TableCell sx={{ fontWeight: 'bold', textTransform: 'capitalize' }}>
+                                            {campo.replace(/([A-Z])/g, ' $1').trim()}
+                                        </TableCell>
+                                        <TableCell sx={{ color: 'text.secondary', fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                                            {formatVal(change.de)}
+                                        </TableCell>
+                                        <TableCell align="center"><ArrowRight size={14} color="#cbd5e1" /></TableCell>
+                                        <TableCell sx={{ fontWeight: 600, fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                                            {formatVal(change.para)}
+                                        </TableCell>
+                                    </TableRow>
+                                );
+                            })}
+                        </TableBody>
+                    </Table>
+                </TableContainer>
+            );
+        }
+
+        // --- CASO 2: BACKUP DE EXCLUSÃO (Delete) ---
+        // O Backend envia { "BACKUP_EXCLUSAO": { ...objeto... } }
+        if (parsedData.BACKUP_EXCLUSAO) {
+            return (
+                <Box>
+                    <Alert severity="warning" sx={{ mb: 2 }}>
+                        Registro dos dados que foram excluídos permanentemente.
+                    </Alert>
+                    {/* Renderiza o objeto interno do backup de forma recursiva/limpa */}
+                    {renderObjectTable(parsedData.BACKUP_EXCLUSAO)}
+                </Box>
+            );
+        }
+
+        // --- CASO 3: SNAPSHOT SIMPLES (Create) ---
+        // Renderiza o objeto plano como tabela
+        return renderObjectTable(parsedData);
+    };
+
+    // Função auxiliar para renderizar objetos (Create/Delete) em tabela
+    const renderObjectTable = (data) => {
+        if (!data || typeof data !== 'object') return null;
+
+        return (
+            <TableContainer component={Paper} variant="outlined" sx={{ mt: 1 }}>
+                <Table size="small">
+                    <TableHead sx={{ bgcolor: '#f8fafc' }}>
+                        <TableRow>
+                            <TableCell sx={{ width: '30%' }}><b>Campo</b></TableCell>
+                            <TableCell><b>Valor Registrado</b></TableCell>
+                        </TableRow>
+                    </TableHead>
+                    <TableBody>
+                        {Object.keys(data).map((key) => {
+                            const val = data[key];
+                            // Se for objeto aninhado complexo (ex: endereços, listas), 
+                            // mostra como JSON formatado dentro da célula para não quebrar o layout
+                            const isComplex = typeof val === 'object' && val !== null;
+
+                            return (
+                                <TableRow key={key} hover>
+                                    <TableCell sx={{ fontWeight: 500, color: 'text.secondary', textTransform: 'capitalize', verticalAlign: 'top' }}>
+                                        {key.replace(/([A-Z])/g, ' $1').trim()}
+                                    </TableCell>
+                                    <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>
+                                        {isComplex ? (
+                                            <Box sx={{ bgcolor: '#f1f5f9', p: 1, borderRadius: 1, maxHeight: 200, overflow: 'auto' }}>
+                                                <pre style={{ margin: 0 }}>{JSON.stringify(val, null, 2)}</pre>
+                                            </Box>
+                                        ) : (
+                                            formatVal(val)
+                                        )}
+                                    </TableCell>
+                                </TableRow>
+                            );
+                        })}
+                    </TableBody>
+                </Table>
+            </TableContainer>
+        );
+    };
+
+    // Helper de formatação de valor
+    const formatVal = (val) => {
+        if (val === null || val === undefined) return <span style={{ color: '#ccc' }}>(vazio)</span>;
+        if (typeof val === 'boolean') return <Chip label={val ? "Sim" : "Não"} size="small" color={val ? "success" : "default"} variant="outlined" sx={{ height: 20, fontSize: '0.7rem' }} />;
+        if (String(val).trim() === '') return <span style={{ color: '#ccc' }}>(string vazia)</span>;
+        return String(val);
     };
 
     return (
@@ -89,7 +251,9 @@ const AuditoriaList = () => {
                     <Typography variant="h5" fontWeight="bold" display="flex" alignItems="center" gap={1}>
                         <HistoryIcon size={28} /> Auditoria do Sistema
                     </Typography>
-                    <Typography variant="body2" color="text.secondary">Rastreabilidade de eventos e alterações.</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                        Rastreabilidade de eventos e alterações (Logs).
+                    </Typography>
                 </Box>
                 <Button variant="outlined" startIcon={<RefreshCw size={18} />} onClick={loadData} disabled={loading}>
                     Atualizar
@@ -101,36 +265,34 @@ const AuditoriaList = () => {
                 <Grid container spacing={2} alignItems="center">
                     <Grid item xs={12} sm={6} md={2}>
                         <TextField
-                            label="Início" type="datetime-local" fullWidth
+                            label="Início" type="datetime-local" fullWidth size="small"
                             name="inicio" value={filtros.inicio} onChange={handleFilterChange}
                             InputLabelProps={{ shrink: true }}
                         />
                     </Grid>
                     <Grid item xs={12} sm={6} md={2}>
                         <TextField
-                            label="Fim" type="datetime-local" fullWidth
+                            label="Fim" type="datetime-local" fullWidth size="small"
                             name="fim" value={filtros.fim} onChange={handleFilterChange}
                             InputLabelProps={{ shrink: true }}
                         />
                     </Grid>
                     <Grid item xs={12} sm={6} md={2}>
-                        <TextField label="Usuário" fullWidth name="usuario" value={filtros.usuario} onChange={handleFilterChange} placeholder="Login..." />
+                        <TextField label="Usuário" fullWidth size="small" name="usuario" value={filtros.usuario} onChange={handleFilterChange} placeholder="Ex: admin" />
                     </Grid>
                     <Grid item xs={12} sm={6} md={2}>
-                        {/* CORREÇÃO 2: Valores do Select batendo com o Backend */}
-                        <TextField select label="Ação" fullWidth name="acao" value={filtros.acao} onChange={handleFilterChange}>
+                        <TextField select label="Ação" fullWidth size="small" name="acao" value={filtros.acao} onChange={handleFilterChange}>
                             <MenuItem value="TODAS">Todas</MenuItem>
                             <MenuItem value="CREATE">Criação (Create)</MenuItem>
-                            <MenuItem value="UPDATE">Edição (Update)</MenuItem>
+                            <MenuItem value="UPDATE">Alteração (Update)</MenuItem>
                             <MenuItem value="DELETE">Exclusão (Delete)</MenuItem>
-                            <MenuItem value="LOGIN">Acesso (Login)</MenuItem>
                         </TextField>
                     </Grid>
                     <Grid item xs={12} sm={6} md={2}>
-                        <TextField label="Entidade" fullWidth name="entidade" value={filtros.entidade} onChange={handleFilterChange} placeholder="Ex: Produto" />
+                        <TextField label="Entidade" fullWidth size="small" name="entidade" value={filtros.entidade} onChange={handleFilterChange} placeholder="Ex: Produto" />
                     </Grid>
                     <Grid item xs={12} md={2}>
-                        <Button variant="contained" fullWidth sx={{ height: 53 }} onClick={handleSearch} startIcon={<Search />}>
+                        <Button variant="contained" fullWidth onClick={handleSearch} startIcon={<Search size={18} />}>
                             Filtrar
                         </Button>
                     </Grid>
@@ -138,43 +300,51 @@ const AuditoriaList = () => {
             </Paper>
 
             {/* TABELA */}
-            <Paper sx={{ width: '100%', mb: 2, overflow: 'hidden' }}>
+            <Paper sx={{ width: '100%', mb: 2, overflow: 'hidden', borderRadius: 2 }}>
                 <TableContainer>
                     <Table size="small">
                         <TableHead sx={{ bgcolor: 'background.subtle' }}>
                             <TableRow>
+                                <TableCell><b>Responsável</b></TableCell>
                                 <TableCell><b>Data/Hora</b></TableCell>
-                                <TableCell><b>Usuário</b></TableCell>
-                                <TableCell><b>Evento</b></TableCell>
-                                <TableCell><b>Entidade</b></TableCell>
-                                <TableCell><b>ID Ref.</b></TableCell>
+                                <TableCell><b>Origem (IP)</b></TableCell>
+                                <TableCell><b>Ação</b></TableCell>
+                                <TableCell><b>Alvo</b></TableCell>
                                 <TableCell align="center"><b>Detalhes</b></TableCell>
                             </TableRow>
                         </TableHead>
                         <TableBody>
                             {logs.map((log) => (
-                                // CORREÇÃO 3: Mapeamento correto dos campos (evento, entidade, entidadeId)
                                 <TableRow key={log.id} hover>
-                                    <TableCell>{new Date(log.dataHora).toLocaleString()}</TableCell>
                                     <TableCell>
-                                        <Typography variant="body2" fontWeight="bold">{log.usuario}</Typography>
+                                        <Typography variant="body2" fontWeight="bold" color="primary.main">{log.usuario}</Typography>
+                                    </TableCell>
+                                    <TableCell>{formatarData(log.dataHora)}</TableCell>
+                                    <TableCell>{log.ipOrigem || '-'}</TableCell>
+                                    <TableCell>
+                                        <Chip
+                                            label={log.evento}
+                                            color={getActionColor(log.evento)}
+                                            size="small"
+                                            variant="outlined"
+                                            sx={{ fontWeight: 'bold', minWidth: 80 }}
+                                        />
                                     </TableCell>
                                     <TableCell>
-                                        <Chip label={log.evento} color={getActionColor(log.evento)} size="small" sx={{ fontWeight: 'bold', minWidth: 80 }} />
+                                        <Typography variant="body2">{log.entidade}</Typography>
+                                        <Typography variant="caption" color="text.secondary">ID: {log.entidadeId}</Typography>
                                     </TableCell>
-                                    <TableCell>{log.entidade}</TableCell>
-                                    <TableCell>{log.entidadeId}</TableCell>
                                     <TableCell align="center">
-                                        <Tooltip title="Ver Snapshot (JSON)">
-                                            <IconButton size="small" color="primary" onClick={() => setSelectedLog(log)}>
-                                                <Eye size={18} />
+                                        <Tooltip title="Ver Alterações">
+                                            <IconButton size="small" onClick={() => handleOpenDetails(log)}>
+                                                <Eye size={18} color="#475569" />
                                             </IconButton>
                                         </Tooltip>
                                     </TableCell>
                                 </TableRow>
                             ))}
                             {!loading && logs.length === 0 && (
-                                <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4 }}>Nenhum registro encontrado no período.</TableCell></TableRow>
+                                <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4, color: 'text.secondary' }}>Nenhum registro encontrado no período.</TableCell></TableRow>
                             )}
                         </TableBody>
                     </Table>
@@ -186,36 +356,48 @@ const AuditoriaList = () => {
                         page={page + 1}
                         onChange={(e, value) => setPage(value - 1)}
                         color="primary"
+                        showFirstButton
+                        showLastButton
                     />
                 </Box>
             </Paper>
 
-            {/* MODAL JSON */}
+            {/* MODAL DE DETALHES */}
             <Dialog open={!!selectedLog} onClose={() => setSelectedLog(null)} maxWidth="md" fullWidth>
-                <DialogTitle display="flex" alignItems="center" gap={1}>
-                    <FileJson size={24} /> Snapshot do Registro
+                <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                    <FileJson size={24} color="#475569" />
+                    Detalhes da Auditoria
                 </DialogTitle>
-                <DialogContent dividers>
+
+                <DialogContent sx={{ mt: 2 }}>
                     {selectedLog && (
                         <Box>
-                            <Typography variant="subtitle2" gutterBottom>
-                                {selectedLog.evento} em {selectedLog.entidade} (ID: {selectedLog.entidadeId})
-                            </Typography>
-                            <Box display="flex" justifyContent="space-between" mb={2}>
-                                <Typography variant="caption" color="text.secondary">
-                                    Realizado por <b>{selectedLog.usuario}</b> em {new Date(selectedLog.dataHora).toLocaleString()}
-                                </Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                    IP: {selectedLog.ipOrigem || 'N/A'}
-                                </Typography>
-                            </Box>
+                            <Grid container spacing={2} mb={3}>
+                                <Grid item xs={3}>
+                                    <Typography variant="caption" color="text.secondary">Responsável</Typography>
+                                    <Typography variant="body2" fontWeight="bold">{selectedLog.usuario}</Typography>
+                                </Grid>
+                                <Grid item xs={3}>
+                                    <Typography variant="caption" color="text.secondary">Data</Typography>
+                                    <Typography variant="body2">{formatarData(selectedLog.dataHora)}</Typography>
+                                </Grid>
+                                <Grid item xs={3}>
+                                    <Typography variant="caption" color="text.secondary">Origem (IP)</Typography>
+                                    <Typography variant="body2">{selectedLog.ipOrigem || 'Não registrado'}</Typography>
+                                </Grid>
+                                <Grid item xs={3}>
+                                    <Typography variant="caption" color="text.secondary">Ação</Typography>
+                                    <Typography variant="body2">
+                                        {selectedLog.evento} em <b>{selectedLog.entidade}</b> (ID: {selectedLog.entidadeId})
+                                    </Typography>
+                                </Grid>
+                            </Grid>
 
-                            <Paper variant="outlined" sx={{ p: 2, bgcolor: '#1e293b', color: '#a5f3fc', overflowX: 'auto' }}>
-                                {/* CORREÇÃO 4: Formatação segura do JSON que vem no campo 'dados' */}
-                                <pre style={{ margin: 0, fontSize: '0.85rem' }}>
-                                    {formatarDados(selectedLog.dados)}
-                                </pre>
-                            </Paper>
+                            <Divider textAlign="left" sx={{ mb: 2 }}>
+                                <Typography variant="caption" color="text.secondary">CONTEÚDO REGISTRADO</Typography>
+                            </Divider>
+
+                            {renderDiffContent()}
                         </Box>
                     )}
                 </DialogContent>

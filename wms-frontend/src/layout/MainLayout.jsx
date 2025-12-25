@@ -54,7 +54,7 @@ const MainLayout = () => {
 
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <Typography variant="body2" fontWeight={500} sx={{ display: { xs: 'none', sm: 'block' } }}>
-                                {user?.login || 'Usuário'}
+                                {user?.nome || 'Usuário'}
                             </Typography>
 
                             <Tooltip title="Menu do Usuário">

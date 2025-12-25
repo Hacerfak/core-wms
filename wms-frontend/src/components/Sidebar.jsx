@@ -1,14 +1,15 @@
-import { useState, useContext, useEffect } from 'react';
+import { useState, useContext } from 'react';
 import {
     Box, List, ListItem, ListItemButton, ListItemIcon, ListItemText,
     Typography, Collapse, Divider
 } from '@mui/material';
 import {
     Home, PackagePlus, Box as BoxIcon, Truck, Settings, Users,
-    Contact, Package, MapPin, ChevronDown, ChevronRight, Building2, Shield, History
+    Contact, Package, MapPin, ChevronDown, ChevronRight, Building2, Shield, History,
+    LayoutDashboard, ClipboardCheck, FileText, // <--- Novos Ícones
+    LayoutList
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import theme from '../theme/theme';
 import { AuthContext } from '../contexts/AuthContext';
 
 const Sidebar = () => {
@@ -19,7 +20,7 @@ const Sidebar = () => {
     // Estado para controlar quais grupos estão abertos
     const [openGroups, setOpenGroups] = useState({
         operacao: true,
-        cadastros: true,
+        gestao: false,
         config: false
     });
 
@@ -27,17 +28,19 @@ const Sidebar = () => {
         setOpenGroups(prev => ({ ...prev, [group]: !prev[group] }));
     };
 
-    // Estrutura do Menu Agrupado
+    // Estrutura do Menu Agrupado com Ícones de Grupo
     const menuStructure = [
         {
             title: 'Principal',
+            groupIcon: <Home size={18} />, // Ícone do Grupo Principal
             items: [
-                { text: 'Dashboard', icon: <Home size={20} />, path: '/dashboard', permission: null }
+                { text: 'Dashboard', icon: <LayoutDashboard size={20} />, path: '/dashboard', permission: null }
             ]
         },
         {
             id: 'operacao',
             title: 'Operação',
+            groupIcon: <ClipboardCheck size={18} />, // Ícone de Tarefas/Operação
             items: [
                 { text: 'Recebimento', icon: <PackagePlus size={20} />, path: '/recebimento', permission: 'RECEBIMENTO_VISUALIZAR' },
                 { text: 'Estoque', icon: <BoxIcon size={20} />, path: '/estoque', permission: 'ESTOQUE_VISUALIZAR' },
@@ -45,8 +48,9 @@ const Sidebar = () => {
             ]
         },
         {
-            id: 'cadastros',
-            title: 'Cadastros',
+            id: 'gestao',
+            title: 'Gestão',
+            groupIcon: <LayoutList size={18} />, // Ícone de Arquivo/Cadastros
             items: [
                 { text: 'Produtos', icon: <Package size={20} />, path: '/cadastros/produtos', permission: 'PRODUTO_VISUALIZAR' },
                 { text: 'Parceiros', icon: <Contact size={20} />, path: '/cadastros/parceiros', permission: 'PARCEIRO_VISUALIZAR' },
@@ -56,6 +60,7 @@ const Sidebar = () => {
         {
             id: 'relatorios',
             title: 'Relatórios',
+            groupIcon: <FileText size={18} />, // Ícone de Relatórios
             items: [
                 { text: 'Auditoria', icon: <History size={20} />, path: '/auditoria', permission: 'AUDITORIA_VISUALIZAR' }
             ]
@@ -63,6 +68,7 @@ const Sidebar = () => {
         {
             id: 'config',
             title: 'Configurações',
+            groupIcon: <Settings size={18} />, // Ícone de Configurações
             items: [
                 { text: 'Minha Empresa', icon: <Building2 size={20} />, path: '/config/empresa', permission: 'CONFIG_GERENCIAR' },
                 { text: 'Usuários', icon: <Users size={20} />, path: '/usuarios', permission: 'USUARIO_LISTAR' },
@@ -126,10 +132,20 @@ const Sidebar = () => {
                     return (
                         <Box key={index} sx={{ mb: 1 }}>
                             {group.title !== 'Principal' && (
-                                <ListItemButton onClick={() => toggleGroup(group.id)} sx={{ py: 1, px: 3 }}>
+                                <ListItemButton onClick={() => toggleGroup(group.id)} sx={{ py: 1.5, px: 3 }}>
+                                    {/* ÍCONE DO GRUPO ADICIONADO AQUI */}
+                                    <ListItemIcon sx={{ minWidth: 32, color: openGroups[group.id] ? 'primary.main' : 'text.secondary' }}>
+                                        {group.groupIcon}
+                                    </ListItemIcon>
+
                                     <ListItemText
                                         primary={group.title}
-                                        primaryTypographyProps={{ fontSize: '0.75rem', fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase' }}
+                                        primaryTypographyProps={{
+                                            fontSize: '0.75rem',
+                                            fontWeight: 700,
+                                            color: openGroups[group.id] ? 'primary.main' : 'text.secondary',
+                                            textTransform: 'uppercase'
+                                        }}
                                     />
                                     {openGroups[group.id] ? <ChevronDown size={16} color="#94a3b8" /> : <ChevronRight size={16} color="#94a3b8" />}
                                 </ListItemButton>

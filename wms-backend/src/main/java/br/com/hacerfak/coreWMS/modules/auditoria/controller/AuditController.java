@@ -40,30 +40,37 @@ public class AuditController {
         Query query = new Query().with(pageable);
         List<Criteria> criteria = new ArrayList<>();
 
-        // 1. Filtro de Segurança (Isolamento de Tenant)
-        criteria.add(Criteria.where("tenantId").is(TenantContext.getTenant()));
+        // --- MUDANÇA 1: Visualizar Tenant Atual OU Master ---
+        // Isso permite ver alterações globais (como criação de usuário no master)
+        String currentTenant = TenantContext.getTenant();
+
+        Criteria tenantCriteria = new Criteria().orOperator(
+                Criteria.where("tenantId").is(currentTenant),
+                Criteria.where("tenantId").is("wms_master"), // Pega logs globais
+                Criteria.where("tenantId").is(TenantContext.DEFAULT_TENANT_ID) // Garante compatibilidade
+        );
+        criteria.add(tenantCriteria);
 
         // 2. Filtro de Data (Range)
+        // Nota: O MongoDB armazena em UTC. O LocalDateTime que chega aqui já considera
+        // o TZ do servidor se configurado corretamente.
         if (inicio != null && fim != null) {
             criteria.add(Criteria.where("dataHora").gte(inicio).lte(fim));
         } else if (inicio != null) {
             criteria.add(Criteria.where("dataHora").gte(inicio));
         }
 
-        // 3. Filtros Opcionais (CORRIGIDOS OS NOMES DOS CAMPOS)
+        // 3. Filtros Opcionais
         if (usuario != null && !usuario.isBlank()) {
             criteria.add(Criteria.where("usuario").regex(usuario, "i"));
         }
         if (entidade != null && !entidade.isBlank()) {
-            // CORREÇÃO: "entityName" -> "entidade"
             criteria.add(Criteria.where("entidade").is(entidade));
         }
         if (acao != null && !acao.isBlank()) {
-            // CORREÇÃO: "action" -> "evento"
             criteria.add(Criteria.where("evento").is(acao));
         }
 
-        // Monta a query final
         if (!criteria.isEmpty()) {
             query.addCriteria(new Criteria().andOperator(criteria.toArray(new Criteria[0])));
         }

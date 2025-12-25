@@ -65,7 +65,7 @@ export const AuthProvider = ({ children }) => {
             const response = await api.post('/auth/login', { login: username, password });
 
             // CORREÇÃO: Desestruturar o 'id' que agora vem do backend
-            const { token, id, empresas, usuario, role } = response.data;
+            const { token, id, nome, empresas, usuario, role } = response.data;
 
             localStorage.setItem('wms_token', token);
             api.defaults.headers.Authorization = `Bearer ${token}`;
@@ -73,7 +73,7 @@ export const AuthProvider = ({ children }) => {
             processToken(token);
 
             // CORREÇÃO: Incluir 'id' no objeto userData
-            const userData = { id, login: usuario, role, empresas };
+            const userData = { id, nome, login: usuario, role, empresas };
 
             localStorage.setItem('wms_user', JSON.stringify(userData));
 

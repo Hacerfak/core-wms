@@ -47,10 +47,10 @@ public class AuthService {
         }
 
         var token = tokenService.generateToken(usuario, null, List.of());
-        return new LoginResponseDTO(token, usuario.getId(), usuario.getLogin(), usuario.getRole().name(), acessos);
+        return new LoginResponseDTO(token, usuario.getId(), usuario.getLogin(), usuario.getNome(),
+                usuario.getRole().name(), acessos);
     }
 
-    @Transactional(readOnly = true) // Adicione Transactional para garantir sessão aberta
     public LoginResponseDTO selecionarEmpresa(String tenantId) {
         String tenantAtual = TenantContext.getTenant();
         TenantContext.setTenant(TenantContext.DEFAULT_TENANT_ID);
@@ -97,7 +97,8 @@ public class AuthService {
         var tokenComTenant = tokenService.generateToken(usuario, tenantId, authorities);
 
         // CORREÇÃO: Passando usuario.getId()
-        return new LoginResponseDTO(tokenComTenant, usuario.getId(), usuario.getLogin(), usuario.getRole().name(),
+        return new LoginResponseDTO(tokenComTenant, usuario.getId(), usuario.getLogin(), usuario.getNome(),
+                usuario.getRole().name(),
                 List.of());
     }
 
@@ -132,7 +133,8 @@ public class AuthService {
         var novoToken = tokenService.generateToken(usuario, tenantAtual, authorities);
 
         // CORREÇÃO: Passando usuario.getId()
-        return new LoginResponseDTO(novoToken, usuario.getId(), usuario.getLogin(), usuario.getRole().name(),
+        return new LoginResponseDTO(novoToken, usuario.getId(), usuario.getLogin(), usuario.getNome(),
+                usuario.getRole().name(),
                 List.of());
     }
 }
