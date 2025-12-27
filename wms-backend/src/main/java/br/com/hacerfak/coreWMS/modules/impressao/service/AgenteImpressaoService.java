@@ -38,19 +38,41 @@ public class AgenteImpressaoService {
         return repository.save(agente);
     }
 
+    // --- NOVA FUNCIONALIDADE: EDIÇÃO ---
     @Transactional
-    // IMPORTANTE: Limpa o cache se revogar, forçando o sistema a ir no banco e
-    // descobrir que está inativo
-    @CacheEvict(value = "agentes-key", allEntries = true)
-    public void revogarAcesso(Long id) {
+    @CacheEvict(value = "agentes-key", allEntries = true) // Limpa cache pois pode mudar status/chave
+    public AgenteImpressao atualizarAgente(Long id, AgenteRequest request, Boolean ativo) {
         AgenteImpressao agente = repository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Agente não encontrado"));
 
-        agente.setAtivo(false);
-        repository.save(agente);
+        // Se mudou o nome, verifica duplicidade
+        if (!agente.getNome().equals(request.nome()) && repository.existsByNome(request.nome())) {
+            throw new IllegalArgumentException("Já existe outro agente com este nome.");
+        }
+
+        agente.setNome(request.nome());
+        agente.setDescricao(request.descricao());
+        agente.setHostname(request.hostname());
+
+        if (ativo != null) {
+            agente.setAtivo(ativo);
+        }
+
+        return repository.save(agente);
+    }
+
+    // --- CORREÇÃO: EXCLUSÃO REAL (HARD DELETE) ---
+    @Transactional
+    @CacheEvict(value = "agentes-key", allEntries = true)
+    public void excluirAgente(Long id) {
+        if (!repository.existsById(id)) {
+            throw new EntityNotFoundException("Agente não encontrado");
+        }
+        repository.deleteById(id);
     }
 
     // Método chamado pelo Filtro para registrar heartbeat (sem transaction pesada)
+    @Transactional
     public void registrarHeartbeat(AgenteImpressao agente, String versao) {
         LocalDateTime agora = LocalDateTime.now();
         // Otimização: Só atualiza no banco se passou mais de 15 min para não spammar

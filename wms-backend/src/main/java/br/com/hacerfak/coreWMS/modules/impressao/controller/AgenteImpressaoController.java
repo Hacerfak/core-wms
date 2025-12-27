@@ -39,16 +39,29 @@ public class AgenteImpressaoController {
         return ResponseEntity.ok(toResponse(agente));
     }
 
+    // --- NOVO: EDIÇÃO ---
+    @PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('CONFIG_SISTEMA') or hasRole('ADMIN')")
+    public ResponseEntity<AgenteResponse> atualizar(
+            @PathVariable Long id,
+            @RequestBody @Valid AgenteRequest request,
+            @RequestParam(required = false) Boolean ativo) { // Recebe status opcional
+
+        AgenteImpressao agente = service.atualizarAgente(id, request, ativo);
+        return ResponseEntity.ok(toResponse(agente));
+    }
+
+    // --- AJUSTE: EXCLUSÃO REAL ---
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAuthority('CONFIG_SISTEMA') or hasRole('ADMIN')")
-    public ResponseEntity<Void> revogar(@PathVariable Long id) {
-        service.revogarAcesso(id);
+    public ResponseEntity<Void> excluir(@PathVariable Long id) {
+        service.excluirAgente(id); // Agora chama o método que faz deleteById
         return ResponseEntity.noContent().build();
     }
 
     private AgenteResponse toResponse(AgenteImpressao a) {
         boolean isOnline = a.getUltimoHeartbeat() != null &&
-                a.getUltimoHeartbeat().isAfter(LocalDateTime.now().minusSeconds(60));
+                a.getUltimoHeartbeat().isAfter(LocalDateTime.now().minusMinutes(20));
 
         return new AgenteResponse(
                 a.getId(),

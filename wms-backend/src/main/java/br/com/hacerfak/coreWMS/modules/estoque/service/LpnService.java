@@ -38,21 +38,19 @@ public class LpnService {
     @Transactional
     public List<String> gerarLpnsVazias(Integer quantidade, String usuario) {
         List<String> codigosGerados = new ArrayList<>();
+        List<Lpn> lpnsParaSalvar = new ArrayList<>(); // Batch para LPN vazia também
 
         for (int i = 0; i < quantidade; i++) {
             String codigo = gerarCodigoLpnUnico();
-
             Lpn lpn = Lpn.builder()
                     .codigo(codigo)
-                    .tipo(TipoLpn.PALLET) // Padrão, pode virar parâmetro
+                    .tipo(TipoLpn.PALLET)
                     .status(StatusLpn.EM_MONTAGEM)
                     .build();
-            // Audit fields preenchidos automaticamente pela BaseEntity
-
-            lpnRepository.save(lpn);
+            lpnsParaSalvar.add(lpn);
             codigosGerados.add(codigo);
         }
-
+        lpnRepository.saveAll(lpnsParaSalvar); // Batch Save
         return codigosGerados;
     }
 
@@ -164,7 +162,7 @@ public class LpnService {
     private String gerarCodigoLpnUnico() {
         // Formato: LPN + Ano + DiaDoAno + Random (Ex: LPN24300-9999)
         // Simples e curto para código de barras
-        String prefix = "LPN" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyDDD"));
+        String prefix = "LPN-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyDDD"));
 
         // Tenta gerar até achar um livre (colisão é rara com 4 digitos random, mas
         // segura morreu de velho)
@@ -189,22 +187,34 @@ public class LpnService {
             Integer qtdVolumes,
             String lote,
             LocalDate validade,
+            String numeroSerie,
+            Localizacao localizacaoInicial, // <--- NOVO
+            Long solicitacaoId,
             String usuario) {
+
         List<Lpn> lpnsParaSalvar = new ArrayList<>();
+        List<EstoqueSaldo> saldosParaSalvar = new ArrayList<>(); // Lista para Batch
         List<String> codigosGerados = new ArrayList<>();
 
-        // Prefixo único para o lote de geração (otimização de performance)
-        String prefixoLote = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyMMddHHmm"));
+        // Validação de segurança para Serial: Se tiver serial, força 1 volume ou valida
+        // unicidade
+        if (numeroSerie != null && !numeroSerie.isBlank() && qtdVolumes > 1) {
+            // Num cenário real, serial é único. Aqui permitimos, mas fica o alerta de
+            // negócio.
+            throw new IllegalArgumentException("Itens serializados devem ser gerados um a um.");
+        }
 
         for (int i = 1; i <= qtdVolumes; i++) {
             // Gera código sequencial rápido: LPN-TIMESTAMP-SEQ (Ex: LPN-2310201030-1)
-            String codigo = "LPN-" + prefixoLote + "-" + i;
+            String codigo = gerarCodigoLpnUnico();
             codigosGerados.add(codigo);
 
             Lpn lpn = Lpn.builder()
                     .codigo(codigo)
                     .tipo(TipoLpn.PALLET)
                     .status(StatusLpn.FECHADO) // Já nasce fechado, pulando a etapa de montagem
+                    .localizacaoAtual(localizacaoInicial)
+                    .solicitacaoEntradaId(solicitacaoId)
                     .build();
 
             // Cria o item dentro da LPN
@@ -214,14 +224,30 @@ public class LpnService {
                     .quantidade(qtdPorVolume)
                     .lote(lote)
                     .dataValidade(validade)
+                    .numeroSerie(numeroSerie)
                     .build();
 
             lpn.adicionarItem(item);
+
             lpnsParaSalvar.add(lpn);
+
+            // Cria objeto de Saldo para salvar em lote depois
+            saldosParaSalvar.add(EstoqueSaldo.builder()
+                    .produto(produto)
+                    .localizacao(localizacaoInicial)
+                    .lpn(codigo)
+                    .lote(lote)
+                    .numeroSerie(numeroSerie)
+                    .statusQualidade(StatusQualidade.DISPONIVEL)
+                    .quantidade(qtdPorVolume)
+                    .quantidadeReservada(BigDecimal.ZERO)
+                    .build());
         }
 
         // Save All é mais eficiente que salvar um por um
         lpnRepository.saveAll(lpnsParaSalvar);
+
+        estoqueSaldoRepository.saveAll(saldosParaSalvar);
 
         return codigosGerados;
     }

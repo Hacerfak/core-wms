@@ -14,17 +14,19 @@ export const deleteRecebimento = async (id) => {
     await api.delete(`/api/recebimentos/${id}`);
 };
 
-// NOVO: Envia a contagem e gera o LPN
-export const conferirProduto = async (recebimentoId, sku, quantidade) => {
-    // O endpoint espera: { sku, quantidade, lpnExterno: null }
+export const conferirProduto = async (recebimentoId, sku, quantidade, dadosExtras = {}) => {
     const payload = {
+        solicitacaoId: Number(recebimentoId),
         sku: sku,
-        quantidade: Number(quantidade),
-        lpnExterno: null
+        quantidadePorVolume: Number(quantidade),
+        quantidadeDeVolumes: Number(dadosExtras.volumes || 1), // Default 1
+        lote: dadosExtras.lote || null,
+        dataValidade: dadosExtras.validade || null,
+        numeroSerie: dadosExtras.serial || null
     };
 
-    const response = await api.post(`/api/recebimentos/${recebimentoId}/volume`, payload);
-    return response.data; // Retorna o código LPN (String)
+    const response = await api.post(`/api/recebimentos/${recebimentoId}/conferencia-massa`, payload);
+    return response.data;
 };
 
 export const finalizarConferencia = async (id) => {
@@ -37,6 +39,50 @@ export const cancelarConferencia = async (id) => {
 };
 
 export const getVolumesDoItem = async (recebimentoId, produtoId) => {
-    const response = await api.get(`/api/recebimentos/${recebimentoId}/produtos/${produtoId}/volumes`);
+    // Endpoint para buscar LPNs já conferidas daquele produto
+    // Caso não tenha endpoint específico, usamos o geral de LPNs filtrando no front (menos performático)
+    // ou assumimos que o backend tem um filtro. Vamos usar o endpoint de LPNs da solicitação.
+    const response = await api.get(`/api/recebimentos/${recebimentoId}/lpns`);
+    // Filtra no front por enquanto se o backend não tiver filtro por produto
+    return response.data.filter(lpn => lpn.itens.some(i => i.produto.id === produtoId));
+};
+
+export const getLpnsDaSolicitacao = async (recebimentoId) => {
+    const response = await api.get(`/api/recebimentos/${recebimentoId}/lpns`);
     return response.data;
+};
+
+export const estornarLpn = async (recebimentoId, lpnId) => {
+    await api.delete(`/api/recebimentos/${recebimentoId}/lpns/${lpnId}`);
+};
+
+export const getDivergenciasPendentes = async () => {
+    const response = await api.get('/api/recebimentos/divergencias');
+    return response.data;
+};
+
+export const resolverDivergencia = async (id, aceitar, observacao) => {
+    const params = new URLSearchParams();
+    params.append('aceitar', aceitar);
+    params.append('observacao', observacao);
+
+    await api.post(`/api/recebimentos/divergencias/${id}/resolver?${params.toString()}`);
+};
+
+export const getProgressoRecebimento = async (id) => {
+    const response = await api.get(`/api/recebimentos/${id}/progresso`);
+    return response.data;
+};
+
+export const atribuirDoca = async (id, docaId) => {
+    await api.put(`/api/recebimentos/${id}/atribuir-doca?docaId=${docaId}`);
+};
+
+// Substitua/Adicione estes métodos
+export const resetarConferencia = async (id) => {
+    await api.post(`/api/recebimentos/${id}/resetar`);
+};
+
+export const excluirSolicitacao = async (id) => {
+    await api.delete(`/api/recebimentos/${id}`);
 };

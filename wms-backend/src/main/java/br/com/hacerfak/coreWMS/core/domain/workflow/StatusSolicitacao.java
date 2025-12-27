@@ -1,9 +1,11 @@
 package br.com.hacerfak.coreWMS.core.domain.workflow;
 
 public enum StatusSolicitacao {
-    CRIADA,
-    EM_PROCESSAMENTO,
-    BLOQUEDA,
+    CRIADA, // NFe importada ou Agendamento criado
+    AGUARDANDO_EXECUCAO, // Doca atribuída, aguardando início físico
+    EM_PROCESSAMENTO, // Operador bipou o primeiro item
+    DIVERGENTE, // Finalizada com diferenças (Falta/Sobra/Avaria)
     CONCLUIDA,
-    CANCELADA
+    BLOQUEADA, // Finalizada com sucesso (100% batido)
+    CANCELADA // Abortada
 }

@@ -11,8 +11,16 @@ export const criarAgente = async (dados) => {
     return response.data;
 };
 
-export const revogarAgente = async (id) => {
+// Renomeado para manter consistência, mas aponta para o DELETE que agora exclui de verdade
+export const excluirAgente = async (id) => {
     await api.delete(`/api/impressao/agentes/${id}`);
+};
+
+// NOVO: Atualizar Agente
+export const atualizarAgente = async (id, dados, ativo) => {
+    const url = `/api/impressao/agentes/${id}${ativo !== undefined ? `?ativo=${ativo}` : ''}`;
+    const response = await api.put(url, dados);
+    return response.data;
 };
 
 // --- IMPRESSORAS ---
@@ -29,6 +37,12 @@ export const salvarImpressora = async (dados) => {
 
 export const testarImpressora = async (id) => {
     await api.post(`/api/impressao/impressoras/${id}/teste`);
+};
+
+export const getImpressorasAtivas = async () => {
+    const response = await api.get('/api/impressao/impressoras');
+    // Filtra apenas as ativas
+    return response.data.filter(i => i.ativo);
 };
 
 // --- TEMPLATES ---
@@ -67,20 +81,14 @@ export const getDebugZpl = async (id) => {
     return response.data;
 };
 
+// LPNs
 /**
- * Busca apenas impressoras ATIVAS para exibir em combos de seleção
+ * Envia comando de impressão de LPN.
+ * Agora suporta templateId opcional.
  */
-export const getImpressorasAtivas = async () => {
-    const response = await api.get('/api/impressao/impressoras');
-    // Filtra no front, já que o endpoint admin retorna todas
-    return response.data.filter(imp => imp.ativo);
-};
+export const imprimirLpn = async (lpnId, impressoraId, templateId = null) => {
+    const params = { impressoraId };
+    if (templateId) params.templateId = templateId;
 
-/**
- * Envia comando de impressão de LPN
- */
-export const imprimirLpn = async (lpnId, impressoraId) => {
-    await api.post(`/api/estoque/lpns/${lpnId}/imprimir`, null, {
-        params: { impressoraId }
-    });
+    await api.post(`/api/estoque/lpns/${lpnId}/imprimir`, null, { params });
 };

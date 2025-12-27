@@ -204,8 +204,8 @@ const AgendamentoList = () => {
                         : item.solicitacaoSaida?.cliente?.nome;
 
                     const docRef = item.tipo === 'ENTRADA'
-                        ? (item.solicitacaoEntrada?.notaFiscal ? `NF: ${item.solicitacaoEntrada.notaFiscal}` : null)
-                        : (item.solicitacaoSaida?.codigoExterno ? `Ped: ${item.solicitacaoSaida.codigoExterno}` : null);
+                        ? (item.solicitacaoEntrada?.notaFiscal ? item.solicitacaoEntrada.notaFiscal : null)
+                        : (item.solicitacaoSaida?.codigoExterno ? item.solicitacaoSaida.codigoExterno : null);
 
                     const corTipo = item.tipo === 'ENTRADA' ? 'success' : 'primary';
                     const statusInfo = STATUS_MAP[item.status] || { label: item.status, color: 'default' };
@@ -249,7 +249,7 @@ const AgendamentoList = () => {
                                                 <Typography variant="h6" fontWeight="bold" noWrap sx={{ maxWidth: '100%' }}>
                                                     {parceiroPrincipal || 'Parceiro não identificado'}
                                                 </Typography>
-                                                {docRef && <Chip label={docRef} variant="outlined" size="small" icon={<FileText size={14} />} />}
+                                                {docRef && <Chip label={docRef} variant="outlined" size="small" icon={<FileText size={16} />} />}
 
                                                 {item.tipo === 'ENTRADA' && !item.xmlVinculado && item.status !== 'CANCELADO' && (
                                                     <Chip label="Aguardando XML" size="small" color="warning" variant="outlined" />

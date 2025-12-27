@@ -5,12 +5,17 @@ import jakarta.validation.constraints.Positive;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
-public record GerarLpnMassaRequest(
-        @NotNull Long solicitacaoId, // Vincula à entrada
-        @NotNull String sku,
-        @NotNull @Positive BigDecimal quantidadePorVolume, // Ex: 50 caixas por pallet
-        @NotNull @Positive Integer quantidadeDeVolumes, // Ex: 500 pallets
+import br.com.hacerfak.coreWMS.modules.estoque.domain.StatusQualidade;
 
-        String lote,
-        LocalDate dataValidade) {
+public record GerarLpnMassaRequest(
+                @NotNull Long solicitacaoId, // Vincula à entrada
+                @NotNull String sku,
+                @NotNull @Positive BigDecimal quantidadePorVolume, // Ex: 50 caixas por pallet
+                @NotNull @Positive Integer quantidadeDeVolumes, // Ex: 500 pallets
+
+                String lote,
+                LocalDate dataValidade,
+                String numeroSerie,
+
+                StatusQualidade statusQualidade) {
 }

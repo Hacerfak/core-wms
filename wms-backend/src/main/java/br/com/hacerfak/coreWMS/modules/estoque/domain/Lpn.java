@@ -1,6 +1,7 @@
 package br.com.hacerfak.coreWMS.modules.estoque.domain;
 
 import br.com.hacerfak.coreWMS.core.domain.BaseEntity;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
@@ -31,6 +32,7 @@ public class Lpn extends BaseEntity {
     // Onde essa LPN está fisicamente agora?
     @ManyToOne
     @JoinColumn(name = "localizacao_atual_id")
+    @JsonIgnoreProperties({ "area", "hibernateLazyInitializer", "handler" })
     private Localizacao localizacaoAtual;
 
     // Mapeamos apenas o ID para evitar acoplamento direto com o módulo de

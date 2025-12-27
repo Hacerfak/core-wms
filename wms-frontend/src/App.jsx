@@ -28,9 +28,13 @@ import AgendamentoList from './pages/Portaria/Agendamento/AgendamentoList';
 import OperacaoPortaria from './pages/Portaria/Operacao/OperacaoPortaria';
 
 // OPERAÇÃO
+import RecebimentoMenu from './pages/Recebimento/RecebimentoMenu';
+import TarefasRecebimentoList from './pages/Recebimento/TarefasRecebimentoList';
 import RecebimentoList from './pages/Recebimento/RecebimentoList';
 import Recebimento from './pages/Recebimento/Recebimento';
 import Conferencia from './pages/Recebimento/Conferencia';
+import DivergenciaList from './pages/Recebimento/DivergenciaList';
+import RecebimentoDetalhes from './pages/Recebimento/RecebimentoDetalhes';
 
 // ESTOQUE
 import EstoqueList from './pages/Estoque/EstoqueList';
@@ -111,10 +115,19 @@ function App() {
               {/* Alias para vínculo de XML (reusa a lista de agenda) */}
               <Route path="/portaria/vinculo-xml" element={<ProtectedRoute permission="RECEBIMENTO_IMPORTAR_XML"><AgendamentoList /></ProtectedRoute>} />
 
-              {/* OPERAÇÃO */}
-              <Route path="/recebimento" element={<ProtectedRoute permission={PERMISSIONS.RECEBIMENTO_VISUALIZAR}><RecebimentoList /></ProtectedRoute>} />
-              <Route path="/recebimento/:id" element={<ProtectedRoute permission={PERMISSIONS.RECEBIMENTO_VISUALIZAR}><Recebimento /></ProtectedRoute>} />
+              {/* OPERAÇÃO - RECEBIMENTO */}
+              {/* 1. Menu Principal */}
+              <Route path="/recebimento" element={<ProtectedRoute permission={PERMISSIONS.RECEBIMENTO_VISUALIZAR}><RecebimentoMenu /></ProtectedRoute>} />
+              {/* 2. Lista de Tarefas (Coletor) - NOVA ROTA */}
+              <Route path="/recebimento/tarefas" element={<ProtectedRoute permission={PERMISSIONS.RECEBIMENTO_CONFERIR}><TarefasRecebimentoList /></ProtectedRoute>} />
+              {/* 3. Lista Gerencial (Antiga lista padrão) */}
+              <Route path="/recebimento/lista" element={<ProtectedRoute permission={PERMISSIONS.RECEBIMENTO_VISUALIZAR}><RecebimentoList /></ProtectedRoute>} />
+              {/* 4. Importação XML */}
+              <Route path="/recebimento/novo" element={<ProtectedRoute permission={PERMISSIONS.RECEBIMENTO_IMPORTAR_XML}><Recebimento /></ProtectedRoute>} />
+              {/* 5. Execução da Conferência */}
               <Route path="/recebimento/:id/conferencia" element={<ProtectedRoute permission={PERMISSIONS.RECEBIMENTO_OPERAR}><Conferencia /></ProtectedRoute>} />
+              <Route path="/recebimento/divergencias" element={<ProtectedRoute permission={PERMISSIONS.RECEBIMENTO_FINALIZAR}><DivergenciaList /></ProtectedRoute>} />
+              <Route path="/recebimento/:id/detalhes" element={<ProtectedRoute permission={PERMISSIONS.RECEBIMENTO_VISUALIZAR}><RecebimentoDetalhes /></ProtectedRoute>} />
 
               <Route path="/estoque" element={<ProtectedRoute permission={PERMISSIONS.ESTOQUE_VISUALIZAR}><EstoqueList /></ProtectedRoute>} />
               <Route path="/estoque/armazenagem" element={<ProtectedRoute permission={PERMISSIONS.ESTOQUE_OPERAR}><Armazenagem /></ProtectedRoute>} />

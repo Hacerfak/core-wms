@@ -1,60 +1,51 @@
-import { Box, Typography, Grid, Paper, Divider, Chip } from '@mui/material';
-import { CalendarClock, Truck, Settings2, FileInput, Construction } from 'lucide-react';
+import { Box, Typography, Grid, Paper, Chip } from '@mui/material';
+import { ListChecks, FileInput, AlertTriangle, ClipboardList } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Can from '../../components/Can';
 
-const PortariaMenu = () => {
+const RecebimentoMenu = () => {
     const navigate = useNavigate();
 
-    // Definição das Seções
     const sections = [
         {
-            title: 'Agendamentos',
-            subtitle: 'Rotinas de agendamento',
+            title: 'Gestão de Entradas',
+            subtitle: 'Controle de notas e importações',
             items: [
-                /*{
-                    title: 'Criar agendamento (Rápido)',
-                    desc: 'Importar NFe para criar agendamento de entrada.',
-                    icon: <FileInput size={32} />,
-                    path: '/portaria/vinculo-xml',
-                    perm: 'RECEBIMENTO_IMPORTAR_XML',
-                    color: '#7c3aed' // Violet
-                },*/
                 {
-                    title: 'Agendamento de Entrada e Saída',
-                    desc: 'Visualizar e criar agendamentos.',
-                    icon: <CalendarClock size={32} />,
-                    path: '/portaria/agenda',
-                    perm: 'PORTARIA_AGENDAR',
-                    color: '#2563eb' // Blue
+                    title: 'Painel de Recebimentos',
+                    desc: 'Visão gerencial de todas as notas.',
+                    icon: <ListChecks size={32} />,
+                    path: '/recebimento/lista',
+                    perm: 'RECEBIMENTO_VISUALIZAR',
+                    color: '#2563eb'
                 }
             ]
         },
         {
-            title: 'Operação Diária',
-            subtitle: 'Controle de acessos',
+            title: 'Operação',
+            subtitle: 'Execução de tarefas operacionais',
             items: [
                 {
-                    title: 'Portaria',
-                    desc: 'Check-in e Check-out de veículos.',
-                    icon: <Construction size={32} />,
-                    path: '/portaria/operacao',
-                    perm: 'PORTARIA_OPERAR',
-                    color: '#16a34a' // Green
+                    title: 'Conferências de entrada',
+                    desc: 'Visualizar fila de trabalho e iniciar bipagem.',
+                    icon: <ClipboardList size={32} />,
+                    path: '/recebimento/tarefas', // <--- Rota Nova
+                    perm: 'RECEBIMENTO_CONFERIR',
+                    color: '#f59e0b' // Amber/Orange
                 }
             ]
         },
         {
-            title: 'Gestão & Configuração',
-            subtitle: 'Cadastros básicos e regras de portaria',
+            title: 'Qualidade',
+            subtitle: 'Tratativa de exceções',
             items: [
                 {
-                    title: 'Gestão de Turnos',
-                    desc: 'Configurar janelas de tempo e dias.',
-                    icon: <Settings2 size={32} />,
-                    path: '/portaria/turnos',
-                    perm: 'PORTARIA_GERENCIAR',
-                    color: '#d97706' // Amber
+                    title: 'Divergências',
+                    desc: 'Aprovar ou recusar diferenças.',
+                    icon: <AlertTriangle size={32} />,
+                    path: '/recebimento/divergencias',
+                    perm: 'RECEBIMENTO_FINALIZAR',
+                    color: '#dc2626'
                 }
             ]
         }
@@ -64,10 +55,10 @@ const PortariaMenu = () => {
         <Box>
             <Box mb={4}>
                 <Typography variant="h5" fontWeight="bold" display="flex" alignItems="center" gap={1}>
-                    <Truck size={28} /> Central de Portaria
+                    Central de Recebimento
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                    Gestão de pátio, agenda e controle de acesso.
+                    Gestão de Entradas: NFe, Conferência e Qualidade.
                 </Typography>
             </Box>
 
@@ -85,14 +76,13 @@ const PortariaMenu = () => {
                     <Grid container spacing={3}>
                         {section.items.map((item, i) => (
                             <Grid item xs={12} md={6} lg={4} key={i}>
-                                <Can permissions={item.perm} elseShow={null}>
+                                <Can permissions={item.perm}>
                                     <Paper
                                         elevation={0}
                                         sx={{
                                             p: 3, cursor: 'pointer',
                                             border: '1px solid #e2e8f0', borderRadius: 3,
-                                            position: 'relative', overflow: 'hidden',
-                                            transition: 'all 0.2s ease-in-out',
+                                            transition: 'all 0.2s',
                                             '&:hover': {
                                                 borderColor: item.color,
                                                 transform: 'translateY(-4px)',
@@ -104,8 +94,7 @@ const PortariaMenu = () => {
                                         <Box display="flex" alignItems="center" gap={2}>
                                             <Box sx={{
                                                 p: 1.5, borderRadius: 2,
-                                                bgcolor: `${item.color}10`,
-                                                color: item.color,
+                                                bgcolor: `${item.color}10`, color: item.color,
                                                 display: 'flex', alignItems: 'center', justifyContent: 'center'
                                             }}>
                                                 {item.icon}
@@ -130,4 +119,4 @@ const PortariaMenu = () => {
     );
 };
 
-export default PortariaMenu;
+export default RecebimentoMenu;

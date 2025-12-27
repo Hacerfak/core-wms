@@ -7,11 +7,15 @@ import br.com.hacerfak.coreWMS.modules.estoque.domain.*;
 import br.com.hacerfak.coreWMS.modules.estoque.event.EstoqueMovimentadoEvent; // <--- Importante
 import br.com.hacerfak.coreWMS.modules.estoque.repository.EstoqueSaldoRepository;
 import br.com.hacerfak.coreWMS.modules.estoque.repository.LocalizacaoRepository;
+import br.com.hacerfak.coreWMS.modules.estoque.repository.LpnRepository;
 import br.com.hacerfak.coreWMS.modules.estoque.repository.MovimentoEstoqueRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher; // <--- Importante
 import org.springframework.stereotype.Service;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
+import org.springframework.dao.OptimisticLockingFailureException;
 
 import java.math.BigDecimal;
 
@@ -23,9 +27,11 @@ public class EstoqueService {
     private final MovimentoEstoqueRepository movimentoRepository;
     private final ProdutoRepository produtoRepository;
     private final LocalizacaoRepository localizacaoRepository;
-    private final ApplicationEventPublisher eventPublisher; // <--- Injeção do Publicador
+    private final LpnRepository lpnRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
+    @Retryable(retryFor = { OptimisticLockingFailureException.class }, maxAttempts = 3, backoff = @Backoff(delay = 100))
     public void movimentar(Long produtoId, Long localId, BigDecimal quantidade,
             String lpn, String lote, String serial,
             StatusQualidade qualidade,
@@ -133,5 +139,38 @@ public class EstoqueService {
                 .observacao(obs)
                 .build();
         movimentoRepository.save(historico);
+    }
+
+    @Transactional
+    public void transferirLpnInteira(Lpn lpn, Localizacao destino, String usuario, String motivo) {
+        if (lpn == null || destino == null)
+            return;
+
+        Localizacao origem = lpn.getLocalizacaoAtual();
+
+        // 1. Atualiza a localização física da LPN
+        lpn.setLocalizacaoAtual(destino);
+        lpnRepository.save(lpn); // Opcional se estiver gerenciado, mas seguro
+        // descomentar se der erro
+
+        // 2. Busca os saldos dessa LPN na origem para mover
+        // Precisamos encontrar exatamente o que tem nessa LPN na Doca
+        // Como o método buscarSaldoExato retorna Optional, precisamos de uma lista se
+        // houver múltiplos itens (mix)
+        // Se o seu sistema garante 1 produto por LPN, ok. Se for mix, precisaria buscar
+        // uma lista.
+        // Assumindo estrutura padrão loopando nos itens da LPN é mais seguro:
+
+        for (LpnItem item : lpn.getItens()) {
+            // SAÍDA da Origem (Doca)
+            movimentar(item.getProduto().getId(), origem.getId(), item.getQuantidade(),
+                    lpn.getCodigo(), item.getLote(), item.getNumeroSerie(), item.getStatusQualidade(),
+                    TipoMovimento.SAIDA, usuario, motivo + " (Saída)");
+
+            // ENTRADA no Destino (Stage)
+            movimentar(item.getProduto().getId(), destino.getId(), item.getQuantidade(),
+                    lpn.getCodigo(), item.getLote(), item.getNumeroSerie(), item.getStatusQualidade(),
+                    TipoMovimento.ENTRADA, usuario, motivo + " (Entrada)");
+        }
     }
 }

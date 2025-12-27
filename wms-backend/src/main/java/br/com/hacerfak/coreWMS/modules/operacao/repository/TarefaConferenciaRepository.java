@@ -18,4 +18,14 @@ public interface TarefaConferenciaRepository extends JpaRepository<TarefaConfere
 
     // Tarefas sem atribuição (livres)
     List<TarefaConferencia> findByUsuarioAtribuidoIsNullAndStatus(StatusTarefa status);
+
+    List<TarefaConferencia> findBySolicitacaoPaiIdAndStatus(Long solicitacaoId, StatusTarefa status);
+
+    List<TarefaConferencia> findByStatusIn(List<StatusTarefa> status);
+
+    List<TarefaConferencia> findByUsuarioAtribuidoAndStatusIn(String usuario, List<StatusTarefa> status);
+
+    List<TarefaConferencia> findByUsuarioAtribuidoIsNullAndStatusIn(List<StatusTarefa> status);
+
+    List<TarefaConferencia> findBySolicitacaoPaiId(Long solicitacaoId);
 }

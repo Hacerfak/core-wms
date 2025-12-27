@@ -2,6 +2,10 @@ package br.com.hacerfak.coreWMS.modules.operacao.domain;
 
 import br.com.hacerfak.coreWMS.core.domain.workflow.Solicitacao;
 import br.com.hacerfak.coreWMS.modules.cadastro.domain.Parceiro;
+import br.com.hacerfak.coreWMS.modules.estoque.domain.Localizacao;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
@@ -33,6 +37,11 @@ public class SolicitacaoEntrada extends Solicitacao {
 
     private LocalDateTime dataEmissao;
 
+    @ManyToOne
+    @JoinColumn(name = "doca_id")
+    @JsonIgnoreProperties({ "area", "armazem", "hibernateLazyInitializer", "handler" })
+    private Localizacao doca;
+
     // Itens Previstos (XML)
     @Builder.Default
     @OneToMany(mappedBy = "solicitacao", cascade = CascadeType.ALL, orphanRemoval = true)
@@ -41,5 +50,6 @@ public class SolicitacaoEntrada extends Solicitacao {
     // Tarefas vinculadas a esta solicitação (Conferência, Inspeção, etc)
     @Builder.Default
     @OneToMany(mappedBy = "solicitacaoPai", cascade = CascadeType.ALL)
+    @JsonIgnore
     private List<TarefaConferencia> tarefasConferencia = new ArrayList<>();
 }

@@ -14,6 +14,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -33,6 +35,7 @@ public class UsuarioService {
     private final AuditService auditService;
 
     // --- HELPERS ---
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     private <T> T callAsMaster(java.util.function.Supplier<T> action) {
         String original = TenantContext.getTenant();
         try {
@@ -46,6 +49,7 @@ public class UsuarioService {
         }
     }
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     private void runAsMaster(Runnable action) {
         String original = TenantContext.getTenant();
         try {

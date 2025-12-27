@@ -1,8 +1,10 @@
 package br.com.hacerfak.coreWMS.modules.portaria.controller;
 
 import br.com.hacerfak.coreWMS.core.exception.EntityNotFoundException;
+import br.com.hacerfak.coreWMS.modules.estoque.domain.Localizacao;
 import br.com.hacerfak.coreWMS.modules.expedicao.domain.SolicitacaoSaida;
 import br.com.hacerfak.coreWMS.modules.expedicao.repository.SolicitacaoSaidaRepository;
+import br.com.hacerfak.coreWMS.modules.operacao.service.RecebimentoWorkflowService;
 import br.com.hacerfak.coreWMS.modules.portaria.domain.Agendamento;
 import br.com.hacerfak.coreWMS.modules.portaria.domain.StatusAgendamento;
 import br.com.hacerfak.coreWMS.modules.portaria.domain.Turno;
@@ -36,6 +38,7 @@ public class PortariaController {
     private final AgendamentoRepository agendamentoRepository;
     private final AnexoService anexoService;
     private final SolicitacaoSaidaRepository solicitacaoSaidaRepository;
+    private final RecebimentoWorkflowService recebimentoWorkflowService;
 
     // =================================================================================
     // 1. GESTÃO DE TURNOS
@@ -140,7 +143,8 @@ public class PortariaController {
             @PathVariable String codigoReserva,
             @RequestParam String placa,
             @RequestParam String motorista,
-            @RequestParam String cpf) {
+            @RequestParam String cpf,
+            @RequestParam(required = false) Long docaId) { // <--- Parâmetro Doca
 
         Agendamento agendamento = agendamentoRepository.findByCodigoReserva(codigoReserva)
                 .orElseThrow(() -> new EntityNotFoundException("Reserva não encontrada: " + codigoReserva));
@@ -149,11 +153,35 @@ public class PortariaController {
             throw new IllegalStateException("Status inválido para check-in. Status atual: " + agendamento.getStatus());
         }
 
+        // 1. Atualiza Doca no Agendamento (se informada no Check-in)
+        if (docaId != null) {
+            Localizacao doca = new Localizacao();
+            doca.setId(docaId);
+            agendamento.setDoca(doca);
+        }
+
+        // 2. PROPAGAÇÃO E GATILHO DE WORKFLOW (A Correção Principal)
+        if (agendamento.getSolicitacaoEntrada() != null) {
+            // Se tem doca (seja definida agora ou no agendamento prévio)
+            if (agendamento.getDoca() != null) {
+                // Chama o serviço que: Seta a Doca na Solicitação + Muda Status para AGUARDANDO
+                // + Gera Tarefa
+                recebimentoWorkflowService.atribuirDoca(
+                        agendamento.getSolicitacaoEntrada().getId(),
+                        agendamento.getDoca().getId());
+            }
+        }
+        // Futuro: Lógica similar para Saída/Expedição se necessário
+
         agendamento.setDataChegada(LocalDateTime.now());
         agendamento.setPlacaVeiculo(placa);
         agendamento.setNomeMotoristaAvulso(motorista);
         agendamento.setCpfMotoristaAvulso(cpf);
-        agendamento.setStatus(StatusAgendamento.NA_PORTARIA);
+        agendamento.setStatus(StatusAgendamento.NA_PORTARIA); // Ou NA_DOCA se já foi direto
+
+        // Se já tiver doca, podemos considerar status NA_DOCA direto?
+        // Geralmente Check-in é "Entrou no Pátio". O "Encostou na Doca" é outro evento.
+        // Vamos manter NA_PORTARIA, mas a doca já fica reservada.
 
         return ResponseEntity.ok(agendamentoRepository.save(agendamento));
     }

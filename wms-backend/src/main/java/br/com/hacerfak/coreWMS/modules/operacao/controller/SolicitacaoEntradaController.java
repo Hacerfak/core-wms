@@ -4,11 +4,13 @@ import br.com.hacerfak.coreWMS.core.domain.workflow.StatusTarefa;
 import br.com.hacerfak.coreWMS.modules.operacao.domain.SolicitacaoEntrada;
 import br.com.hacerfak.coreWMS.modules.operacao.domain.TarefaConferencia;
 import br.com.hacerfak.coreWMS.modules.operacao.dto.GerarLpnMassaRequest;
+import br.com.hacerfak.coreWMS.modules.operacao.dto.ProgressoRecebimentoDTO;
 import br.com.hacerfak.coreWMS.modules.operacao.dto.SolicitacaoEntradaResumoDTO;
 import br.com.hacerfak.coreWMS.modules.operacao.repository.SolicitacaoEntradaRepository;
 import br.com.hacerfak.coreWMS.modules.operacao.repository.TarefaConferenciaRepository;
 import br.com.hacerfak.coreWMS.modules.operacao.service.RecebimentoWorkflowService;
 import br.com.hacerfak.coreWMS.modules.operacao.service.NfeImportService;
+import br.com.hacerfak.coreWMS.modules.estoque.domain.Lpn;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
@@ -73,22 +75,20 @@ public class SolicitacaoEntradaController {
             Authentication auth,
             @RequestParam(required = false) Boolean somenteMinhas,
             @RequestParam(required = false) Boolean semAtribuicao) {
-        // Define o status alvo
-        StatusTarefa statusAlvo = StatusTarefa.PENDENTE;
+
+        List<StatusTarefa> statusAtivos = List.of(StatusTarefa.PENDENTE, StatusTarefa.EM_EXECUCAO);
+
+        List<TarefaConferencia> tarefas;
 
         if (Boolean.TRUE.equals(somenteMinhas)) {
-            // CORREÇÃO: Usando a variável 'statusAlvo' ao invés do Enum direto
-            return ResponseEntity.ok(tarefaRepository.findByUsuarioAtribuidoAndStatus(auth.getName(), statusAlvo));
+            tarefas = tarefaRepository.findByUsuarioAtribuidoAndStatusIn(auth.getName(), statusAtivos);
+        } else if (Boolean.TRUE.equals(semAtribuicao)) {
+            tarefas = tarefaRepository.findByUsuarioAtribuidoIsNullAndStatusIn(statusAtivos);
+        } else {
+            tarefas = tarefaRepository.findByStatusIn(statusAtivos);
         }
 
-        if (Boolean.TRUE.equals(semAtribuicao)) {
-            // CORREÇÃO: Usando a variável 'statusAlvo'
-            return ResponseEntity.ok(tarefaRepository.findByUsuarioAtribuidoIsNullAndStatus(statusAlvo));
-        }
-
-        // Padrão: Todas as pendentes
-        // CORREÇÃO: Usando a variável 'statusAlvo'
-        return ResponseEntity.ok(tarefaRepository.findByStatus(statusAlvo));
+        return ResponseEntity.ok(tarefas);
     }
 
     /**
@@ -123,7 +123,82 @@ public class SolicitacaoEntradaController {
         return ResponseEntity.ok(lpns);
     }
 
-    // OBS: Os endpoints de "Bipar Produto" (gerarVolume) e "Finalizar"
-    // serão reimplementados na próxima etapa, focados na TarefaConferencia
-    // e não mais no ID da Nota Fiscal.
+    // --- GESTÃO DE LPNs NA CONFERÊNCIA ---
+
+    @GetMapping("/{id}/lpns")
+    @PreAuthorize("hasAuthority('RECEBIMENTO_VISUALIZAR') or hasRole('ADMIN')")
+    public ResponseEntity<List<Lpn>> listarLpnsDaSolicitacao(@PathVariable Long id) {
+        return ResponseEntity.ok(inboundWorkflowService.listarLpnsPorSolicitacao(id));
+    }
+
+    @DeleteMapping("/{id}/lpns/{lpnId}")
+    @PreAuthorize("hasAuthority('RECEBIMENTO_CONFERIR') or hasRole('ADMIN')")
+    public ResponseEntity<Void> estornarLpn(
+            @PathVariable Long id,
+            @PathVariable Long lpnId,
+            Authentication auth) {
+
+        inboundWorkflowService.estornarLpn(id, lpnId, auth.getName());
+        return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/{id}/progresso")
+    public ResponseEntity<ProgressoRecebimentoDTO> getProgresso(@PathVariable Long id) {
+        return ResponseEntity.ok(inboundWorkflowService.getProgresso(id));
+    }
+
+    @GetMapping("/{id}/config-conferencia")
+    @PreAuthorize("hasAuthority('RECEBIMENTO_VISUALIZAR') or hasRole('ADMIN')")
+    public ResponseEntity<Boolean> consultarConfigConferencia(@PathVariable Long id) {
+        boolean isCega = inboundWorkflowService.isConferenciaCega(id);
+        return ResponseEntity.ok(isCega);
+    }
+
+    @PostMapping("/{id}/finalizar")
+    @PreAuthorize("hasAuthority('RECEBIMENTO_FINALIZAR') or hasRole('ADMIN')")
+    public ResponseEntity<Void> finalizar(@PathVariable Long id, @RequestParam Long stageId, Authentication auth) {
+        // Busca a tarefa de conferência pendente/em execução desta solicitação
+        // Como simplificação, pegamos a primeira ativa (já que a relação é 1:N mas o
+        // fluxo atual é linear)
+        TarefaConferencia tarefa = tarefaRepository.findBySolicitacaoPaiIdAndStatus(id, StatusTarefa.EM_EXECUCAO)
+                .stream().findFirst()
+                .or(() -> tarefaRepository.findBySolicitacaoPaiIdAndStatus(id, StatusTarefa.PENDENTE).stream()
+                        .findFirst())
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Nenhuma tarefa de conferência ativa encontrada para esta solicitação."));
+
+        // Chama o serviço de workflow para concluir
+        inboundWorkflowService.concluirConferencia(tarefa.getId(), stageId, auth.getName());
+
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/{id}/cancelar")
+    @PreAuthorize("hasAuthority('RECEBIMENTO_CANCELAR') or hasRole('ADMIN')")
+    public ResponseEntity<Void> cancelar(@PathVariable Long id, Authentication auth) {
+        // CORREÇÃO: Chamada do serviço implementada
+        inboundWorkflowService.cancelarRecebimento(id, auth.getName());
+        return ResponseEntity.ok().build();
+    }
+
+    @PutMapping("/{id}/atribuir-doca")
+    @PreAuthorize("hasAuthority('RECEBIMENTO_EDITAR') or hasRole('ADMIN')")
+    public ResponseEntity<Void> atribuirDoca(@PathVariable Long id, @RequestParam Long docaId) {
+        inboundWorkflowService.atribuirDoca(id, docaId);
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/{id}/resetar")
+    @PreAuthorize("hasAuthority('RECEBIMENTO_CONFERIR') or hasRole('ADMIN')")
+    public ResponseEntity<Void> resetarConferencia(@PathVariable Long id, Authentication auth) {
+        inboundWorkflowService.resetarConferencia(id, auth.getName());
+        return ResponseEntity.ok().build();
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAuthority('RECEBIMENTO_EXCLUIR') or hasRole('ADMIN')")
+    public ResponseEntity<Void> excluirSolicitacao(@PathVariable Long id, Authentication auth) {
+        inboundWorkflowService.excluirSolicitacao(id, auth.getName());
+        return ResponseEntity.noContent().build();
+    }
 }
