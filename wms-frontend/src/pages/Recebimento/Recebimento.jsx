@@ -83,18 +83,13 @@ const Recebimento = () => {
             });
 
             toast.success(`Nota ${previewData.nNF} importada com sucesso!`);
-            // Limpa tudo após sucesso
-            setFile(null);
-            setPreviewData(null);
-
-            // Opcional: Navegar para a lista ou detalhes
-            //navigate('/recebimentos');
+            // CORREÇÃO: Redireciona para a lista para ver a nova entrada e atribuir doca
+            navigate('/recebimento/lista');
 
         } catch (error) {
             console.error(error);
             const msg = error.response?.data?.message || "Erro ao importar nota.";
             toast.error(msg);
-        } finally {
             setLoading(false);
         }
     };

@@ -17,6 +17,8 @@ import br.com.hacerfak.coreWMS.modules.operacao.event.EntradaFinalizadaEvent;
 import br.com.hacerfak.coreWMS.modules.faturamento.dto.FaturamentoEvent;
 import br.com.hacerfak.coreWMS.modules.sistema.repository.SistemaConfigRepository;
 import br.com.hacerfak.coreWMS.modules.operacao.repository.*;
+import br.com.hacerfak.coreWMS.modules.portaria.domain.Agendamento;
+import br.com.hacerfak.coreWMS.modules.portaria.repository.AgendamentoRepository;
 import br.com.hacerfak.coreWMS.modules.estoque.domain.Localizacao;
 import br.com.hacerfak.coreWMS.modules.estoque.domain.Lpn;
 import br.com.hacerfak.coreWMS.modules.estoque.domain.LpnItem;
@@ -53,6 +55,7 @@ public class RecebimentoWorkflowService {
         private final SistemaConfigRepository sistemaConfigRepository;
         private final LocalizacaoRepository localizacaoRepository;
         private final EstoqueService estoqueService;
+        private final AgendamentoRepository agendamentoRepository;
 
         // 1. Início: Criar Solicitação
         @Transactional
@@ -71,22 +74,65 @@ public class RecebimentoWorkflowService {
         // Método chamado pelo Listener (Assíncrono)
         @Transactional
         public void processarInicioEntrada(Long solicitacaoId) {
-                SolicitacaoEntrada solicitacao = solicitacaoRepo.findById(solicitacaoId)
-                                .orElseThrow(() -> new EntityNotFoundException(
-                                                "Solicitação não encontrada no processamento async"));
+                log.info("Solicitação #{} registrada. Aguardando chegada na doca.", solicitacaoId);
+        }
 
-                boolean isCega = solicitacao.getFornecedor().isRecebimentoCego();
+        // PASSO 1: Apenas atribui a Doca (Planejamento) - Não gera tarefas
+        @Transactional
+        public void vincularDoca(Long solicitacaoId, Long docaId) {
+                SolicitacaoEntrada sol = solicitacaoRepo.findById(solicitacaoId)
+                                .orElseThrow(() -> new EntityNotFoundException("Solicitação não encontrada"));
 
-                TarefaConferencia tarefa = TarefaConferencia.builder()
-                                .solicitacaoPai(solicitacao)
-                                .cega(isCega)
-                                .build();
-                tarefa.setStatus(StatusTarefa.PENDENTE);
-                tarefaRepo.save(tarefa);
+                Localizacao doca = localizacaoRepository.findById(docaId)
+                                .orElseThrow(() -> new EntityNotFoundException("Doca não encontrada"));
 
-                solicitacao.setStatus(StatusSolicitacao.EM_PROCESSAMENTO);
-                solicitacaoRepo.save(solicitacao);
-                log.info("Processamento async da solicitação #{} concluído. Tarefa gerada.", solicitacaoId);
+                // Verifica se a doca está ocupada fisicamente (NA_DOCA) por OUTRO veículo
+                // Se for o mesmo veículo (re-atribuição), permite.
+                boolean ocupada = agendamentoRepository.isDocaOcupada(docaId);
+                // Em um cenário real, validariamos se a ocupação é de outra solicitação,
+                // mas aqui vamos simplificar: se está NA_DOCA, está ocupada.
+                if (ocupada && (sol.getDoca() == null || !sol.getDoca().getId().equals(docaId))) {
+                        // Aviso: Doca ocupada fisicamente. Mas como é planejamento, poderiamos permitir
+                        // "reservar".
+                        // Vamos permitir atribuir, mas o "Encostar" falhará depois se ainda estiver
+                        // ocupada.
+                }
+
+                sol.setDoca(doca);
+                solicitacaoRepo.save(sol);
+        }
+
+        // PASSO 2: Veículo Encostou -> Gera Tarefas e Muda Status
+        @Transactional
+        public void confirmarInicioOperacao(Long solicitacaoId) {
+                SolicitacaoEntrada sol = solicitacaoRepo.findById(solicitacaoId)
+                                .orElseThrow(() -> new EntityNotFoundException("Solicitação não encontrada"));
+
+                if (sol.getDoca() == null) {
+                        throw new IllegalStateException("É necessário atribuir uma doca antes de iniciar.");
+                }
+
+                if (sol.getTarefasConferencia().isEmpty()) {
+                        boolean isCega = sol.getFornecedor() != null && sol.getFornecedor().isRecebimentoCego();
+
+                        TarefaConferencia tarefa = TarefaConferencia.builder()
+                                        .solicitacaoPai(sol)
+                                        .cega(isCega)
+                                        .build();
+                        tarefa.setStatus(StatusTarefa.PENDENTE);
+                        tarefaRepo.save(tarefa);
+
+                        sol.setStatus(StatusSolicitacao.AGUARDANDO_EXECUCAO);
+                        solicitacaoRepo.save(sol);
+                        log.info("Veículo encostou. Tarefa gerada para Solicitação #{}", sol.getId());
+                }
+        }
+
+        // Mantido método de conveniência para fluxo direto (Manual)
+        @Transactional
+        public void atribuirDocaEIniciar(Long solicitacaoId, Long docaId) {
+                vincularDoca(solicitacaoId, docaId);
+                confirmarInicioOperacao(solicitacaoId);
         }
 
         private void gerarTarefaConferencia(SolicitacaoEntrada solicitacao, StatusTarefa statusInicial) {
@@ -206,7 +252,6 @@ public class RecebimentoWorkflowService {
                 finalizarSolicitacao(solicitacao, usuario);
         }
 
-        // --- MÉTODO CORRIGIDO ---
         private void finalizarSolicitacao(SolicitacaoEntrada solicitacao, String usuario) {
                 boolean temDivergencia = false;
 
@@ -281,7 +326,7 @@ public class RecebimentoWorkflowService {
                 return lpnRepository.findBySolicitacaoEntradaIdAndStatus(solicitacaoId, StatusLpn.FECHADO);
         }
 
-        // --- NOVA LÓGICA: RESETAR CONFERÊNCIA (Botão "Cancelar" na tela de
+        // --- RESETAR CONFERÊNCIA (Botão "Cancelar" na tela de
         // conferência) ---
         @Transactional
         public void resetarConferencia(Long id, String usuario) {
@@ -488,96 +533,53 @@ public class RecebimentoWorkflowService {
         }
 
         @Transactional
-        public void atribuirDoca(Long solicitacaoId, Long docaId) {
-                SolicitacaoEntrada sol = solicitacaoRepo.findById(solicitacaoId)
-                                .orElseThrow(() -> new EntityNotFoundException("Solicitação não encontrada"));
-
-                if (sol.isConcluida()) {
-                        throw new IllegalStateException("Não é possível alterar doca de solicitação concluída.");
-                }
-
-                Localizacao doca = localizacaoRepository.findById(docaId)
-                                .orElseThrow(() -> new EntityNotFoundException("Doca não encontrada"));
-
-                sol.setDoca(doca);
-                sol.setStatus(StatusSolicitacao.AGUARDANDO_EXECUCAO);
-                solicitacaoRepo.save(sol);
-
-                // --- LÓGICA DE TAREFA ÚNICA ---
-                // Busca se JÁ EXISTE alguma tarefa para esta solicitação que não esteja
-                // cancelada
-                TarefaConferencia tarefaExistente = tarefaRepo.findBySolicitacaoPaiId(sol.getId()).stream()
-                                .filter(t -> t.getStatus() != StatusTarefa.CANCELADA)
-                                .findFirst()
-                                .orElse(null);
-
-                if (tarefaExistente != null) {
-                        // Se já existe, apenas atualiza o status para AGUARDANDO (se não estiver
-                        // finalizada)
-                        if (tarefaExistente.getStatus() != StatusTarefa.CONCLUIDA) {
-                                tarefaExistente.setStatus(StatusTarefa.PENDENTE);
-                                tarefaRepo.save(tarefaExistente);
-                        }
-                } else {
-                        // Só cria se realmente não existir nenhuma
-                        gerarTarefaConferencia(sol, StatusTarefa.PENDENTE);
-                }
-        }
-
-        @Transactional
         public void cancelarRecebimento(Long id, String usuario) {
                 SolicitacaoEntrada solicitacao = solicitacaoRepo.findById(id)
                                 .orElseThrow(() -> new EntityNotFoundException("Solicitação não encontrada"));
 
-                // 1. Validação: Não pode cancelar se já foi concluída
                 if (solicitacao.getStatus() == StatusSolicitacao.CONCLUIDA) {
-                        throw new IllegalStateException(
-                                        "Não é possível cancelar um recebimento já concluído (Estoque consolidado).");
+                        throw new IllegalStateException("Não é possível cancelar recebimento concluído.");
                 }
 
-                // 2. Verifica se existem LPNs geradas e se elas já foram armazenadas
+                // Validação de Estoque Físico
                 List<Lpn> lpns = lpnRepository.findBySolicitacaoEntradaIdAndStatus(id, StatusLpn.ARMAZENADO);
                 if (!lpns.isEmpty()) {
-                        throw new IllegalStateException(
-                                        "Existem LPNs já armazenadas no estoque. Faça o estorno individual ou saída manual antes de cancelar.");
+                        throw new IllegalStateException("Existem LPNs armazenadas. Faça o estorno antes.");
                 }
 
-                // 3. Limpeza de LPNs na Doca (Estorno em massa)
-                // Se houver LPNs na Doca (não armazenadas), podemos apagar
+                // Limpeza de LPNs na Doca
                 List<Lpn> lpnsNaDoca = lpnRepository.findBySolicitacaoEntradaIdAndStatus(id, StatusLpn.FECHADO);
                 lpnsNaDoca.addAll(lpnRepository.findBySolicitacaoEntradaIdAndStatus(id, StatusLpn.EM_MONTAGEM));
 
                 for (Lpn lpn : lpnsNaDoca) {
-                        // Remove saldo da doca
                         if (lpn.getLocalizacaoAtual() != null) {
                                 estoqueService.movimentar(
                                                 lpn.getItens().get(0).getProduto().getId(),
                                                 lpn.getLocalizacaoAtual().getId(),
-                                                lpn.getItens().get(0).getQuantidade(),
-                                                lpn.getCodigo(),
-                                                lpn.getItens().get(0).getLote(),
-                                                null,
-                                                StatusQualidade.DISPONIVEL,
-                                                TipoMovimento.AJUSTE_NEGATIVO,
-                                                usuario,
-                                                "Cancelamento de Recebimento");
+                                                lpn.getItens().get(0).getQuantidade(), lpn.getCodigo(),
+                                                lpn.getItens().get(0).getLote(), null, StatusQualidade.DISPONIVEL,
+                                                TipoMovimento.AJUSTE_NEGATIVO, usuario, "Cancelamento");
                         }
                         lpnRepository.delete(lpn);
                 }
 
-                // 4. Cancelar Tarefas
-                List<TarefaConferencia> tarefas = tarefaRepo.findBySolicitacaoPaiIdAndStatus(id, StatusTarefa.PENDENTE);
-                tarefas.addAll(tarefaRepo.findBySolicitacaoPaiIdAndStatus(id, StatusTarefa.EM_EXECUCAO));
-
-                tarefas.forEach(t -> {
+                // Cancelar Tarefas
+                tarefaRepo.findBySolicitacaoPaiId(id).forEach(t -> {
                         t.setStatus(StatusTarefa.CANCELADA);
                         tarefaRepo.save(t);
                 });
 
-                // 5. Atualiza Status da Solicitação
+                // --- REGRA DE NEGÓCIO: DESVINCULAR DO AGENDAMENTO ---
+                // Se foi cancelada manualmente (pelo Inbound), ela solta o agendamento.
+                if (solicitacao.getAgendamento() != null) {
+                        Agendamento agendamento = solicitacao.getAgendamento();
+                        agendamento.setSolicitacaoEntrada(null);
+                        agendamentoRepository.save(agendamento);
+                        log.info("Solicitação #{} desvinculada do Agendamento #{}", id, agendamento.getId());
+                }
+
                 solicitacao.setStatus(StatusSolicitacao.CANCELADA);
                 solicitacaoRepo.save(solicitacao);
-
                 log.info("Recebimento {} cancelado por {}", id, usuario);
         }
 
@@ -586,45 +588,42 @@ public class RecebimentoWorkflowService {
                 SolicitacaoEntrada solicitacao = solicitacaoRepo.findById(id)
                                 .orElseThrow(() -> new EntityNotFoundException("Solicitação não encontrada"));
 
-                // Verifica estoque consolidado
                 boolean temEstoque = !lpnRepository.findBySolicitacaoEntradaIdAndStatus(id, StatusLpn.ARMAZENADO)
                                 .isEmpty();
 
                 if (temEstoque) {
-                        // Apenas cancela
-                        solicitacao.setStatus(StatusSolicitacao.CANCELADA);
-                        // Cancela a tarefa associada
-                        tarefaRepo.findBySolicitacaoPaiId(id).forEach(t -> {
-                                t.setStatus(StatusTarefa.CANCELADA);
-                                tarefaRepo.save(t);
-                        });
-                        solicitacaoRepo.save(solicitacao);
+                        // Se tem estoque, forçamos o cancelar em vez de excluir
+                        cancelarRecebimento(id, usuario);
                 } else {
                         // Remoção Física
-                        // 1. Limpa LPNs da doca e saldos
                         List<Lpn> lpnsSujas = lpnRepository.findBySolicitacaoEntradaIdAndStatus(id, StatusLpn.FECHADO);
                         lpnsSujas.addAll(lpnRepository.findBySolicitacaoEntradaIdAndStatus(id, StatusLpn.EM_MONTAGEM));
 
                         for (Lpn l : lpnsSujas) {
                                 if (l.getLocalizacaoAtual() != null) {
-                                        estoqueService.movimentar(
-                                                        l.getItens().get(0).getProduto().getId(),
+                                        estoqueService.movimentar(l.getItens().get(0).getProduto().getId(),
                                                         l.getLocalizacaoAtual().getId(),
-                                                        l.getItens().get(0).getQuantidade(), l.getCodigo(), null, null,
-                                                        StatusQualidade.DISPONIVEL, TipoMovimento.AJUSTE_NEGATIVO,
-                                                        usuario, "Exclusão");
+                                                        l.getItens().get(0).getQuantidade(),
+                                                        l.getCodigo(), null, null, StatusQualidade.DISPONIVEL,
+                                                        TipoMovimento.AJUSTE_NEGATIVO, usuario, "Exclusão");
                                 }
                                 lpnRepository.delete(l);
                         }
 
-                        // 2. Remove Tarefas antes de remover a solicitação (se não for Cascade)
-                        // Se estiver cascade no @OneToMany da Solicitação, o delete da solicitação
-                        // resolve.
-                        // Por segurança:
+                        // --- REGRA DE NEGÓCIO: DESVINCULAR DO AGENDAMENTO ---
+                        // O filho "morre" (é excluído), mas o pai (agendamento) continua vivo.
+                        if (solicitacao.getAgendamento() != null) {
+                                Agendamento agendamento = solicitacao.getAgendamento();
+                                agendamento.setSolicitacaoEntrada(null);
+                                agendamentoRepository.save(agendamento); // Persiste a quebra do vínculo
+                        }
+
+                        // Remove Tarefas
                         List<TarefaConferencia> tarefas = tarefaRepo.findBySolicitacaoPaiId(id);
                         tarefaRepo.deleteAll(tarefas);
 
                         solicitacaoRepo.delete(solicitacao);
+                        log.info("Solicitação #{} excluída por {}", id, usuario);
                 }
         }
 }

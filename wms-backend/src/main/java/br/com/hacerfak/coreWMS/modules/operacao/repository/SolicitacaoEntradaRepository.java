@@ -32,9 +32,13 @@ public interface SolicitacaoEntradaRepository extends JpaRepository<SolicitacaoE
                    s.dataCriacao,
                    s.dataEmissao,
                    d.id,
-                   d.enderecoCompleto
+                   d.enderecoCompleto,
+                   a.id,
+                   a.status,
+                   a.placaVeiculo
                )
                FROM SolicitacaoEntrada s
+               LEFT JOIN s.agendamento a
                LEFT JOIN s.doca d
                ORDER BY s.id DESC
             """)

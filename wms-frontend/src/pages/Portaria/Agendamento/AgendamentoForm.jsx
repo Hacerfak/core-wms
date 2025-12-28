@@ -1,291 +1,344 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import {
-    Dialog, DialogTitle, DialogContent, DialogActions, Button,
-    TextField, Grid, MenuItem, Typography, Alert, Box, Fade,
-    CircularProgress, Stepper, Step, StepLabel, Paper, Divider
+    Box, Stepper, Step, StepLabel, Button, Typography,
+    Grid, TextField, FormControl, InputLabel, Select, MenuItem,
+    Alert, Dialog, DialogTitle, DialogContent, DialogActions, IconButton
 } from '@mui/material';
 import { toast } from 'react-toastify';
-import dayjs from 'dayjs';
-import 'dayjs/locale/pt-br';
-import { criarAgendamento, getTurnos, getSaidasPendentes } from '../../../services/portariaService';
+import api from '../../../services/api';
+import SearchableSelect from '../../../components/SearchableSelect'; // Supondo que este componente usa Autocomplete ou Select do MUI
 import { getParceiros } from '../../../services/parceiroService';
-import { getLocalizacoes } from '../../../services/localizacaoService';
-import SearchableSelect from '../../../components/SearchableSelect';
-import { CheckCircle2, AlertCircle, Truck, Package, CalendarClock, MapPin } from 'lucide-react';
+import { getTurnos } from '../../../services/portariaService';
+import { Save, ArrowRight, ArrowLeft, Truck, Calendar, X } from 'lucide-react';
 
-const DIAS_SEMANA_MAP = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB'];
-const STEPS = ['Horário & Turno', 'Dados da Carga', 'Localização (Doca)'];
+const steps = ['Dados do Agendamento', 'Veículo e Transportadora'];
 
-const AgendamentoForm = ({ open, onClose, onSuccess, dataInicial }) => {
+// Helper para formatar Data
+const formatDateTime = (date) => {
+    if (!date) return '';
+    const d = new Date(date);
+    const pad = (n) => n.toString().padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
+const AgendamentoForm = ({ open, onClose, onSuccess, dataInicial, agendamentoId }) => {
+    const isEdit = !!agendamentoId;
     const [activeStep, setActiveStep] = useState(0);
     const [loading, setLoading] = useState(false);
-    const [validatingTurno, setValidatingTurno] = useState(false);
 
-    // Combos
+    // Listas
+    const [transportadoras, setTransportadoras] = useState([]);
     const [turnos, setTurnos] = useState([]);
-    const [parceiros, setParceiros] = useState([]); // Transportadoras
-    const [depositantes, setDepositantes] = useState([]); // Depositantes
-    const [docas, setDocas] = useState([]);
-    const [saidasPendentes, setSaidasPendentes] = useState([]); // Lista de pedidos para saída
 
-    // Estado do Turno
-    const [turnoDetectado, setTurnoDetectado] = useState(null);
-    const [erroTurno, setErroTurno] = useState(null);
-
-    const [form, setForm] = useState({
+    const [formData, setFormData] = useState({
         tipo: 'ENTRADA',
-        data: dayjs().format('YYYY-MM-DD'),
-        horaInicio: '',
-
-        transportadoraId: '',
-        depositanteId: '', // Para entrada manual
-        solicitacaoSaidaId: '', // Para saída
-
+        dataInicio: '',
+        dataFim: '',
+        turnoId: '',
         placa: '',
-        motorista: '',
-        cpf: '',
-
-        docaId: '',
-        turnoId: ''
+        motoristaNome: '',
+        motoristaCpf: '',
+        transportadoraId: '',
+        docaId: null
     });
 
+    // Resetar form ao abrir
     useEffect(() => {
         if (open) {
-            carregarDependencias();
             setActiveStep(0);
-            if (dataInicial) setForm(prev => ({ ...prev, ...dataInicial }));
-            setTurnoDetectado(null);
-        }
-    }, [open, dataInicial]);
+            loadDependencies();
 
-    // Validação de Turno (Passo 1)
-    useEffect(() => {
-        if (form.data && form.horaInicio && turnos.length > 0) {
-            validarDisponibilidade();
-        } else {
-            setTurnoDetectado(null);
-        }
-    }, [form.data, form.horaInicio, turnos]);
-
-    const carregarDependencias = async () => {
-        try {
-            const [t, p, d, s] = await Promise.all([
-                getTurnos(),
-                getParceiros(),
-                getLocalizacoes('DOCA'),
-                getSaidasPendentes()
-            ]);
-            setTurnos(t);
-
-            // Separa parceiros
-            const transportadoras = p.filter(x => x.tipo === 'TRANSPORTADORA' || x.tipo === 'AMBOS').map(x => ({ value: x.id, label: x.nome }));
-            const deps = p.filter(x => x.tipo === 'CLIENTE' || x.tipo === 'AMBOS').map(x => ({ value: x.id, label: x.nome }));
-
-            setParceiros(transportadoras);
-            setDepositantes(deps);
-            setDocas(d.map(x => ({ value: x.id, label: x.enderecoCompleto })));
-            setSaidasPendentes(s);
-
-        } catch (e) {
-            toast.error("Erro ao carregar dados.");
-        }
-    };
-
-    const validarDisponibilidade = () => {
-        setValidatingTurno(true);
-        setErroTurno(null);
-        setTimeout(() => {
-            const dataObj = dayjs(form.data);
-            const diaSemanaStr = DIAS_SEMANA_MAP[dataObj.day()];
-            const horaAgendada = form.horaInicio;
-
-            const turnoValido = turnos.find(t => {
-                if (!t.diasSemana || !t.diasSemana.includes(diaSemanaStr)) return false;
-                const inicioStr = t.inicio.substring(0, 5);
-                const fimStr = t.fim.substring(0, 5);
-                return horaAgendada >= inicioStr && horaAgendada <= fimStr;
-            });
-
-            if (turnoValido) {
-                setTurnoDetectado(turnoValido);
-                setForm(prev => ({ ...prev, turnoId: turnoValido.id }));
+            if (isEdit) {
+                loadAgendamento(agendamentoId);
             } else {
-                setErroTurno(`Sem turno operacional em ${diaSemanaStr} às ${horaAgendada}.`);
-                setTurnoDetectado(null);
+                // Configuração Inicial
+                const now = new Date();
+
+                if (dataInicial?.data && dataInicial.data !== formatDateTime(now).split('T')[0]) {
+                    const filterDate = new Date(dataInicial.data);
+                    filterDate.setHours(now.getHours(), now.getMinutes());
+                    now.setTime(filterDate.getTime());
+                }
+
+                const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
+
+                setFormData(prev => ({
+                    ...prev,
+                    tipo: 'ENTRADA',
+                    dataInicio: formatDateTime(now),
+                    dataFim: formatDateTime(oneHourLater),
+                    turnoId: '', // Será preenchido pelo autoSelect ou loadDependencies
+                    placa: '',
+                    motoristaNome: '',
+                    motoristaCpf: '',
+                    transportadoraId: '', // Será preenchido pelo loadDependencies se só houver 1
+                    docaId: null
+                }));
             }
-            setValidatingTurno(false);
-        }, 300);
+        }
+    }, [open, agendamentoId, dataInicial]);
+
+    // Lógica Automática de Turno (Monitora dataInicio)
+    useEffect(() => {
+        if (formData.dataInicio && turnos.length > 0 && !isEdit) {
+            autoSelectTurno(formData.dataInicio);
+        }
+    }, [formData.dataInicio, turnos, isEdit]);
+
+    const loadDependencies = async () => {
+        try {
+            const allParceiros = await getParceiros();
+            // Filtra apenas transportadoras
+            const transps = allParceiros
+                .filter(p => p.tipo === 'TRANSPORTADORA' || p.tipo === 'AMBOS')
+                .map(p => ({ value: p.id, label: p.nome }));
+            setTransportadoras(transps);
+
+            // Pré-seleção inteligente: Se houver transportadoras, seleciona a primeira (ou se só tiver uma)
+            // Se for edição, mantém o que veio do banco (tratado no loadAgendamento)
+            if (!isEdit && transps.length > 0) {
+                setFormData(prev => ({ ...prev, transportadoraId: transps[0].value }));
+            }
+
+            const turnosData = await getTurnos();
+            setTurnos(turnosData);
+        } catch (e) { console.error("Erro ao carregar listas", e); }
     };
 
-    const handleNext = () => {
-        // Validações antes de avançar
-        if (activeStep === 0) {
-            if (!turnoDetectado) return toast.warning("Selecione um horário válido dentro de um turno.");
-        }
-        if (activeStep === 1) {
-            if (form.tipo === 'SAIDA' && !form.solicitacaoSaidaId) return toast.warning("Selecione o pedido de saída.");
-            if (form.transportadoraId && !form.placa) return toast.warning("Se informou transportadora, a placa é obrigatória.");
-        }
-
-        setActiveStep((prev) => prev + 1);
-    };
-
-    const handleBack = () => setActiveStep((prev) => prev - 1);
-
-    const handleSave = async () => {
+    const loadAgendamento = async (id) => {
         setLoading(true);
         try {
-            const inicio = `${form.data}T${form.horaInicio}:00`;
-            const fim = dayjs(inicio).add(1, 'hour').format('YYYY-MM-DDTHH:mm:ss');
-
-            const payload = {
-                ...form,
-                dataInicio: inicio,
-                dataFim: fim,
-                placa: form.placa ? form.placa.toUpperCase() : '',
-                docaId: form.docaId || null
-            };
-
-            await criarAgendamento(payload);
-            toast.success("Agendamento realizado!");
-            onSuccess();
-            onClose();
+            const { data } = await api.get(`/api/portaria/agenda/${id}`);
+            setFormData({
+                ...data,
+                dataInicio: data.dataPrevistaInicio,
+                dataFim: data.dataPrevistaFim,
+                transportadoraId: data.transportadora?.id || '',
+                turnoId: data.turno?.id || '',
+                docaId: data.doca?.id || null
+            });
         } catch (e) {
-            toast.error(e.response?.data?.message || "Erro ao agendar.");
+            toast.error("Erro ao carregar dados.");
+            onClose();
         } finally {
             setLoading(false);
         }
     };
 
-    // --- RENDERIZAÇÃO DOS PASSOS ---
+    const autoSelectTurno = (dataInicioStr) => {
+        const date = new Date(dataInicioStr);
+        const minutes = date.getHours() * 60 + date.getMinutes();
 
-    const renderStep0 = () => (
-        <Grid container spacing={2}>
-            <Grid item xs={12}><Typography variant="subtitle2" color="primary">Definição de Horário</Typography></Grid>
-            <Grid item xs={12} sm={4}>
-                <TextField select label="Tipo de Operação" fullWidth value={form.tipo} onChange={e => setForm({ ...form, tipo: e.target.value })}>
-                    <MenuItem value="ENTRADA">Recebimento (Entrada)</MenuItem>
-                    <MenuItem value="SAIDA">Expedição (Saída)</MenuItem>
-                </TextField>
-            </Grid>
-            <Grid item xs={6} sm={4}>
-                <TextField type="date" label="Data" fullWidth InputLabelProps={{ shrink: true }} value={form.data} onChange={e => setForm({ ...form, data: e.target.value })} />
-            </Grid>
-            <Grid item xs={6} sm={4}>
-                <TextField type="time" label="Hora" fullWidth InputLabelProps={{ shrink: true }} value={form.horaInicio} onChange={e => setForm({ ...form, horaInicio: e.target.value })} />
-            </Grid>
-            <Grid item xs={12}>
-                {validatingTurno && <Box display="flex" gap={1}><CircularProgress size={16} /><Typography variant="caption">Validando turno...</Typography></Box>}
-                {turnoDetectado && <Alert severity="success" icon={<CheckCircle2 fontSize="inherit" />}>Turno: <strong>{turnoDetectado.nome}</strong> disponível.</Alert>}
-                {erroTurno && <Alert severity="error" icon={<AlertCircle fontSize="inherit" />}>{erroTurno}</Alert>}
-            </Grid>
-        </Grid>
-    );
+        const turnoEncontrado = turnos.find(t => {
+            const [h1, m1] = t.inicio.split(':').map(Number);
+            const [h2, m2] = t.fim.split(':').map(Number);
+            const start = h1 * 60 + m1;
+            const end = h2 * 60 + m2;
 
-    const renderStep1 = () => (
-        <Grid container spacing={2}>
-            <Grid item xs={12}><Typography variant="subtitle2" color="primary">Dados da Carga</Typography></Grid>
+            if (end < start) {
+                return minutes >= start || minutes <= end;
+            }
+            return minutes >= start && minutes <= end;
+        });
 
-            {/* CONDICIONAL: SAÍDA */}
-            {form.tipo === 'SAIDA' && (
-                <Grid item xs={12}>
-                    <TextField select label="Solicitação de Saída (Pedido)" fullWidth required value={form.solicitacaoSaidaId} onChange={e => setForm({ ...form, solicitacaoSaidaId: e.target.value })} helperText="Selecione o pedido pronto para despacho">
-                        {saidasPendentes.length === 0 && <MenuItem disabled>Nenhum pedido pendente</MenuItem>}
-                        {saidasPendentes.map(s => (
-                            <MenuItem key={s.id} value={s.id}>
-                                #{s.codigoExterno} - {s.cliente?.nome} ({s.rota || 'Sem rota'})
-                            </MenuItem>
-                        ))}
-                    </TextField>
-                </Grid>
-            )}
+        if (turnoEncontrado) {
+            setFormData(prev => ({ ...prev, turnoId: turnoEncontrado.id }));
+        } else if (turnos.length > 0 && !formData.turnoId) {
+            // Fallback: Se não casou horário, pega o primeiro da lista
+            setFormData(prev => ({ ...prev, turnoId: turnos[0].id }));
+        }
+    };
 
-            {/* CONDICIONAL: ENTRADA */}
-            {form.tipo === 'ENTRADA' && (
-                <Grid item xs={12}>
-                    <SearchableSelect
-                        label="Depositante / Fornecedor (Opcional)"
-                        options={depositantes}
-                        value={form.depositanteId}
-                        onChange={e => setForm({ ...form, depositanteId: e.target.value })}
-                        helperText="Será atualizado automaticamente ao subir o XML"
-                    />
-                </Grid>
-            )}
+    const handleNext = () => {
+        if (activeStep === 0) {
+            if (!formData.dataInicio || !formData.dataFim || !formData.tipo) {
+                return toast.warning("Preencha Data Início, Fim e Tipo.");
+            }
+            if (new Date(formData.dataFim) <= new Date(formData.dataInicio)) {
+                return toast.warning("Data Fim deve ser maior que Início.");
+            }
+        }
+        setActiveStep((prev) => prev + 1);
+    };
 
-            <Grid item xs={12}><Divider sx={{ my: 1 }}><Typography variant="caption">TRANSPORTE</Typography></Divider></Grid>
+    const handleBack = () => setActiveStep((prev) => prev - 1);
 
-            <Grid item xs={12} sm={8}>
-                <SearchableSelect label="Transportadora (Opcional)" options={parceiros} value={form.transportadoraId} onChange={e => setForm({ ...form, transportadoraId: e.target.value })} />
-            </Grid>
-            <Grid item xs={12} sm={4}>
-                <TextField label="Placa Veículo" fullWidth value={form.placa} onChange={e => setForm({ ...form, placa: e.target.value.toUpperCase() })} placeholder="ABC-1234" required={!!form.transportadoraId} />
-            </Grid>
-            <Grid item xs={12} sm={8}>
-                <TextField label="Nome Motorista (Opcional)" fullWidth value={form.motorista} onChange={e => setForm({ ...form, motorista: e.target.value })} />
-            </Grid>
-            <Grid item xs={12} sm={4}>
-                <TextField label="CPF Motorista" fullWidth value={form.cpf} onChange={e => setForm({ ...form, cpf: e.target.value })} />
-            </Grid>
-        </Grid>
-    );
+    const handleSubmit = async () => {
+        setLoading(true);
+        try {
+            const payload = { ...formData, docaId: null };
 
-    const renderStep2 = () => (
-        <Grid container spacing={2}>
-            <Grid item xs={12}><Typography variant="subtitle2" color="primary">Alocação de Doca</Typography></Grid>
-            <Grid item xs={12}>
-                <Alert severity="info" sx={{ mb: 2 }}>
-                    A definição da doca é opcional neste momento. Ela pode ser atribuída ou alterada durante o Check-in na portaria.
-                </Alert>
-                <TextField select label="Doca Sugerida" fullWidth value={form.docaId} onChange={e => setForm({ ...form, docaId: e.target.value })}>
-                    <MenuItem value=""><em>Definir na Chegada</em></MenuItem>
-                    {docas.map(d => <MenuItem key={d.value} value={d.value}>{d.label}</MenuItem>)}
-                </TextField>
-            </Grid>
-
-            <Grid item xs={12}>
-                <Paper variant="outlined" sx={{ p: 2, bgcolor: '#f8fafc', mt: 2 }}>
-                    <Typography variant="subtitle2" fontWeight="bold">Resumo:</Typography>
-                    <Box display="flex" gap={2} mt={1} flexWrap="wrap">
-                        <Typography variant="body2">📅 {dayjs(form.data).format('DD/MM/YYYY')} às {form.horaInicio}</Typography>
-                        <Typography variant="body2">🚛 {form.tipo}</Typography>
-                        {form.placa && <Typography variant="body2">🔢 Placa: {form.placa}</Typography>}
-                    </Box>
-                </Paper>
-            </Grid>
-        </Grid>
-    );
+            if (isEdit) {
+                await api.put(`/api/portaria/agenda/${agendamentoId}`, payload);
+                toast.success("Agendamento atualizado!");
+            } else {
+                await api.post('/api/portaria/agenda', payload);
+                toast.success("Agendamento criado com sucesso!");
+            }
+            onSuccess();
+        } catch (error) {
+            toast.error(error.response?.data?.message || "Erro ao salvar.");
+        } finally {
+            setLoading(false);
+        }
+    };
 
     return (
         <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-            <DialogTitle sx={{ borderBottom: '1px solid #e2e8f0' }}>
-                {dataInicial?.id ? 'Editar Agendamento' : 'Novo Agendamento'}
+            <DialogTitle display="flex" justifyContent="space-between" alignItems="center">
+                <Typography variant="h6" fontWeight="bold">
+                    {isEdit ? 'Editar Agendamento' : 'Novo Agendamento'}
+                </Typography>
+                <IconButton onClick={onClose} size="small"><X /></IconButton>
             </DialogTitle>
 
-            <DialogContent sx={{ pt: 3, minHeight: 400 }}>
-                <Stepper activeStep={activeStep} alternativeLabel sx={{ mb: 4 }}>
-                    {STEPS.map((label) => <Step key={label}><StepLabel>{label}</StepLabel></Step>)}
+            <DialogContent dividers>
+                <Stepper activeStep={activeStep} sx={{ mb: 4, mt: 1 }}>
+                    {steps.map((label) => (
+                        <Step key={label}><StepLabel>{label}</StepLabel></Step>
+                    ))}
                 </Stepper>
 
-                <Box sx={{ mt: 2 }}>
-                    {activeStep === 0 && renderStep0()}
-                    {activeStep === 1 && renderStep1()}
-                    {activeStep === 2 && renderStep2()}
+                <Box sx={{ minHeight: 300 }}>
+                    {/* ETAPA 1: DADOS GERAIS */}
+                    {activeStep === 0 && (
+                        <Grid container spacing={3}>
+                            <Grid item xs={12}>
+                                <Alert severity="info" icon={<Calendar size={20} />} sx={{ mb: 1 }}>
+                                    Defina a janela de tempo. O turno será ajustado automaticamente.
+                                </Alert>
+                            </Grid>
+                            <Grid item xs={12} md={4}>
+                                <FormControl fullWidth>
+                                    <InputLabel>Tipo de Operação</InputLabel>
+                                    <Select
+                                        value={formData.tipo}
+                                        label="Tipo de Operação"
+                                        onChange={(e) => setFormData({ ...formData, tipo: e.target.value })}
+                                        sx={{ height: 56 }} // Força altura padrão do Material UI (igual TextField)
+                                    >
+                                        <MenuItem value="ENTRADA">Recebimento (Entrada)</MenuItem>
+                                        <MenuItem value="SAIDA">Expedição (Saída)</MenuItem>
+                                    </Select>
+                                </FormControl>
+                            </Grid>
+                            <Grid item xs={12} md={4}>
+                                <TextField
+                                    label="Data/Hora Início"
+                                    type="datetime-local"
+                                    fullWidth
+                                    InputLabelProps={{ shrink: true }}
+                                    value={formData.dataInicio}
+                                    onChange={(e) => setFormData({ ...formData, dataInicio: e.target.value })}
+                                />
+                            </Grid>
+                            <Grid item xs={12} md={4}>
+                                <TextField
+                                    label="Data/Hora Fim"
+                                    type="datetime-local"
+                                    fullWidth
+                                    InputLabelProps={{ shrink: true }}
+                                    value={formData.dataFim}
+                                    onChange={(e) => setFormData({ ...formData, dataFim: e.target.value })}
+                                />
+                            </Grid>
+                            <Grid item xs={12} md={12}> {/* Ocupa linha toda para não comprimir */}
+                                <FormControl fullWidth>
+                                    <InputLabel>Turno (Automático)</InputLabel>
+                                    <Select
+                                        value={formData.turnoId}
+                                        label="Turno (Automático)"
+                                        onChange={(e) => setFormData({ ...formData, turnoId: e.target.value })}
+                                        sx={{ height: 56 }}
+                                    >
+                                        <MenuItem value=""><em>Manual / Nenhum</em></MenuItem>
+                                        {turnos.map(t => (
+                                            <MenuItem key={t.id} value={t.id}>{t.nome} ({t.inicio} - {t.fim})</MenuItem>
+                                        ))}
+                                    </Select>
+                                </FormControl>
+                            </Grid>
+                        </Grid>
+                    )}
+
+                    {/* ETAPA 2: VEÍCULO E TRANSPORTADORA */}
+                    {activeStep === 1 && (
+                        <Grid container spacing={3}>
+                            <Grid item xs={12}>
+                                <Alert severity="info" icon={<Truck size={20} />} sx={{ mb: 1 }}>
+                                    Dados logísticos. A transportadora será pré-selecionada se disponível.
+                                </Alert>
+                            </Grid>
+
+                            {/* TRANSPORTADORA: FULL WIDTH (12) para resolver o problema visual */}
+                            <Grid item xs={12}>
+                                <SearchableSelect
+                                    label="Transportadora"
+                                    options={transportadoras}
+                                    value={formData.transportadoraId}
+                                    onChange={(e) => setFormData({ ...formData, transportadoraId: e.target.value })}
+                                    placeholder="Buscar transportadora..."
+                                // A prop style ou sx pode ser passada se o componente suportar, 
+                                // mas xs={12} já garante largura total do container
+                                />
+                            </Grid>
+
+                            <Grid item xs={12} md={4}>
+                                <TextField
+                                    label="Placa do Veículo"
+                                    fullWidth
+                                    value={formData.placa}
+                                    onChange={(e) => setFormData({ ...formData, placa: e.target.value.toUpperCase() })}
+                                    placeholder="AAA-0000"
+                                />
+                            </Grid>
+                            <Grid item xs={12} md={4}>
+                                <TextField
+                                    label="Nome do Motorista"
+                                    fullWidth
+                                    value={formData.motoristaNome}
+                                    onChange={(e) => setFormData({ ...formData, motoristaNome: e.target.value })}
+                                />
+                            </Grid>
+                            <Grid item xs={12} md={4}>
+                                <TextField
+                                    label="CPF do Motorista"
+                                    fullWidth
+                                    value={formData.motoristaCpf}
+                                    onChange={(e) => setFormData({ ...formData, motoristaCpf: e.target.value })}
+                                />
+                            </Grid>
+                        </Grid>
+                    )}
                 </Box>
             </DialogContent>
 
-            <DialogActions sx={{ p: 3, borderTop: '1px solid #e2e8f0', bgcolor: '#fafafa' }}>
-                <Button onClick={onClose} color="inherit" sx={{ mr: 'auto' }}>Cancelar</Button>
+            <DialogActions sx={{ p: 3, justifyContent: 'space-between' }}>
+                <Button
+                    disabled={activeStep === 0}
+                    onClick={handleBack}
+                    startIcon={<ArrowLeft />}
+                >
+                    Voltar
+                </Button>
 
-                {activeStep > 0 && <Button onClick={handleBack}>Voltar</Button>}
-
-                {activeStep < STEPS.length - 1 ? (
-                    <Button variant="contained" onClick={handleNext} disabled={activeStep === 0 && !turnoDetectado}>
-                        Próximo
+                {activeStep === steps.length - 1 ? (
+                    <Button
+                        variant="contained"
+                        onClick={handleSubmit}
+                        disabled={loading}
+                        startIcon={<Save />}
+                        color="primary"
+                    >
+                        {loading ? 'Salvando...' : 'Finalizar Agendamento'}
                     </Button>
                 ) : (
-                    <Button variant="contained" color="success" onClick={handleSave} disabled={loading}>
-                        {loading ? 'Salvando...' : 'Confirmar Agendamento'}
+                    <Button
+                        variant="contained"
+                        onClick={handleNext}
+                        endIcon={<ArrowRight />}
+                    >
+                        Próximo
                     </Button>
                 )}
             </DialogActions>

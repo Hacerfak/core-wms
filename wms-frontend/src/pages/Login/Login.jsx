@@ -52,7 +52,7 @@ const Login = () => {
                         WMS Core
                     </Typography>
                     <Typography variant="body2" color="text.secondary" mb={2}>
-                        Entre para gerenciar seu armazém
+                        Entre para gerenciar seus armazéns
                     </Typography>
 
                     <form onSubmit={handleSubmit} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '20px' }}>

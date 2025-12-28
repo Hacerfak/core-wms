@@ -1,282 +1,307 @@
 import { useState, useEffect } from 'react';
 import {
-    Box, Typography, Button, Grid, Card, CardContent, Chip,
-    IconButton, Tooltip, InputAdornment, TextField, Divider, Paper, MenuItem
+    Box, Typography, Button, Paper, Chip, IconButton, Tooltip,
+    Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
+    LinearProgress, Dialog, DialogTitle, DialogContent, DialogActions
 } from '@mui/material';
 import {
-    Plus, Search, Copy, Truck, Calendar, FileText,
-    ArrowRight, Anchor, PackagePlus, Trash2, Filter, Eye, AlertCircle
-} from 'lucide-react';
+    Plus, Search, PlayCircle, Trash2, FileText,
+    CheckCircle2, Clock, Truck, Warehouse, LogOut, ArrowLeft, Anchor,
+    HousePlus
+} from 'lucide-react'; // Adicionado Anchor para "Encostar"
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import dayjs from 'dayjs';
-
-import { getRecebimentos, excluirSolicitacao } from '../../services/recebimentoService';
-import AtribuirDocaModal from './Components/AtribuirDocaModal';
+import api from '../../services/api';
+import { getRecebimentos, deleteRecebimento } from '../../services/recebimentoService';
+import { getLocalizacoes } from '../../services/localizacaoService';
+import SearchableSelect from '../../components/SearchableSelect';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import Can from '../../components/Can';
 
-const STATUS_MAP = {
-    'CRIADA': { label: 'NOVA', color: 'default' },
-    'AGUARDANDO_EXECUCAO': { label: 'AGUARDANDO', color: 'info' },
-    'EM_PROCESSAMENTO': { label: 'PROCESSANDO', color: 'primary' },
-    'DIVERGENTE': { label: 'DIVERGENTE', color: 'warning' },
-    'BLOQUEADA': { label: 'BLOQUEADA', color: 'error' },
-    'CONCLUIDA': { label: 'CONCLUÍDA', color: 'success' },
-    'CANCELADA': { label: 'CANCELADA', color: 'error' }
+const statusConfig = {
+    CRIADA: { color: 'default', label: 'Nova', icon: <HousePlus size={14} /> },
+    AGUARDANDO_EXECUCAO: { color: 'warning', label: 'Aguardando Início', icon: <Clock size={14} /> },
+    EM_PROCESSAMENTO: { color: 'info', label: 'Conferindo', icon: <PlayCircle size={14} /> },
+    CONCLUIDA: { color: 'success', label: 'Concluída', icon: <CheckCircle2 size={14} /> },
+    BLOQUEDA: { color: 'error', label: 'Bloqueada', icon: <Search size={14} /> }
 };
 
 const RecebimentoList = () => {
     const navigate = useNavigate();
-    const [items, setItems] = useState([]);
-    const [filtered, setFiltered] = useState([]);
+    const [recebimentos, setRecebimentos] = useState([]);
     const [loading, setLoading] = useState(true);
 
-    // Filtros
-    const [search, setSearch] = useState('');
-    const [statusFilter, setStatusFilter] = useState('TODOS');
-    const [dataFilter, setDataFilter] = useState('');
-
     // Modais
-    const [docaModalOpen, setDocaModalOpen] = useState(false);
-    const [selectedSolicitacao, setSelectedSolicitacao] = useState(null);
-    const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
-    const [itemToDelete, setItemToDelete] = useState(null);
+    const [modalEncostar, setModalEncostar] = useState(false);
+    const [modalLiberar, setModalLiberar] = useState(false);
+    const [docas, setDocas] = useState([]);
+    const [selectedDoca, setSelectedDoca] = useState('');
+    const [selectedItem, setSelectedItem] = useState(null);
+    const [assinaturaFile, setAssinaturaFile] = useState(null);
+    const [confirmOpen, setConfirmOpen] = useState(false);
+    const [confirmAction, setConfirmAction] = useState(null);
 
     useEffect(() => { loadData(); }, []);
-
-    // Lógica de Filtragem
-    useEffect(() => {
-        let result = items;
-        const term = search.toLowerCase();
-
-        if (search) {
-            result = result.filter(i =>
-                (i.notaFiscal && i.notaFiscal.toLowerCase().includes(term)) ||
-                (i.fornecedorNome && i.fornecedorNome.toLowerCase().includes(term)) ||
-                (i.codigoExterno && i.codigoExterno.toLowerCase().includes(term))
-            );
-        }
-        if (statusFilter !== 'TODOS') {
-            result = result.filter(i => i.status === statusFilter);
-        }
-        if (dataFilter) {
-            result = result.filter(i => i.dataCriacao && i.dataCriacao.startsWith(dataFilter));
-        }
-        setFiltered(result);
-    }, [search, statusFilter, dataFilter, items]);
 
     const loadData = async () => {
         setLoading(true);
         try {
             const data = await getRecebimentos();
-            setItems(data);
-            setFiltered(data);
-        } catch (error) {
-            toast.error("Erro ao carregar recebimentos.");
-        } finally {
-            setLoading(false);
+            setRecebimentos(data);
+        } catch (error) { toast.error("Erro ao carregar lista"); }
+        finally { setLoading(false); }
+    };
+
+    // --- LÓGICA DE ESTADO REFINADA ---
+    const getEstadoLogistico = (row) => {
+        // 1. Agendado
+        if (row.agendamentoId) {
+            if (row.statusAgendamento === 'NA_DOCA') return 'NA_DOCA';
+            if (row.statusAgendamento === 'AGUARDANDO_SAIDA') return 'LIBERADO';
+            if (row.statusAgendamento === 'FINALIZADO') return 'SAIU';
+
+            // Se está no Pátio (NA_PORTARIA) mas JÁ TEM doca definida (planejada)
+            if (row.statusAgendamento === 'NA_PORTARIA' && row.docaNome) return 'DOCA_PLANEJADA';
+
+            return 'NO_PATIO';
         }
+
+        // 2. Manual
+        if (row.docaNome) return 'NA_DOCA'; // No manual, se tem doca, consideramos encostado
+        return 'NO_PATIO';
     };
 
-    const handleCopyKey = (key) => {
-        if (!key) return toast.info("Chave indisponível.");
-        navigator.clipboard.writeText(key);
-        toast.success("Chave copiada!");
-    };
+    // Ação: Encostar (Atribui Doca se necessário e confirma chegada)
+    const handleOpenEncostar = async (item) => {
+        setSelectedItem(item);
 
-    const handleDeleteClick = (item) => {
-        setItemToDelete(item);
-        setConfirmDeleteOpen(true);
-    };
-
-    const confirmDelete = async () => {
-        if (!itemToDelete) return;
+        // Se já tem doca planejada, podemos pular a seleção e só confirmar
+        // Mas vamos abrir o modal para permitir troca se necessário
         try {
-            await excluirSolicitacao(itemToDelete.id);
-            toast.success("Solicitação excluída/cancelada.");
+            const locais = await getLocalizacoes('DOCA');
+            setDocas(locais.map(d => ({ value: d.id, label: d.enderecoCompleto })));
+            setSelectedDoca(item.docaId || '');
+            setModalEncostar(true);
+        } catch (e) { toast.error("Erro ao carregar docas"); }
+    };
+
+    const confirmEncostar = async () => {
+        // Para Manual, Doca é obrigatória.
+        // Para Agendado com doca já planejada, se o usuário não selecionar, usamos a existente no backend
+        if (!selectedDoca && !selectedItem.docaId) return toast.warning("Selecione uma doca.");
+
+        const docaFinal = selectedDoca || selectedItem.docaId;
+
+        try {
+            await api.post(`/api/operacao-patio/entrada/${selectedItem.id}/encostar?docaId=${docaFinal}`);
+            toast.success("Veículo encostado! Tarefa gerada.");
+            setModalEncostar(false);
             loadData();
-        } catch (error) {
-            toast.error("Erro ao excluir solicitação.");
-        }
-        setConfirmDeleteOpen(false);
+        } catch (e) { toast.error(e.response?.data?.message || "Erro ao encostar."); }
+    };
+
+    const handleOpenLiberar = (item) => {
+        setSelectedItem(item);
+        setAssinaturaFile(null);
+        setModalLiberar(true);
+    };
+
+    const confirmLiberar = async () => {
+        if (!assinaturaFile) return toast.warning("Assinatura obrigatória.");
+        const formData = new FormData();
+        formData.append('assinatura', assinaturaFile);
+
+        try {
+            await api.post(`/api/operacao-patio/entrada/${selectedItem.id}/liberar`, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            toast.success("Doca liberada! Veículo enviado para saída.");
+            setModalLiberar(false);
+            loadData();
+        } catch (e) { toast.error(e.response?.data?.message || "Erro ao liberar."); }
+    };
+
+    const handleIniciarConferencia = (id) => navigate(`/recebimento/${id}/conferencia`);
+
+    const handleDeleteClick = (id, status) => {
+        if (status !== 'CRIADA' && status !== 'AGUARDANDO_EXECUCAO') return toast.warning("Em andamento.");
+        setConfirmAction(() => async () => {
+            try { await deleteRecebimento(id); toast.success("Excluído"); loadData(); }
+            catch (e) { toast.error("Erro ao excluir"); }
+        });
+        setConfirmOpen(true);
     };
 
     return (
         <Box>
-            {/* Header */}
-            <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+            <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
                 <Box display="flex" alignItems="center" gap={2}>
-                    <Typography variant="h5" fontWeight="bold">Recebimentos</Typography>
-                    <Typography variant="body2" color="text.secondary"> | Gestão de NFe</Typography>
+                    <Button startIcon={<ArrowLeft />} onClick={() => navigate('/recebimento')} color="inherit">Voltar</Button>
+                    <Box>
+                        <Typography variant="h5" fontWeight="bold">Solicitações de Entrada</Typography>
+                        <Typography variant="body2" color="text.secondary">Gestão de pátio e descarga.</Typography>
+                    </Box>
                 </Box>
-                <Button variant="contained" startIcon={<Plus />} onClick={() => navigate('/recebimento/novo')}>
-                    Nova Entrada
-                </Button>
+                <Can I="RECEBIMENTO_IMPORTAR_XML">
+                    <Button variant="contained" startIcon={<Plus size={18} />} onClick={() => navigate('/recebimento/importar')}>
+                        Importar XML
+                    </Button>
+                </Can>
             </Box>
 
-            {/* Filtros */}
-            <Paper sx={{ p: 2, mb: 3, borderRadius: 2 }}>
-                <Grid container spacing={2} alignItems="center">
-                    <Grid item xs={12} sm={2}>
-                        <TextField
-                            type="date" label="Data" fullWidth size="small"
-                            InputLabelProps={{ shrink: true }}
-                            value={dataFilter}
-                            onChange={e => setDataFilter(e.target.value)}
-                        />
-                    </Grid>
-                    <Grid item xs={12} sm={2}>
-                        <TextField
-                            select label="Status" fullWidth size="small"
-                            value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
-                        >
-                            <MenuItem value="TODOS">Todos</MenuItem>
-                            {Object.keys(STATUS_MAP).map(key => (
-                                <MenuItem key={key} value={key}>{STATUS_MAP[key].label}</MenuItem>
-                            ))}
-                        </TextField>
-                    </Grid>
-                    <Grid item xs={12} sm={6}>
-                        <TextField
-                            fullWidth placeholder="Buscar por Nota, Fornecedor ou ID..."
-                            value={search} onChange={(e) => setSearch(e.target.value)}
-                            size="small"
-                            InputProps={{ startAdornment: <InputAdornment position="start"><Search size={20} color="#94a3b8" /></InputAdornment> }}
-                        />
-                    </Grid>
-                    <Grid item xs={12} sm={2}>
-                        <Button variant="outlined" fullWidth onClick={loadData} startIcon={<Filter size={18} />}>Atualizar</Button>
-                    </Grid>
-                </Grid>
-            </Paper>
+            <Paper sx={{ width: '100%', overflow: 'hidden', borderRadius: 2 }}>
+                {loading && <LinearProgress />}
+                <TableContainer>
+                    <Table size="medium">
+                        <TableHead sx={{ bgcolor: '#f8fafc' }}>
+                            <TableRow>
+                                <TableCell><b>Nota Fiscal</b></TableCell>
+                                <TableCell><b>Fornecedor</b></TableCell>
+                                <TableCell><b>Veículo</b></TableCell>
+                                <TableCell><b>Doca</b></TableCell>
+                                <TableCell><b>Status</b></TableCell>
+                                <TableCell align="center"><b>Ações</b></TableCell>
+                            </TableRow>
+                        </TableHead>
+                        <TableBody>
+                            {recebimentos.map((row) => {
+                                const statusProc = statusConfig[row.status] || statusConfig.CRIADA;
+                                const estado = getEstadoLogistico(row);
 
-            {/* Grid de Cards (Estilo Agendamento) */}
-            <Grid container spacing={2}>
-                {filtered.map((item) => {
-                    const statusInfo = STATUS_MAP[item.status] || { label: item.status, color: 'default' };
+                                return (
+                                    <TableRow key={row.id} hover>
+                                        <TableCell>
+                                            <Box display="flex" alignItems="center" gap={1}>
+                                                <FileText size={16} color="#64748b" />
+                                                <Typography fontWeight={500}>{row.codigoExterno}</Typography>
+                                            </Box>
+                                        </TableCell>
+                                        <TableCell>{row.fornecedorNome}</TableCell>
 
-                    return (
-                        <Grid item xs={12} key={item.id}>
-                            <Card
-                                elevation={0}
-                                sx={{
-                                    border: '1px solid #e2e8f0', borderRadius: 3,
-                                    borderLeft: '6px solid', borderLeftColor: `${statusInfo.color}.main`,
-                                    transition: '0.2s', opacity: item.status === 'CANCELADA' ? 0.6 : 1,
-                                    '&:hover': { boxShadow: '0 4px 12px rgba(0,0,0,0.08)', transform: 'translateY(-2px)' }
-                                }}
-                            >
-                                <CardContent sx={{ p: 3, '&:last-child': { pb: 3 } }}>
-                                    <Grid container alignItems="center" spacing={3}>
+                                        <TableCell>
+                                            {row.placaVeiculo ? (
+                                                <Box>
+                                                    <Typography variant="caption" fontWeight="bold">{row.placaVeiculo}</Typography>
+                                                    <Chip label={row.agendamentoId ? "Agendado" : "Manual"} size="small" variant="outlined" sx={{ ml: 1, height: 20, fontSize: '0.6rem' }} />
+                                                </Box>
+                                            ) : <Typography variant="caption" color="text.secondary">Sem Veículo</Typography>}
+                                        </TableCell>
 
-                                        {/* COLUNA 1: HORA/DATA/ID */}
-                                        <Grid item xs={12} sm={2} md={1.5} textAlign="center" sx={{ borderRight: { sm: '1px solid #f1f5f9' } }}>
-                                            <Typography variant="h5" fontWeight="bold" color="text.primary">
-                                                {item.notaFiscal || 'S/N'}
-                                            </Typography>
-                                            <Typography variant="caption" color="text.secondary" display="block">
-                                                {dayjs(item.dataCriacao).format('DD/MM HH:mm')}
-                                            </Typography>
-
-                                            <Tooltip title="Copiar Chave">
+                                        <TableCell>
+                                            {/* Mostra doca se estiver definida, mesmo que não encostado */}
+                                            {row.docaNome ? (
                                                 <Chip
-                                                    label={`#${item.codigoExterno || item.id}`}
+                                                    icon={<Warehouse size={12} />}
+                                                    label={row.docaNome}
+                                                    // Amarelo se planejado, Azul se encostado
+                                                    color={estado === 'NA_DOCA' ? 'primary' : (estado === 'DOCA_PLANEJADA' ? 'warning' : 'default')}
                                                     size="small"
-                                                    icon={<Copy size={12} />}
-                                                    onClick={() => handleCopyKey(item.chaveAcesso)}
-                                                    sx={{ mt: 1, fontFamily: 'monospace', fontWeight: 'bold', bgcolor: '#f1f5f9', cursor: 'pointer', maxWidth: '100%' }}
                                                 />
-                                            </Tooltip>
-                                        </Grid>
+                                            ) : '-'}
+                                        </TableCell>
 
-                                        {/* COLUNA 2: DADOS PRINCIPAIS */}
-                                        <Grid item xs={12} sm={6} md={6.5}>
-                                            <Box display="flex" alignItems="center" gap={1.5} mb={1} flexWrap="wrap">
-                                                <Typography variant="h6" fontWeight="bold" noWrap sx={{ maxWidth: '100%' }}>
-                                                    {item.fornecedorNome || 'Fornecedor Desconhecido'}
-                                                </Typography>
-                                                {item.chaveAcesso && <Chip label="XML" size="small" variant="outlined" color="primary" icon={<FileText size={14} />} />}
-                                            </Box>
+                                        <TableCell>
+                                            <Chip label={statusProc.label} color={statusProc.color} size="small" icon={statusProc.icon} />
+                                        </TableCell>
 
-                                            <Box display="flex" gap={4} color="text.secondary" flexWrap="wrap">
-                                                <Box display="flex" alignItems="center" gap={1}>
-                                                    <Calendar size={18} />
-                                                    <Typography variant="body2">Emissão: {item.dataEmissao ? dayjs(item.dataEmissao).format('DD/MM/YYYY') : '-'}</Typography>
-                                                </Box>
+                                        <TableCell align="center">
+                                            <Box display="flex" justifyContent="center" gap={1}>
 
-                                                <Box display="flex" alignItems="center" gap={1}>
-                                                    <Anchor size={18} color={item.docaNome ? "#059669" : "#dc2626"} />
-                                                    {item.docaNome ? (
-                                                        <Typography variant="body2" fontWeight="bold" color="success.main">{item.docaNome}</Typography>
-                                                    ) : (
-                                                        <Box display="flex" alignItems="center" gap={1}>
-                                                            <Typography variant="body2" color="error">Sem Doca</Typography>
-                                                            {item.status !== 'CONCLUIDA' && item.status !== 'CANCELADA' && (
-                                                                <Button size="small" variant="outlined" color="warning"
-                                                                    onClick={() => { setSelectedSolicitacao(item); setDocaModalOpen(true); }}
-                                                                    sx={{ py: 0, fontSize: '0.7rem', height: 24 }}
-                                                                >
-                                                                    Atribuir
-                                                                </Button>
-                                                            )}
-                                                        </Box>
-                                                    )}
-                                                </Box>
-                                            </Box>
-                                        </Grid>
-
-                                        {/* COLUNA 3: AÇÕES E STATUS */}
-                                        <Grid item xs={12} sm={4} md={4} display="flex" justifyContent={{ xs: 'flex-start', sm: 'flex-end' }} alignItems="center" gap={1} flexWrap="wrap">
-
-                                            {/* Botões de Ação */}
-                                            {item.status !== 'CANCELADA' && item.status !== 'CONCLUIDA' && (
-                                                <>
-                                                    <Tooltip title="Excluir">
-                                                        <IconButton size="small" color="error" onClick={() => handleDeleteClick(item)}>
-                                                            <Trash2 size={20} />
+                                                {/* 1. ENCOSTAR / CONFIRMAR CHEGADA
+                                                    Aparece se:
+                                                    - Está no pátio (Sem doca)
+                                                    - OU tem doca planejada mas ainda não está NA_DOCA (Agendamento)
+                                                */}
+                                                {(estado === 'NO_PATIO' || estado === 'DOCA_PLANEJADA') && row.status !== 'CANCELADA' && (
+                                                    <Tooltip title={estado === 'DOCA_PLANEJADA' ? "Confirmar chegada na doca" : "Atribuir Doca"}>
+                                                        <IconButton
+                                                            size="small"
+                                                            color={estado === 'DOCA_PLANEJADA' ? "warning" : "primary"}
+                                                            onClick={() => handleOpenEncostar(row)}
+                                                        >
+                                                            {estado === 'DOCA_PLANEJADA' ? <Anchor size={18} /> : <Truck size={18} />}
                                                         </IconButton>
                                                     </Tooltip>
+                                                )}
 
-                                                    {item.docaId && (
-                                                        <Tooltip title="Conferência">
-                                                            <IconButton color="primary" onClick={() => navigate(`/recebimento/${item.id}/conferencia`)}>
-                                                                <PackagePlus size={22} />
-                                                            </IconButton>
-                                                        </Tooltip>
-                                                    )}
-                                                </>
-                                            )}
+                                                {/* 2. LIBERAR SAÍDA */}
+                                                {estado === 'NA_DOCA' && (
+                                                    <Tooltip title="Liberar Doca (Retornar ao Pátio)">
+                                                        <IconButton size="small" color="success" onClick={() => handleOpenLiberar(row)}>
+                                                            <LogOut size={18} />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                )}
 
-                                            <Tooltip title="Detalhes">
-                                                <IconButton onClick={() => navigate(`/recebimento/${item.id}/detalhes`)}>
-                                                    <Eye size={20} />
-                                                </IconButton>
-                                            </Tooltip>
+                                                {/* 3. CONFERIR (Somente se tarefa gerada) */}
+                                                {(row.status === 'AGUARDANDO_EXECUCAO' || row.status === 'EM_PROCESSAMENTO') && (
+                                                    <Tooltip title="Conferir">
+                                                        <IconButton size="small" color="info" onClick={() => handleIniciarConferencia(row.id)}>
+                                                            <PlayCircle size={18} />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                )}
 
-                                            <Chip
-                                                label={statusInfo.label}
-                                                color={statusInfo.color}
-                                                size="small"
-                                                sx={{ fontWeight: 'bold', ml: 1, height: 28 }}
-                                            />
-                                        </Grid>
+                                                {(row.status === 'CRIADA') && (
+                                                    <IconButton size="small" color="error" onClick={() => handleDeleteClick(row.id, row.status)}>
+                                                        <Trash2 size={18} />
+                                                    </IconButton>
+                                                )}
+                                            </Box>
+                                        </TableCell>
+                                    </TableRow>
+                                );
+                            })}
+                        </TableBody>
+                    </Table>
+                </TableContainer>
+            </Paper>
 
-                                    </Grid>
-                                </CardContent>
-                            </Card>
-                        </Grid>
-                    );
-                })}
-            </Grid>
+            {/* MODAL ENCOSTAR */}
+            <Dialog open={modalEncostar} onClose={() => setModalEncostar(false)} maxWidth="xs" fullWidth>
+                <DialogTitle>
+                    {selectedItem?.docaNome ? "Confirmar Chegada na Doca" : "Atribuir Doca"}
+                </DialogTitle>
+                <DialogContent>
+                    <Typography variant="body2" gutterBottom>
+                        {selectedItem?.docaNome
+                            ? `O veículo está fisicamente na doca ${selectedItem.docaNome}?`
+                            : "Selecione a doca para direcionar o veículo."}
+                    </Typography>
+                    <Box mt={2}>
+                        <SearchableSelect
+                            label="Doca"
+                            options={docas}
+                            value={selectedDoca}
+                            onChange={e => setSelectedDoca(e.target.value)}
+                        />
+                    </Box>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setModalEncostar(false)}>Cancelar</Button>
+                    <Button variant="contained" onClick={confirmEncostar}>
+                        {selectedItem?.docaNome ? "Confirmar e Iniciar" : "Atribuir e Iniciar"}
+                    </Button>
+                </DialogActions>
+            </Dialog>
 
-            <AtribuirDocaModal open={docaModalOpen} onClose={() => setDocaModalOpen(false)} solicitacao={selectedSolicitacao} onSuccess={loadData} />
+            {/* MODAL LIBERAR */}
+            <Dialog open={modalLiberar} onClose={() => setModalLiberar(false)} maxWidth="xs" fullWidth>
+                <DialogTitle>Liberar Doca</DialogTitle>
+                <DialogContent>
+                    <Typography variant="body2" gutterBottom>Anexe a assinatura para liberar a doca e devolver o veículo ao pátio.</Typography>
+                    <Button variant="outlined" component="label" fullWidth sx={{ mt: 2, height: 100, borderStyle: 'dashed' }}>
+                        {assinaturaFile ? assinaturaFile.name : "Anexar Assinatura"}
+                        <input type="file" hidden accept="image/*" onChange={e => setAssinaturaFile(e.target.files[0])} />
+                    </Button>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setModalLiberar(false)}>Cancelar</Button>
+                    <Button variant="contained" color="success" onClick={confirmLiberar} disabled={!assinaturaFile}>Liberar</Button>
+                </DialogActions>
+            </Dialog>
 
-            <ConfirmDialog
-                open={confirmDeleteOpen} onClose={() => setConfirmDeleteOpen(false)} onConfirm={confirmDelete}
-                title="Excluir Solicitação"
-                message={`Tem certeza? Se houver movimentações, ela será apenas cancelada.\nCaso contrário, será removida do sistema.`}
-                severity="error"
-            />
+            <ConfirmDialog open={confirmOpen} onClose={() => setConfirmOpen(false)} onConfirm={confirmAction} title="Excluir" message="Confirma exclusão?" />
         </Box>
     );
 };

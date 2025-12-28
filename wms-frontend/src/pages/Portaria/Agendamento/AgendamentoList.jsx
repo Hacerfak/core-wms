@@ -2,12 +2,13 @@ import { useState, useEffect } from 'react';
 import {
     Box, Button, Paper, Typography, Grid, Card, CardContent,
     TextField, Chip, Dialog, DialogTitle, DialogContent,
-    DialogActions, MenuItem, IconButton, Tooltip, Divider
+    DialogActions, MenuItem, IconButton, Tooltip, Divider, Avatar
 } from '@mui/material';
 import {
     Calendar, ArrowLeft, Plus, Upload, Truck,
     MapPin, Clock, Filter, Eye, FileText, Share2,
-    Printer, Copy, XCircle, UserX, Trash2, RectangleHorizontal
+    Printer, Copy, XCircle, UserX, Trash2, RectangleHorizontal,
+    CheckCircle, LogOut, LogIn, User, ClipboardList
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
@@ -20,13 +21,15 @@ import AgendamentoForm from './AgendamentoForm';
 import SearchableSelect from '../../../components/SearchableSelect';
 import ConfirmDialog from '../../../components/ConfirmDialog';
 
+// Mapa de Status com Cores e Ícones
 const STATUS_MAP = {
-    'AGENDADO': { label: 'AGENDADO', color: 'default' },
-    'NA_PORTARIA': { label: 'CHECK-IN OK', color: 'primary' },
-    'NA_DOCA': { label: 'NA DOCA', color: 'info' },
-    'FINALIZADO': { label: 'FINALIZADO', color: 'success' },
-    'CANCELADO': { label: 'CANCELADO', color: 'error' },
-    'NO_SHOW': { label: 'NÃO COMPARECEU', color: 'warning' }
+    'AGENDADO': { label: 'AGENDADO', color: 'default', icon: <Calendar size={16} /> },
+    'NA_PORTARIA': { label: 'NO PÁTIO', color: 'warning', icon: <Truck size={16} /> },
+    'NA_DOCA': { label: 'NA DOCA', color: 'primary', icon: <MapPin size={16} /> },
+    'AGUARDANDO_SAIDA': { label: 'SAÍDA PENDENTE', color: 'info', icon: <LogOut size={16} /> },
+    'FINALIZADO': { label: 'FINALIZADO', color: 'success', icon: <CheckCircle size={16} /> },
+    'CANCELADO': { label: 'CANCELADO', color: 'error', icon: <XCircle size={16} /> },
+    'NO_SHOW': { label: 'NÃO COMPARECEU', color: 'error', icon: <UserX size={16} /> }
 };
 
 const AgendamentoList = () => {
@@ -100,7 +103,6 @@ const AgendamentoList = () => {
         } catch (e) { toast.error("Erro no upload."); }
     };
 
-    // Ações de Cancelamento / No Show
     const handleAction = (type, item) => {
         let title, message, apiFunc;
 
@@ -152,7 +154,7 @@ const AgendamentoList = () => {
                 </Button>
             </Box>
 
-            <Paper sx={{ p: 2, mb: 3, borderRadius: 2 }}>
+            <Paper sx={{ p: 3, mb: 3, borderRadius: 2 }}>
                 <Grid container spacing={2} alignItems="center">
                     <Grid item xs={12} sm={3}>
                         <TextField
@@ -182,7 +184,9 @@ const AgendamentoList = () => {
                         />
                     </Grid>
                     <Grid item xs={6} sm={2}>
-                        <Button startIcon={<Filter size={18} />} onClick={loadAgenda} fullWidth variant="outlined">Atualizar</Button>
+                        <Button startIcon={<Filter size={18} />} onClick={loadAgenda} fullWidth variant="outlined" sx={{ height: 40 }}>
+                            Atualizar
+                        </Button>
                     </Grid>
                 </Grid>
             </Paper>
@@ -192,23 +196,28 @@ const AgendamentoList = () => {
                     <Grid item xs={12}>
                         <Paper sx={{ p: 6, textAlign: 'center', bgcolor: '#f8fafc', border: '1px dashed #e2e8f0', borderRadius: 3 }}>
                             <Calendar size={48} color="#cbd5e1" style={{ marginBottom: 16 }} />
-                            <Typography color="text.secondary" variant="h6">Nenhum agendamento encontrado para esta data.</Typography>
+                            <Typography color="text.secondary" variant="h6">Nenhum agendamento encontrado.</Typography>
                             <Button sx={{ mt: 2 }} onClick={() => setModalOpen(true)}>Criar Primeiro Agendamento</Button>
                         </Paper>
                     </Grid>
                 )}
 
                 {agendaFiltrada.map(item => {
-                    const parceiroPrincipal = item.tipo === 'ENTRADA'
+                    const isEntry = item.tipo === 'ENTRADA';
+                    const parceiroPrincipal = isEntry
                         ? item.solicitacaoEntrada?.fornecedor?.nome
                         : item.solicitacaoSaida?.cliente?.nome;
 
-                    const docRef = item.tipo === 'ENTRADA'
-                        ? (item.solicitacaoEntrada?.notaFiscal ? item.solicitacaoEntrada.notaFiscal : null)
-                        : (item.solicitacaoSaida?.codigoExterno ? item.solicitacaoSaida.codigoExterno : null);
+                    const corTipo = isEntry ? 'success' : 'primary';
+                    const statusInfo = STATUS_MAP[item.status] || { label: item.status, color: 'default', icon: null };
 
-                    const corTipo = item.tipo === 'ENTRADA' ? 'success' : 'primary';
-                    const statusInfo = STATUS_MAP[item.status] || { label: item.status, color: 'default' };
+                    // Dados para Chip de Documento (NF ou Pedido)
+                    const docNum = isEntry
+                        ? item.solicitacaoEntrada?.notaFiscal
+                        : item.solicitacaoSaida?.codigoExterno;
+
+                    const DocIcon = isEntry ? FileText : ClipboardList;
+                    const docLabel = isEntry ? "NF" : "Ped";
 
                     return (
                         <Grid item xs={12} key={item.id}>
@@ -216,125 +225,172 @@ const AgendamentoList = () => {
                                 elevation={0}
                                 sx={{
                                     border: '1px solid #e2e8f0', borderRadius: 3,
-                                    borderLeft: '6px solid', borderLeftColor: `${corTipo}.main`,
+                                    borderLeft: `6px solid`,
+                                    // A cor da borda segue o STATUS, não o tipo
+                                    borderLeftColor: `${statusInfo.color}.main`,
                                     transition: '0.2s',
                                     opacity: item.status === 'CANCELADO' ? 0.6 : 1,
                                     '&:hover': { boxShadow: '0 8px 24px rgba(0,0,0,0.08)', transform: 'translateY(-2px)' }
                                 }}
                             >
-                                <CardContent sx={{ p: 3, '&:last-child': { pb: 3 } }}>
-                                    <Grid container alignItems="center" spacing={3}>
+                                <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                                    <Grid container alignItems="center" spacing={2}>
 
-                                        {/* HORA E CÓDIGO */}
-                                        <Grid item xs={12} sm={2} md={1.5} textAlign="center" sx={{ borderRight: { sm: '1px solid #f1f5f9' } }}>
+                                        {/* COLUNA 1: HORA e CÓDIGO 
+                                            UX Update: Espaçamento na borda direita para não ficar colado
+                                        */}
+                                        <Grid item xs={12} sm={2} md={1.5}
+                                            textAlign="center"
+                                            sx={{
+                                                borderRight: { sm: '1px solid #e2e8f0' },
+                                                pr: { sm: 3 }, // Espaçamento interno à direita
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                alignItems: 'center',
+                                                justifyContent: 'center'
+                                            }}
+                                        >
                                             <Typography variant="h4" fontWeight="bold" color="text.primary" sx={{ letterSpacing: -1 }}>
                                                 {dayjs(item.dataPrevistaInicio).format('HH:mm')}
                                             </Typography>
-
                                             <Tooltip title="Clique para copiar código">
                                                 <Chip
                                                     label={item.codigoReserva}
                                                     size="small"
                                                     icon={<Copy size={12} />}
                                                     onClick={() => handleCopyCode(item.codigoReserva)}
-                                                    sx={{ mt: 1, fontFamily: 'monospace', fontWeight: 'bold', bgcolor: '#f1f5f9', cursor: 'pointer' }}
+                                                    sx={{ mt: 1, fontFamily: 'monospace', fontWeight: 'bold', bgcolor: '#f1f5f9', cursor: 'pointer', maxWidth: '100%' }}
                                                 />
                                             </Tooltip>
                                         </Grid>
 
-                                        {/* DADOS PRINCIPAIS */}
-                                        <Grid item xs={12} sm={6} md={6.5}>
-                                            <Box display="flex" alignItems="center" gap={1.5} mb={1} flexWrap="wrap">
-                                                <Chip label={item.tipo} color={corTipo} size="small" sx={{ fontWeight: '800', px: 1 }} />
-                                                <Typography variant="h6" fontWeight="bold" noWrap sx={{ maxWidth: '100%' }}>
-                                                    {parceiroPrincipal || 'Parceiro não identificado'}
-                                                </Typography>
-                                                {docRef && <Chip label={docRef} variant="outlined" size="small" icon={<FileText size={16} />} />}
+                                        {/* COLUNA 2: DADOS PRINCIPAIS (Parceiro e Tipo) */}
+                                        <Grid item xs={12} sm={4} md={4}>
+                                            <Box display="flex" alignItems="center" gap={1} mb={0.5}>
+                                                <Chip
+                                                    label={item.tipo}
+                                                    color={corTipo}
+                                                    size="small"
+                                                    icon={isEntry ? <LogIn size={12} /> : <LogOut size={12} />}
+                                                    sx={{ fontWeight: '800', px: 0.5, height: 20, fontSize: '0.65rem' }}
+                                                />
 
-                                                {item.tipo === 'ENTRADA' && !item.xmlVinculado && item.status !== 'CANCELADO' && (
-                                                    <Chip label="Aguardando XML" size="small" color="warning" variant="outlined" />
+                                                {/* UX Update: Ícone para NF/Pedido */}
+                                                {docNum && (
+                                                    <Chip
+                                                        icon={<DocIcon size={12} />}
+                                                        label={`${docLabel}: ${docNum}`}
+                                                        variant="outlined"
+                                                        size="small"
+                                                        sx={{ height: 20, fontSize: '0.65rem', fontWeight: '500' }}
+                                                    />
+                                                )}
+
+                                                {/* Aviso de falta de XML */}
+                                                {isEntry && !item.xmlVinculado && item.status !== 'CANCELADO' && (
+                                                    <Tooltip title="Necessário vincular XML">
+                                                        <Chip label="XML Pendente" size="small" color="warning" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />
+                                                    </Tooltip>
                                                 )}
                                             </Box>
 
-                                            <Box display="flex" gap={4} color="text.secondary" flexWrap="wrap">
+                                            <Typography variant="h6" fontWeight="bold" noWrap title={parceiroPrincipal}>
+                                                {parceiroPrincipal || 'Parceiro não identificado'}
+                                            </Typography>
+
+                                            <Box display="flex" alignItems="center" gap={1} color="text.secondary" mt={0.5}>
+                                                <User size={14} />
+                                                <Typography variant="caption">
+                                                    {item.nomeMotoristaAvulso || item.motorista?.nome || 'Motorista não inf.'}
+                                                </Typography>
+                                            </Box>
+                                        </Grid>
+
+                                        {/* COLUNA 3: LOGÍSTICA (Transp, Placa, Doca) */}
+                                        <Grid item xs={12} sm={3} md={3.5}>
+                                            <Box display="flex" flexDirection="column" gap={0.5}>
                                                 <Box display="flex" alignItems="center" gap={1}>
-                                                    <Truck size={18} />
-                                                    <Typography variant="body2">{item.transportadora?.nome || 'Transp. Própria'}</Typography>
+                                                    <Truck size={16} color="#64748b" />
+                                                    <Typography variant="body2" fontWeight="500">
+                                                        {item.transportadora?.nome || 'Transp. Própria'}
+                                                    </Typography>
                                                 </Box>
-                                                {item.placaVeiculo && (
-                                                    <Box display="flex" alignItems="center" gap={1}>
-                                                        <RectangleHorizontal size={18} />
-                                                        <Box px={0.8} py={0} border="1px solid #cbd5e1" borderRadius={1} bgcolor="#fff">
-                                                            <Typography variant="caption" fontWeight="bold" color="text.primary">{item.placaVeiculo}</Typography>
+
+                                                <Box display="flex" gap={2}>
+                                                    {item.placaVeiculo && (
+                                                        <Box display="flex" alignItems="center" gap={0.5}>
+                                                            <RectangleHorizontal size={16} color="#64748b" />
+                                                            <Typography variant="body2" fontWeight="bold">{item.placaVeiculo}</Typography>
                                                         </Box>
+                                                    )}
+
+                                                    <Box display="flex" alignItems="center" gap={0.5}>
+                                                        <MapPin size={16} color={item.doca ? "#2563eb" : "#94a3b8"} />
+                                                        <Typography variant="body2" color={item.doca ? "primary" : "text.secondary"} fontWeight={item.doca ? "bold" : "normal"}>
+                                                            {/* UX Update: Endereço completo da doca */}
+                                                            {item.doca ? item.doca.enderecoCompleto : 'Sem Doca'}
+                                                        </Typography>
                                                     </Box>
-                                                )}
-                                                <Box display="flex" alignItems="center" gap={1}>
-                                                    <MapPin size={18} />
-                                                    <Typography variant="body2">{item.doca ? item.doca.enderecoCompleto : 'Doca não definida'}</Typography>
                                                 </Box>
                                             </Box>
                                         </Grid>
 
-                                        {/* AÇÕES (Direita) */}
-                                        <Grid item xs={12} sm={4} md={4} display="flex" justifyContent={{ xs: 'flex-start', sm: 'flex-end' }} alignItems="center" gap={1} flexWrap="wrap">
-
-                                            {/* Ações só habilitadas se NÃO estiver cancelado ou finalizado */}
-                                            {['AGENDADO', 'NA_PORTARIA'].includes(item.status) && (
-                                                <>
-                                                    {item.tipo === 'ENTRADA' && !item.xmlVinculado && (
-                                                        <Tooltip title="Vincular XML">
-                                                            <IconButton size="small" color="secondary" onClick={() => { setSelectedItem(item); setXmlModalOpen(true); }}>
-                                                                <Upload size={18} />
-                                                            </IconButton>
-                                                        </Tooltip>
-                                                    )}
-
-                                                    <Tooltip title="Compartilhar QR">
-                                                        <IconButton color="primary" onClick={() => { setSelectedItem(item); setQrModalOpen(true); }}>
-                                                            <Share2 size={20} />
-                                                        </IconButton>
-                                                    </Tooltip>
-
-                                                    <Tooltip title="Cancelar">
-                                                        <IconButton size="small" color="error" onClick={() => handleAction('CANCELAR', item)}>
-                                                            <XCircle size={20} />
-                                                        </IconButton>
-                                                    </Tooltip>
-
-                                                    {/* Opção No Show apenas se já passou do horário e ainda não chegou */}
-                                                    {dayjs().isAfter(dayjs(item.dataPrevistaInicio)) && item.status === 'AGENDADO' && (
-                                                        <Tooltip title="Não Compareceu">
-                                                            <IconButton size="small" color="warning" onClick={() => handleAction('NO_SHOW', item)}>
-                                                                <UserX size={20} />
-                                                            </IconButton>
-                                                        </Tooltip>
-                                                    )}
-                                                </>
-                                            )}
-
-                                            {/* Botão de Excluir apenas para Cancelados */}
-                                            {item.status === 'CANCELADO' && (
-                                                <Tooltip title="Excluir Definitivamente">
-                                                    <IconButton size="small" onClick={() => handleAction('EXCLUIR', item)}>
-                                                        <Trash2 size={20} />
-                                                    </IconButton>
-                                                </Tooltip>
-                                            )}
-
-                                            <Tooltip title="Detalhes">
-                                                <IconButton onClick={() => { setSelectedItem(item); setDetalhesOpen(true); }}>
-                                                    <Eye size={20} />
-                                                </IconButton>
-                                            </Tooltip>
-
+                                        {/* COLUNA 4: AÇÕES E STATUS */}
+                                        <Grid item xs={12} sm={3} md={3} display="flex" flexDirection="column" alignItems={{ xs: 'flex-start', sm: 'flex-end' }} gap={1}>
                                             <Chip
+                                                icon={statusInfo.icon}
                                                 label={statusInfo.label}
                                                 color={statusInfo.color}
                                                 size="small"
-                                                sx={{ fontWeight: 'bold', ml: 1 }}
+                                                sx={{ fontWeight: 'bold' }}
                                             />
+
+                                            <Box display="flex" gap={0.5} mt={0.5}>
+                                                {/* Ações para Agendado/No Pátio */}
+                                                {['AGENDADO', 'NA_PORTARIA'].includes(item.status) && (
+                                                    <>
+                                                        {isEntry && !item.xmlVinculado && (
+                                                            <Tooltip title="Vincular XML">
+                                                                <IconButton size="small" sx={{ color: '#ec4899', border: '1px solid #fce7f3' }} onClick={() => { setSelectedItem(item); setXmlModalOpen(true); }}>
+                                                                    <Upload size={16} />
+                                                                </IconButton>
+                                                            </Tooltip>
+                                                        )}
+                                                        <Tooltip title="QR Code">
+                                                            <IconButton size="small" color="primary" sx={{ border: '1px solid #e0f2fe' }} onClick={() => { setSelectedItem(item); setQrModalOpen(true); }}>
+                                                                <Share2 size={16} />
+                                                            </IconButton>
+                                                        </Tooltip>
+
+                                                        {/* Apenas se ainda não chegou */}
+                                                        {item.status === 'AGENDADO' && (
+                                                            <Tooltip title="Cancelar/No Show">
+                                                                <IconButton size="small" color="error" sx={{ border: '1px solid #fee2e2' }} onClick={() => handleAction('CANCELAR', item)}>
+                                                                    <XCircle size={16} />
+                                                                </IconButton>
+                                                            </Tooltip>
+                                                        )}
+                                                    </>
+                                                )}
+
+                                                {/* Detalhes sempre visível */}
+                                                <Tooltip title="Ver Detalhes">
+                                                    <IconButton size="small" onClick={() => { setSelectedItem(item); setDetalhesOpen(true); }} sx={{ border: '1px solid #e2e8f0' }}>
+                                                        <Eye size={16} />
+                                                    </IconButton>
+                                                </Tooltip>
+
+                                                {/* Excluir se Cancelado */}
+                                                {item.status === 'CANCELADO' && (
+                                                    <Tooltip title="Excluir">
+                                                        <IconButton size="small" color="error" onClick={() => handleAction('EXCLUIR', item)}>
+                                                            <Trash2 size={16} />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                )}
+                                            </Box>
                                         </Grid>
+
                                     </Grid>
                                 </CardContent>
                             </Card>
@@ -343,8 +399,14 @@ const AgendamentoList = () => {
                 })}
             </Grid>
 
-            {/* MODAIS (Mantidos iguais ao anterior, apenas chamam os novos handlers) */}
-            <AgendamentoForm open={modalOpen} onClose={() => setModalOpen(false)} onSuccess={() => { setModalOpen(false); loadAgenda(); }} dataInicial={{ data: filtros.data }} />
+            {/* MODAIS (Lógica Original Preservada) */}
+
+            <AgendamentoForm
+                open={modalOpen}
+                onClose={() => setModalOpen(false)}
+                onSuccess={() => { setModalOpen(false); loadAgenda(); }}
+                dataInicial={{ data: filtros.data }}
+            />
 
             <Dialog open={xmlModalOpen} onClose={() => setXmlModalOpen(false)} maxWidth="sm" fullWidth>
                 <DialogTitle>Vincular Nota Fiscal</DialogTitle>
@@ -388,7 +450,9 @@ const AgendamentoList = () => {
                     {selectedItem && (
                         <Grid container spacing={2}>
                             <Grid item xs={6}><Typography variant="caption">Código</Typography><Typography variant="body1" fontWeight="bold">{selectedItem.codigoReserva}</Typography></Grid>
-                            <Grid item xs={6}><Typography variant="caption">Status</Typography><br /><Chip label={STATUS_MAP[selectedItem.status]?.label} color={STATUS_MAP[selectedItem.status]?.color} size="small" /></Grid>
+                            <Grid item xs={6}><Typography variant="caption">Status</Typography><br />
+                                <Chip icon={STATUS_MAP[selectedItem.status]?.icon} label={STATUS_MAP[selectedItem.status]?.label} color={STATUS_MAP[selectedItem.status]?.color} size="small" />
+                            </Grid>
                             <Grid item xs={12}><Divider /></Grid>
                             <Grid item xs={6}><Typography variant="caption">Início Previsto</Typography><Typography>{dayjs(selectedItem.dataPrevistaInicio).format('DD/MM/YYYY HH:mm')}</Typography></Grid>
                             <Grid item xs={6}><Typography variant="caption">Fim Previsto</Typography><Typography>{dayjs(selectedItem.dataPrevistaFim).format('DD/MM/YYYY HH:mm')}</Typography></Grid>

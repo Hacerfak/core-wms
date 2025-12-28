@@ -8,6 +8,8 @@ import br.com.hacerfak.coreWMS.modules.operacao.domain.ItemSolicitacaoEntrada;
 import br.com.hacerfak.coreWMS.modules.operacao.domain.SolicitacaoEntrada;
 import br.com.hacerfak.coreWMS.modules.operacao.repository.SolicitacaoEntradaRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -24,6 +26,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.Optional;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class NfeImportService {
 
@@ -212,5 +215,55 @@ public class NfeImportService {
             }
         }
         return null;
+    }
+
+    private Parceiro garantirParceiro(String documento, String nome, String tipo) {
+        return parceiroRepository.findByCpfCnpj(documento)
+                .orElseGet(() -> {
+                    Parceiro novo = Parceiro.builder()
+                            .nome(nome)
+                            .cpfCnpj(documento)
+                            .tipo(tipo)
+                            .ativo(true)
+                            .build();
+                    return parceiroRepository.save(novo);
+                });
+    }
+
+    // --- NOVO MÉTODO PARA EXTRAIR TRANSPORTADORA ---
+    @Transactional
+    public Optional<Parceiro> extrairTransportadoraDoXml(MultipartFile file) {
+        try {
+            DocumentBuilderFactory dbFactory = DocumentBuilderFactory.newInstance();
+            DocumentBuilder dBuilder = dbFactory.newDocumentBuilder();
+            Document doc = dBuilder.parse(file.getInputStream());
+            doc.getDocumentElement().normalize();
+
+            // Procura tag <transp> -> <transporta>
+            NodeList transpList = doc.getElementsByTagName("transp");
+            if (transpList.getLength() > 0) {
+                Element transp = (Element) transpList.item(0);
+                NodeList transportaList = transp.getElementsByTagName("transporta");
+
+                if (transportaList.getLength() > 0) {
+                    Element transporta = (Element) transportaList.item(0);
+                    // Pode ser CNPJ ou CPF
+                    String cnpj = getTagValue("CNPJ", transporta);
+                    String cpf = getTagValue("CPF", transporta);
+                    String nome = getTagValue("xNome", transporta);
+
+                    String docFederal = cnpj != null ? cnpj : cpf;
+
+                    if (docFederal != null && !docFederal.isEmpty()) {
+                        // Verifica se existe, senão cria
+                        return Optional.of(garantirParceiro(docFederal, nome, "TRANSPORTADORA"));
+                    }
+                }
+            }
+            return Optional.empty();
+        } catch (Exception e) {
+            log.warn("Não foi possível extrair transportadora do XML: {}", e.getMessage());
+            return Optional.empty();
+        }
     }
 }

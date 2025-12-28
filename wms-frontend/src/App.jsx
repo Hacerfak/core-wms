@@ -25,6 +25,7 @@ import MapeamentoView from './pages/Cadastros/Mapeamento/MapeamentoView';
 import PortariaMenu from './pages/Portaria/PortariaMenu';
 import TurnoList from './pages/Portaria/Turnos/TurnoList';
 import AgendamentoList from './pages/Portaria/Agendamento/AgendamentoList';
+import AgendamentoForm from './pages/Portaria/Agendamento/AgendamentoForm';
 import OperacaoPortaria from './pages/Portaria/Operacao/OperacaoPortaria';
 
 // OPERAÇÃO
@@ -123,7 +124,7 @@ function App() {
               {/* 3. Lista Gerencial (Antiga lista padrão) */}
               <Route path="/recebimento/lista" element={<ProtectedRoute permission={PERMISSIONS.RECEBIMENTO_VISUALIZAR}><RecebimentoList /></ProtectedRoute>} />
               {/* 4. Importação XML */}
-              <Route path="/recebimento/novo" element={<ProtectedRoute permission={PERMISSIONS.RECEBIMENTO_IMPORTAR_XML}><Recebimento /></ProtectedRoute>} />
+              <Route path="/recebimento/importar" element={<ProtectedRoute permission={PERMISSIONS.RECEBIMENTO_IMPORTAR_XML}><Recebimento /></ProtectedRoute>} />
               {/* 5. Execução da Conferência */}
               <Route path="/recebimento/:id/conferencia" element={<ProtectedRoute permission={PERMISSIONS.RECEBIMENTO_OPERAR}><Conferencia /></ProtectedRoute>} />
               <Route path="/recebimento/divergencias" element={<ProtectedRoute permission={PERMISSIONS.RECEBIMENTO_FINALIZAR}><DivergenciaList /></ProtectedRoute>} />

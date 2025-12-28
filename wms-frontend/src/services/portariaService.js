@@ -76,3 +76,12 @@ export const realizarCheckout = async (codigoReserva, assinaturaFile) => {
     });
     return response.data;
 };
+
+export const encostarVeiculo = async (agendamentoId, docaId) => {
+    // Se docaId for nulo, tenta usar a doca já atribuída no agendamento
+    const url = docaId
+        ? `/api/portaria/operacao/${agendamentoId}/encostar?docaId=${docaId}`
+        : `/api/portaria/operacao/${agendamentoId}/encostar`;
+
+    await api.post(url);
+};

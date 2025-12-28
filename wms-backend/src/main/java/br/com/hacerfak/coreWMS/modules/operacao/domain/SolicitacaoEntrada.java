@@ -3,6 +3,8 @@ package br.com.hacerfak.coreWMS.modules.operacao.domain;
 import br.com.hacerfak.coreWMS.core.domain.workflow.Solicitacao;
 import br.com.hacerfak.coreWMS.modules.cadastro.domain.Parceiro;
 import br.com.hacerfak.coreWMS.modules.estoque.domain.Localizacao;
+import br.com.hacerfak.coreWMS.modules.portaria.domain.Agendamento;
+
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
@@ -39,8 +41,13 @@ public class SolicitacaoEntrada extends Solicitacao {
 
     @ManyToOne
     @JoinColumn(name = "doca_id")
-    @JsonIgnoreProperties({ "area", "armazem", "hibernateLazyInitializer", "handler" })
+    @JsonIgnoreProperties({ "area", "hibernateLazyInitializer", "handler" })
     private Localizacao doca;
+
+    // --- NOVO: Mapeamento reverso para facilitar DTOs ---
+    @OneToOne(mappedBy = "solicitacaoEntrada")
+    @JsonIgnore // Evita ciclo
+    private Agendamento agendamento;
 
     // Itens Previstos (XML)
     @Builder.Default

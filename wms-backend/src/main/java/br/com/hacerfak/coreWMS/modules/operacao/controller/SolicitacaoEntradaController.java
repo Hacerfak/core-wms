@@ -184,7 +184,7 @@ public class SolicitacaoEntradaController {
     @PutMapping("/{id}/atribuir-doca")
     @PreAuthorize("hasAuthority('RECEBIMENTO_EDITAR') or hasRole('ADMIN')")
     public ResponseEntity<Void> atribuirDoca(@PathVariable Long id, @RequestParam Long docaId) {
-        inboundWorkflowService.atribuirDoca(id, docaId);
+        inboundWorkflowService.vincularDoca(id, docaId);
         return ResponseEntity.ok().build();
     }
 

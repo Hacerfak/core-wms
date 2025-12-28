@@ -166,7 +166,7 @@ public class PortariaController {
             if (agendamento.getDoca() != null) {
                 // Chama o serviço que: Seta a Doca na Solicitação + Muda Status para AGUARDANDO
                 // + Gera Tarefa
-                recebimentoWorkflowService.atribuirDoca(
+                recebimentoWorkflowService.vincularDoca(
                         agendamento.getSolicitacaoEntrada().getId(),
                         agendamento.getDoca().getId());
             }
@@ -214,5 +214,15 @@ public class PortariaController {
         agendamento.setStatus(StatusAgendamento.FINALIZADO);
 
         return ResponseEntity.ok(agendamentoRepository.save(agendamento));
+    }
+
+    @PostMapping("/operacao/{id}/encostar")
+    @PreAuthorize("hasAuthority('PORTARIA_OPERAR') or hasRole('ADMIN')")
+    public ResponseEntity<Void> encostarVeiculo(
+            @PathVariable Long id,
+            @RequestParam(required = false) Long docaId) {
+
+        portariaService.encostarVeiculo(id, docaId);
+        return ResponseEntity.ok().build();
     }
 }

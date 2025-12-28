@@ -63,7 +63,7 @@ const SelecaoEmpresa = () => {
             {/* Header */}
             <Box sx={{ bgcolor: 'white', py: 2, px: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: 1 }}>
                 <Box display="flex" alignItems="center" gap={2}>
-                    <Typography variant="h6" fontWeight="bold" color="primary">CoreWMS</Typography>
+                    <Typography variant="h6" fontWeight="bold" color="primary">WMS Core</Typography>
                 </Box>
 
                 <Box display="flex" gap={2}>

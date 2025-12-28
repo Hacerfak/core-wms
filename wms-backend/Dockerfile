@@ -51,10 +51,18 @@ RUN rm /tmp/icp-brasil-v5.crt /tmp/icp-brasil-v10.crt && \
 
 # Cria usuário não-root por segurança
 RUN groupadd -r wmsgroup && useradd -r -g wmsgroup wmsuser
+
+# --- CORREÇÃO AQUI ---
+# 1. Cria a pasta de uploads explicitamente
+# 2. Dá permissão ao usuário wmsuser para a pasta de trabalho inteira (/app)
+RUN mkdir -p /app/uploads && \
+    chown -R wmsuser:wmsgroup /app
+
 USER wmsuser
 
 # Copia o JAR gerado no Estágio 1
-COPY --from=builder /app/target/*.jar app.jar
+# O --chown garante que o arquivo copiado também pertença ao usuário correto
+COPY --from=builder --chown=wmsuser:wmsgroup /app/target/*.jar app.jar
 
 # Configurações de Memória Java para Containers
 ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"

@@ -40,6 +40,7 @@ public class Agendamento extends BaseEntity {
 
     @ManyToOne
     @JoinColumn(name = "doca_id")
+    @JsonIgnoreProperties({ "area", "hibernateLazyInitializer", "handler" })
     private Localizacao doca;
 
     private LocalDateTime dataPrevistaInicio;
