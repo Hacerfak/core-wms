@@ -20,6 +20,7 @@ import ParceiroForm from './pages/Cadastros/ParceiroForm';
 import ProdutoList from './pages/Cadastros/ProdutoList';
 import ProdutoForm from './pages/Cadastros/ProdutoForm';
 import MapeamentoView from './pages/Cadastros/Mapeamento/MapeamentoView';
+import FormatoLpnList from './pages/Cadastros/Estoque/FormatoLpnList';
 
 //PORTARIA
 import PortariaMenu from './pages/Portaria/PortariaMenu';
@@ -105,7 +106,7 @@ function App() {
               <Route path="/cadastros/parceiros/:id" element={<ProtectedRoute permission={PERMISSIONS.PARCEIRO_GERENCIAR}><ParceiroForm /></ProtectedRoute>} />
 
               <Route path="/cadastros/locais" element={<ProtectedRoute permission={PERMISSIONS.LOCALIZACAO_VISUALIZAR}><MapeamentoView /></ProtectedRoute>} />
-
+              <Route path="/cadastros/formatos-lpn" element={<ProtectedRoute permission={PERMISSIONS.ESTOQUE_GERENCIAR}><FormatoLpnList /></ProtectedRoute>} />
 
               {/* PORTARIA */}
               <Route path="/portaria" element={<ProtectedRoute permission="PORTARIA_AGENDAR"><PortariaMenu /></ProtectedRoute>} />

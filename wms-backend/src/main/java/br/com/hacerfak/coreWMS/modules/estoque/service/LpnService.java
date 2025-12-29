@@ -5,8 +5,10 @@ import br.com.hacerfak.coreWMS.modules.cadastro.domain.Produto;
 import br.com.hacerfak.coreWMS.modules.cadastro.repository.ProdutoRepository;
 import br.com.hacerfak.coreWMS.modules.estoque.domain.*;
 import br.com.hacerfak.coreWMS.modules.estoque.repository.EstoqueSaldoRepository;
+import br.com.hacerfak.coreWMS.modules.estoque.repository.FormatoLpnRepository; // NOVO IMPORT
 import br.com.hacerfak.coreWMS.modules.estoque.repository.LpnItemRepository;
 import br.com.hacerfak.coreWMS.modules.estoque.repository.LpnRepository;
+import br.com.hacerfak.coreWMS.modules.estoque.repository.MovimentoEstoqueRepository;
 import br.com.hacerfak.coreWMS.modules.operacao.dto.AddItemLpnRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -29,55 +31,73 @@ public class LpnService {
     private final LpnItemRepository lpnItemRepository;
     private final ProdutoRepository produtoRepository;
     private final EstoqueSaldoRepository estoqueSaldoRepository;
+    private final FormatoLpnRepository formatoLpnRepository;
+    private final MovimentoEstoqueRepository movimentoEstoqueRepository;
 
     /**
      * 1. PRÉ-GERAÇÃO DE ETIQUETAS
      * Gera N códigos de LPN no banco para o operador imprimir e colar nos pallets
      * vazios.
+     * ALTERAÇÃO: Recebe formatoId para vincular ao tipo físico (PBR, Caixa, etc).
      */
     @Transactional
-    public List<String> gerarLpnsVazias(Integer quantidade, String usuario) {
+    public List<String> gerarLpnsVazias(Integer quantidade, Long formatoId, String usuario) {
+        // Busca o formato escolhido
+        FormatoLpn formato = formatoLpnRepository.findById(formatoId)
+                .orElseThrow(
+                        () -> new EntityNotFoundException("Formato de LPN não encontrado (ID: " + formatoId + ")"));
+
         List<String> codigosGerados = new ArrayList<>();
-        List<Lpn> lpnsParaSalvar = new ArrayList<>(); // Batch para LPN vazia também
+        List<Lpn> lpnsParaSalvar = new ArrayList<>();
 
         for (int i = 0; i < quantidade; i++) {
             String codigo = gerarCodigoLpnUnico();
             Lpn lpn = Lpn.builder()
                     .codigo(codigo)
-                    .tipo(TipoLpn.PALLET)
+                    .formato(formato) // Substitui .tipo(TipoLpn.PALLET)
                     .status(StatusLpn.EM_MONTAGEM)
+                    .criadoPor(usuario)
                     .build();
             lpnsParaSalvar.add(lpn);
             codigosGerados.add(codigo);
         }
-        lpnRepository.saveAll(lpnsParaSalvar); // Batch Save
+        lpnRepository.saveAll(lpnsParaSalvar);
         return codigosGerados;
     }
 
     /**
      * 2. CONFERÊNCIA (BIPAGEM)
      * Adiciona um produto dentro de uma LPN.
-     * Se a LPN não existir (ex: operador está usando uma etiqueta que ele achou
-     * perdida
-     * ou digitou um código novo manual), o sistema cria na hora.
+     * ALTERAÇÃO: Recebe formatoId (Opcional) caso precise criar a LPN "on the fly".
      */
     @Transactional
-    public void adicionarItem(String codigoLpn, AddItemLpnRequest dto, String usuario) {
+    public void adicionarItem(String codigoLpn, AddItemLpnRequest dto, Long formatoId, String usuario) {
         // 1. Busca ou Cria a LPN (Container)
         Lpn lpn = lpnRepository.findByCodigo(codigoLpn)
                 .orElseGet(() -> {
-                    // Se não existe, cria "on the fly"
+                    // Se não existe, cria "on the fly".
+                    // Para criar, PRECISAMOS do formatoId informado pelo operador na tela.
+                    if (formatoId == null) {
+                        throw new IllegalArgumentException(
+                                "LPN nova detectada. Informe o Formato (Pallet/Caixa) para prosseguir.");
+                    }
+
+                    FormatoLpn formato = formatoLpnRepository.findById(formatoId)
+                            .orElseThrow(() -> new EntityNotFoundException("Formato inválido."));
+
                     Lpn nova = Lpn.builder()
                             .codigo(codigoLpn)
-                            .tipo(TipoLpn.PALLET)
+                            .formato(formato) // Vincula o formato escolhido na tela
                             .status(StatusLpn.EM_MONTAGEM)
+                            .criadoPor(usuario)
                             .build();
                     return lpnRepository.save(nova);
                 });
 
         validarStatusLpn(lpn);
 
-        // 1. Verifica se já existe no Estoque Físico (Armazenado)
+        // --- LÓGICA ORIGINAL DE VALIDAÇÃO DE ITEM/SERIAL MANTIDA ABAIXO ---
+
         Produto produto = produtoRepository.findByCodigoBarras(dto.sku())
                 .orElseThrow(() -> new EntityNotFoundException("Produto não encontrado"));
 
@@ -87,17 +107,10 @@ public class LpnService {
                 throw new IllegalArgumentException("Itens controlados por serial devem ter quantidade igual a 1.");
             }
 
-            // Já fazemos essa busca
-            // antes no código
-            // original
             if (estoqueSaldoRepository.existsByProdutoIdAndNumeroSerie(produto.getId(), dto.numeroSerie())) {
                 throw new IllegalArgumentException("Serial já existente no estoque: " + dto.numeroSerie());
             }
 
-            // 2. Verifica se já foi bipado em OUTRA LPN que ainda está na doca (status
-            // EM_MONTAGEM ou FECHADO)
-            // Isso evita que dois operadores bipem o mesmo serial em pallets diferentes
-            // simultaneamente
             boolean serialEmOutraLpn = lpnItemRepository.existsByProdutoIdAndNumeroSerieAndLpnCodigoNot(
                     produto.getId(), dto.numeroSerie(), codigoLpn);
 
@@ -106,8 +119,7 @@ public class LpnService {
             }
         }
 
-        // Busca se já existe item igual na LPN para somar (exceto se for serializado,
-        // aí cria novo)
+        // Upsert do Item
         Optional<LpnItem> itemExistente = Optional.empty();
 
         if (dto.numeroSerie() == null) {
@@ -127,15 +139,14 @@ public class LpnService {
                     .lote(dto.lote())
                     .dataValidade(dto.dataValidade())
                     .statusQualidade(dto.statusQualidade() != null ? dto.statusQualidade() : StatusQualidade.DISPONIVEL)
-                    .numeroSerie(dto.numeroSerie()) // <--- Passando o serial
+                    .numeroSerie(dto.numeroSerie())
                     .build();
             lpnItemRepository.save(novoItem);
         }
     }
 
     /**
-     * 3. FECHAMENTO DO VOLUME
-     * Marca a LPN como pronta para armazenagem (Stage).
+     * 3. FECHAMENTO DO VOLUME (Sem alterações, apenas mantido)
      */
     @Transactional
     public void fecharLpn(String codigoLpn, String usuario) {
@@ -160,12 +171,7 @@ public class LpnService {
     }
 
     private String gerarCodigoLpnUnico() {
-        // Formato: LPN + Ano + DiaDoAno + Random (Ex: LPN24300-9999)
-        // Simples e curto para código de barras
         String prefix = "LPN-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyDDD"));
-
-        // Tenta gerar até achar um livre (colisão é rara com 4 digitos random, mas
-        // segura morreu de velho)
         for (int i = 0; i < 5; i++) {
             int random = ThreadLocalRandom.current().nextInt(1000, 9999);
             String codigo = prefix + "-" + random;
@@ -178,7 +184,7 @@ public class LpnService {
 
     /**
      * GERAÇÃO EM MASSA (Carga Fechada / Monoproduto)
-     * Cria N LPNs já com o item vinculado e status FECHADO (Pronto para armazenar).
+     * ALTERAÇÃO: Adicionado parâmetro Long formatoId.
      */
     @Transactional
     public List<String> gerarLpnsComConteudo(
@@ -188,50 +194,52 @@ public class LpnService {
             String lote,
             LocalDate validade,
             String numeroSerie,
-            Localizacao localizacaoInicial, // <--- NOVO
+            Localizacao localizacaoInicial,
             Long solicitacaoId,
+            Long formatoId,
             String usuario) {
 
+        // Busca o formato uma única vez para usar em todas as LPNs do loop
+        FormatoLpn formato = formatoLpnRepository.findById(formatoId)
+                .orElseThrow(() -> new EntityNotFoundException("Formato de LPN não encontrado."));
+
         List<Lpn> lpnsParaSalvar = new ArrayList<>();
-        List<EstoqueSaldo> saldosParaSalvar = new ArrayList<>(); // Lista para Batch
+        List<EstoqueSaldo> saldosParaSalvar = new ArrayList<>();
+        List<MovimentoEstoque> movimentosParaSalvar = new ArrayList<>();
         List<String> codigosGerados = new ArrayList<>();
 
-        // Validação de segurança para Serial: Se tiver serial, força 1 volume ou valida
-        // unicidade
         if (numeroSerie != null && !numeroSerie.isBlank() && qtdVolumes > 1) {
-            // Num cenário real, serial é único. Aqui permitimos, mas fica o alerta de
-            // negócio.
             throw new IllegalArgumentException("Itens serializados devem ser gerados um a um.");
         }
 
         for (int i = 1; i <= qtdVolumes; i++) {
-            // Gera código sequencial rápido: LPN-TIMESTAMP-SEQ (Ex: LPN-2310201030-1)
             String codigo = gerarCodigoLpnUnico();
             codigosGerados.add(codigo);
 
             Lpn lpn = Lpn.builder()
                     .codigo(codigo)
-                    .tipo(TipoLpn.PALLET)
-                    .status(StatusLpn.FECHADO) // Já nasce fechado, pulando a etapa de montagem
+                    .formato(formato) // Vínculo com a entidade FormatoLpn
+                    .status(StatusLpn.FECHADO)
                     .localizacaoAtual(localizacaoInicial)
                     .solicitacaoEntradaId(solicitacaoId)
+                    .criadoPor(usuario) // Boa prática registrar quem gerou a massa
                     .build();
 
-            // Cria o item dentro da LPN
             LpnItem item = LpnItem.builder()
-                    .lpn(lpn) // O JPA/Hibernate gerencia o vínculo se salvo em cascata
+                    .lpn(lpn)
                     .produto(produto)
                     .quantidade(qtdPorVolume)
                     .lote(lote)
                     .dataValidade(validade)
                     .numeroSerie(numeroSerie)
+                    .statusQualidade(StatusQualidade.DISPONIVEL) // Default importante
                     .build();
 
-            lpn.adicionarItem(item);
+            lpn.setItens(new ArrayList<>()); // Garante lista inicializada caso precise
+            lpn.getItens().add(item); // Vínculo bidirecional se necessário pelo Cascade
 
             lpnsParaSalvar.add(lpn);
 
-            // Cria objeto de Saldo para salvar em lote depois
             saldosParaSalvar.add(EstoqueSaldo.builder()
                     .produto(produto)
                     .localizacao(localizacaoInicial)
@@ -242,12 +250,29 @@ public class LpnService {
                     .quantidade(qtdPorVolume)
                     .quantidadeReservada(BigDecimal.ZERO)
                     .build());
+
+            // 4. --- CORREÇÃO: Cria o Registro de Movimentação (Kardex) ---
+            // Como é um registro novo (saldo novo), o anterior é zero.
+            MovimentoEstoque movimento = MovimentoEstoque.builder()
+                    .tipo(TipoMovimento.ENTRADA) // Marca como Entrada
+                    .produto(produto)
+                    .localizacao(localizacaoInicial)
+                    .quantidade(qtdPorVolume)
+                    .saldoAnterior(BigDecimal.ZERO)
+                    .saldoAtual(qtdPorVolume)
+                    .lpn(codigo)
+                    .lote(lote)
+                    .numeroSerie(numeroSerie)
+                    .usuarioResponsavel(usuario)
+                    .observacao("Recebimento - Geração de LPN (Solicitação " + solicitacaoId + ")")
+                    .build();
+
+            movimentosParaSalvar.add(movimento);
         }
 
-        // Save All é mais eficiente que salvar um por um
         lpnRepository.saveAll(lpnsParaSalvar);
-
         estoqueSaldoRepository.saveAll(saldosParaSalvar);
+        movimentoEstoqueRepository.saveAll(movimentosParaSalvar);
 
         return codigosGerados;
     }

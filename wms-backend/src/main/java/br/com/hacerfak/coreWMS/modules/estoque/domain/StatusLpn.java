@@ -1,6 +1,7 @@
 package br.com.hacerfak.coreWMS.modules.estoque.domain;
 
 public enum StatusLpn {
+    CRIADA,
     EM_MONTAGEM, // Na doca, sendo bipado
     FECHADO, // Pronto para armazenar (Stage)
     ARMAZENADO, // Já no pulmão/blocado

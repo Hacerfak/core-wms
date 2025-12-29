@@ -21,8 +21,6 @@ INSERT INTO tb_area (
         nome,
         codigo,
         armazem_id,
-        tipo,
-        padrao_recebimento,
         ativo,
         criado_por,
         data_criacao
@@ -35,8 +33,6 @@ VALUES (
             FROM tb_armazem
             WHERE codigo = 'CD01'
         ),
-        'DOCA',
-        TRUE,
         TRUE,
         'SEED',
         NOW()
@@ -46,8 +42,6 @@ INSERT INTO tb_area (
         nome,
         codigo,
         armazem_id,
-        tipo,
-        padrao_recebimento,
         ativo,
         criado_por,
         data_criacao
@@ -60,8 +54,6 @@ VALUES (
             FROM tb_armazem
             WHERE codigo = 'CD01'
         ),
-        'ARMAZENAGEM',
-        FALSE,
         TRUE,
         'SEED',
         NOW()
@@ -71,8 +63,6 @@ INSERT INTO tb_area (
         nome,
         codigo,
         armazem_id,
-        tipo,
-        padrao_expedicao,
         ativo,
         criado_por,
         data_criacao
@@ -85,8 +75,6 @@ VALUES (
             FROM tb_armazem
             WHERE codigo = 'CD01'
         ),
-        'STAGE',
-        TRUE,
         TRUE,
         'SEED',
         NOW()

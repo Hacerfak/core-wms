@@ -20,13 +20,7 @@ CREATE TABLE tb_area (
     nome VARCHAR(100) NOT NULL,
     codigo VARCHAR(50) NOT NULL,
     armazem_id BIGINT NOT NULL,
-    -- Campos Corrigidos
-    tipo VARCHAR(30) NOT NULL,
-    -- ARMAZENAGEM, DOCA, STAGE
     ativo BOOLEAN DEFAULT TRUE,
-    padrao_recebimento BOOLEAN DEFAULT FALSE,
-    padrao_expedicao BOOLEAN DEFAULT FALSE,
-    padrao_quarentena BOOLEAN DEFAULT FALSE,
     CONSTRAINT fk_area_armazem FOREIGN KEY (armazem_id) REFERENCES tb_armazem(id),
     CONSTRAINT uk_area_codigo UNIQUE (armazem_id, codigo)
 );
@@ -66,7 +60,6 @@ CREATE TABLE tb_lpn (
     data_atualizacao TIMESTAMP,
     data_finalizacao TIMESTAMP,
     codigo VARCHAR(50) NOT NULL UNIQUE,
-    tipo VARCHAR(30) NOT NULL,
     status VARCHAR(30) NOT NULL,
     localizacao_atual_id BIGINT,
     solicitacao_entrada_id BIGINT,

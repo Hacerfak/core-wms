@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
     Box, Button, Table, TableBody, TableCell, TableContainer, TableHead,
     TableRow, Paper, IconButton, Dialog, DialogTitle, DialogContent,
-    TextField, DialogActions, Switch, FormControlLabel, MenuItem, Grid, Chip
+    TextField, DialogActions, MenuItem, Switch, FormControlLabel, Chip
 } from '@mui/material';
-import { Plus, Edit, Trash2 } from 'lucide-react';
+import { Plus, Edit, Trash2, Filter, CheckCircle, XCircle } from 'lucide-react'; // Adicionado Filter
 import { toast } from 'react-toastify';
 import { getArmazens, getAreas, salvarArea, excluirItem } from '../../../services/mapeamentoService';
 import ConfirmDialog from '../../../components/ConfirmDialog';
@@ -13,49 +13,68 @@ import Can from '../../../components/Can';
 const AreaList = () => {
     const [armazens, setArmazens] = useState([]);
     const [armazemSelecionado, setArmazemSelecionado] = useState('');
+    const [busca, setBusca] = useState(''); // Novo estado para busca textual
     const [lista, setLista] = useState([]);
     const [modalOpen, setModalOpen] = useState(false);
 
     // Estados para exclusão
     const [confirmOpen, setConfirmOpen] = useState(false);
-    const [confirmAction, setConfirmAction] = useState(null);
+    const [confirmData, setConfirmData] = useState({ title: '', message: '', action: null });
 
     const [form, setForm] = useState({
-        id: '', armazemId: '', codigo: '', nome: '', tipo: 'ARMAZENAGEM',
-        padraoRecebimento: false, padraoExpedicao: false, padraoQuarentena: false,
-        ativo: true
+        id: '', armazemId: '', codigo: '', nome: '', ativo: true
     });
 
     useEffect(() => { loadArmazens(); }, []);
 
     const loadArmazens = async () => {
-        const data = await getArmazens();
-        setArmazens(data);
-        if (data.length > 0) setArmazemSelecionado(data[0].id);
+        try {
+            const data = await getArmazens();
+            setArmazens(data);
+            if (data.length > 0) setArmazemSelecionado(data[0].id);
+        } catch (e) { toast.error("Erro ao carregar armazéns"); }
     };
 
     useEffect(() => { if (armazemSelecionado) loadAreas(); }, [armazemSelecionado]);
 
-    const loadAreas = async () => { setLista(await getAreas(armazemSelecionado)); };
+    const loadAreas = async () => {
+        try {
+            const data = await getAreas(armazemSelecionado);
+            setLista(data || []);
+        } catch (e) { toast.error("Erro ao carregar áreas"); }
+    };
 
+    // --- FILTRAGEM LOCAL ---
+    const listaFiltrada = useMemo(() => {
+        if (!busca) return lista;
+        const termo = busca.toUpperCase();
+        return lista.filter(item =>
+            item.codigo.toUpperCase().includes(termo) ||
+            item.nome.toUpperCase().includes(termo)
+        );
+    }, [lista, busca]);
+
+    // --- AÇÕES ---
     const handleNew = () => {
         setForm({
-            id: '', armazemId: armazemSelecionado, codigo: '', nome: '', tipo: 'ARMAZENAGEM',
-            padraoRecebimento: false, padraoExpedicao: false, padraoQuarentena: false,
-            ativo: true
+            id: '', armazemId: armazemSelecionado, codigo: '', nome: '', ativo: true
         });
         setModalOpen(true);
     };
 
     const handleEdit = (item) => {
         setForm({
-            ...item,
-            armazemId: item.armazem.id
+            id: item.id,
+            armazemId: item.armazem.id,
+            codigo: item.codigo,
+            nome: item.nome,
+            ativo: item.ativo
         });
         setModalOpen(true);
     };
 
     const handleSubmit = async () => {
+        if (!form.codigo || !form.nome) return toast.warning("Preencha Código e Nome.");
         try {
             await salvarArea(form);
             toast.success("Área salva!");
@@ -66,15 +85,18 @@ const AreaList = () => {
         }
     };
 
-    // Lógica de Exclusão
     const handleDelete = (id) => {
-        setConfirmAction(() => async () => {
-            try {
-                await excluirItem('areas', id);
-                toast.success("Área excluída!");
-                loadAreas();
-            } catch (error) {
-                toast.error(error.response?.data?.message || "Erro ao excluir. Verifique se há endereços vinculados.");
+        setConfirmData({
+            title: 'Excluir Área',
+            message: 'Tem certeza? A exclusão só é permitida se não houver endereços vinculados.',
+            action: async () => {
+                try {
+                    await excluirItem('areas', id);
+                    toast.success("Área excluída!");
+                    loadAreas();
+                } catch (error) {
+                    toast.error(error.response?.data?.message || "Erro ao excluir.");
+                }
             }
         });
         setConfirmOpen(true);
@@ -82,41 +104,87 @@ const AreaList = () => {
 
     return (
         <Box>
-            <Box display="flex" gap={2} mb={2} alignItems="center">
-                <TextField select label="Filtrar por Armazém" size="small" value={armazemSelecionado} onChange={e => setArmazemSelecionado(e.target.value)} sx={{ width: 250 }}>
-                    {armazens.map(a => <MenuItem key={a.id} value={a.id}>{a.nome}</MenuItem>)}
-                </TextField>
+            {/* 1. BARRA DE FILTROS E AÇÕES (PADRONIZADA) */}
+            <Paper sx={{ p: 2, mb: 2, display: 'flex', flexDirection: { xs: 'column', md: 'row' }, alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
 
-                <Can I="LOCALIZACAO_GERENCIAR">
-                    <Button variant="contained" startIcon={<Plus size={18} />} onClick={handleNew} disabled={!armazemSelecionado}>
-                        Nova Área
-                    </Button>
-                </Can>
-            </Box>
+                {/* Lado Esquerdo: Filtros */}
+                <Box display="flex" gap={2} alignItems="center" flex={1}>
+                    <Filter size={20} color="#64748b" />
 
-            <TableContainer component={Paper}>
+                    <TextField
+                        select
+                        label="Filtrar por Armazém"
+                        size="small"
+                        value={armazemSelecionado}
+                        onChange={e => setArmazemSelecionado(e.target.value)}
+                        sx={{ minWidth: 250 }}
+                    >
+                        {armazens.map(a => <MenuItem key={a.id} value={a.id}>{a.nome}</MenuItem>)}
+                    </TextField>
+
+                    <TextField
+                        placeholder="Buscar por nome ou código..."
+                        size="small"
+                        value={busca}
+                        onChange={e => setBusca(e.target.value)}
+                        sx={{ flex: 1, maxWidth: 400 }}
+                    />
+                </Box>
+
+                {/* Lado Direito: Botões */}
+                <Box display="flex" gap={1}>
+                    <Can I="LOCALIZACAO_GERENCIAR">
+                        <Button variant="contained" startIcon={<Plus size={18} />} onClick={handleNew} disabled={!armazemSelecionado}>
+                            Nova Área
+                        </Button>
+                    </Can>
+                </Box>
+            </Paper>
+
+            {/* 2. TABELA */}
+            <TableContainer component={Paper} sx={{ borderRadius: 2 }}>
                 <Table size="small">
                     <TableHead sx={{ bgcolor: 'background.subtle' }}>
                         <TableRow>
                             <TableCell>Código</TableCell>
                             <TableCell>Nome</TableCell>
-                            <TableCell>Tipo</TableCell>
-                            <TableCell>Padrões</TableCell>
+                            <TableCell>Status</TableCell>
                             <TableCell align="center">Ações</TableCell>
                         </TableRow>
                     </TableHead>
                     <TableBody>
-                        {lista.map(item => (
-                            <TableRow key={item.id}>
+                        {listaFiltrada.map(item => (
+                            <TableRow key={item.id} hover>
                                 <TableCell><b>{item.codigo}</b></TableCell>
                                 <TableCell>{item.nome}</TableCell>
-                                <TableCell><Chip label={item.tipo} size="small" /></TableCell>
                                 <TableCell>
-                                    <Box display="flex" gap={0.5}>
-                                        {item.padraoRecebimento && <Chip label="REC" color="info" size="small" />}
-                                        {item.padraoExpedicao && <Chip label="EXP" color="warning" size="small" />}
-                                        {item.padraoQuarentena && <Chip label="QUA" color="error" size="small" />}
-                                    </Box>
+                                    {item.ativo ? (
+                                        <Chip
+                                            icon={<CheckCircle size={12} />}
+                                            label="Ativo"
+                                            size="small"
+                                            sx={{
+                                                fontSize: '0.65rem',
+                                                height: 22,
+                                                bgcolor: '#dcfce7',
+                                                color: '#166534',
+                                                fontWeight: '600',
+                                                '& .MuiChip-icon': { color: '#16a34a' }
+                                            }}
+                                        />
+                                    ) : (
+                                        <Chip
+                                            icon={<XCircle size={12} />}
+                                            label="Inativo"
+                                            size="small"
+                                            sx={{
+                                                fontSize: '0.65rem',
+                                                height: 22,
+                                                bgcolor: '#f1f5f9',
+                                                color: '#64748b'
+                                            }}
+                                        />
+                                    )}
                                 </TableCell>
                                 <TableCell align="center">
                                     <Box display="flex" justifyContent="center" gap={1}>
@@ -125,7 +193,6 @@ const AreaList = () => {
                                                 <Edit size={16} />
                                             </IconButton>
                                         </Can>
-
                                         <Can I="LOCALIZACAO_EXCLUIR">
                                             <IconButton size="small" color="error" onClick={() => handleDelete(item.id)}>
                                                 <Trash2 size={16} />
@@ -135,41 +202,37 @@ const AreaList = () => {
                                 </TableCell>
                             </TableRow>
                         ))}
+                        {listaFiltrada.length === 0 && (
+                            <TableRow><TableCell colSpan={4} align="center" sx={{ py: 3, color: 'text.secondary' }}>Nenhuma área encontrada.</TableCell></TableRow>
+                        )}
                     </TableBody>
                 </Table>
             </TableContainer>
 
-            <Dialog open={modalOpen} onClose={() => setModalOpen(false)} maxWidth="md" fullWidth>
+            {/* MODAL CADASTRO */}
+            <Dialog open={modalOpen} onClose={() => setModalOpen(false)} maxWidth="sm" fullWidth>
                 <DialogTitle>{form.id ? 'Editar' : 'Nova'} Área</DialogTitle>
                 <DialogContent>
-                    <Grid container spacing={2} mt={0.5}>
-                        <Grid item xs={4}>
-                            <TextField label="Código" value={form.codigo} onChange={e => setForm({ ...form, codigo: e.target.value.toUpperCase() })} fullWidth required helperText="Ex: DOCA1" />
-                        </Grid>
-                        <Grid item xs={8}>
-                            <TextField label="Nome da Área" value={form.nome} onChange={e => setForm({ ...form, nome: e.target.value })} fullWidth required />
-                        </Grid>
-                        <Grid item xs={6}>
-                            <TextField select label="Tipo" value={form.tipo} onChange={e => setForm({ ...form, tipo: e.target.value })} fullWidth>
-                                <MenuItem value="DOCA">Doca (Entrada/Saída)</MenuItem>
-                                <MenuItem value="STAGE">Stage (Conferência)</MenuItem>
-                                <MenuItem value="SEGREGACAO">Segregação (Inspeção)</MenuItem>
-                                <MenuItem value="ARMAZENAGEM">Armazenagem (Estoque)</MenuItem>
-                                <MenuItem value="PICKING">Picking (Separação)</MenuItem>
-                                <MenuItem value="AVARIA">Avaria</MenuItem>
-                                <MenuItem value="QUARENTENA">Quarentena</MenuItem>
-                                <MenuItem value="PERDA">Perda</MenuItem>
-                                <MenuItem value="PULMAO">Pulmão (Reservas)</MenuItem>
-                            </TextField>
-                        </Grid>
-                        <Grid item xs={12}>
-                            <Box display="flex" gap={2}>
-                                <FormControlLabel control={<Switch checked={form.padraoRecebimento} onChange={e => setForm({ ...form, padraoRecebimento: e.target.checked })} />} label="Padrão Recebimento" />
-                                <FormControlLabel control={<Switch checked={form.padraoExpedicao} onChange={e => setForm({ ...form, padraoExpedicao: e.target.checked })} />} label="Padrão Expedição" />
-                                <FormControlLabel control={<Switch checked={form.padraoQuarentena} onChange={e => setForm({ ...form, padraoQuarentena: e.target.checked })} color="error" />} label="Padrão Quarentena" />
-                            </Box>
-                        </Grid>
-                    </Grid>
+                    <Box display="flex" flexDirection="column" gap={2} mt={1}>
+                        <TextField
+                            label="Código"
+                            value={form.codigo}
+                            onChange={e => setForm({ ...form, codigo: e.target.value.toUpperCase() })}
+                            fullWidth required
+                            helperText="Ex: RUA-A, MEZANINO"
+                            disabled={!!form.id}
+                        />
+                        <TextField
+                            label="Nome da Área"
+                            value={form.nome}
+                            onChange={e => setForm({ ...form, nome: e.target.value })}
+                            fullWidth required
+                        />
+                        <FormControlLabel
+                            control={<Switch checked={form.ativo} onChange={e => setForm({ ...form, ativo: e.target.checked })} />}
+                            label="Ativo"
+                        />
+                    </Box>
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setModalOpen(false)}>Cancelar</Button>
@@ -180,9 +243,10 @@ const AreaList = () => {
             <ConfirmDialog
                 open={confirmOpen}
                 onClose={() => setConfirmOpen(false)}
-                onConfirm={confirmAction}
-                title="Excluir Área"
-                message="Tem certeza? A exclusão só é permitida se não houver endereços nesta área."
+                onConfirm={confirmData.action}
+                title={confirmData.title || ''}
+                message={confirmData.message || ''}
+                severity={confirmData.title && confirmData.title.includes('Excluir') ? "error" : "primary"}
             />
         </Box>
     );

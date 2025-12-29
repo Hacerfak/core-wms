@@ -20,11 +20,15 @@ public interface LocalizacaoRepository extends JpaRepository<Localizacao, Long> 
 
         List<Localizacao> findByAreaId(Long areaId);
 
+        List<Localizacao> findByAreaIdOrderByCodigoAsc(Long areaId);
+
         // Lista tudo ativo
         List<Localizacao> findByAtivoTrue();
 
         // NOVO: Busca global por tipo (ex: trazer todas as DOCAS do sistema)
         List<Localizacao> findByTipoAndAtivoTrue(TipoLocalizacao tipo);
+
+        Optional<Localizacao> findByAreaIdAndCodigo(Long areaId, String codigo);
 
         // Cache para busca por ID
         @Cacheable(value = "locais", key = "#id")

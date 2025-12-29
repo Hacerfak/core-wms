@@ -7,7 +7,7 @@ import {
     Home, PackagePlus, Box as BoxIcon, Truck, Settings, Users,
     Contact, Package, MapPin, ChevronDown, ChevronRight, Building2, Shield, History,
     LayoutDashboard, ClipboardCheck, FileText,
-    LayoutList, Printer, Construction, Boxes,
+    LayoutList, Printer, Construction, Boxes, Container
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../contexts/AuthContext';
@@ -55,7 +55,8 @@ const Sidebar = () => {
             items: [
                 { text: 'Produtos', icon: <Package size={20} />, path: '/cadastros/produtos', permission: 'PRODUTO_VISUALIZAR' },
                 { text: 'Parceiros', icon: <Contact size={20} />, path: '/cadastros/parceiros', permission: 'PARCEIRO_VISUALIZAR' },
-                { text: 'Endereços', icon: <MapPin size={20} />, path: '/cadastros/locais', permission: 'LOCALIZACAO_VISUALIZAR' }
+                { text: 'Endereços', icon: <MapPin size={20} />, path: '/cadastros/locais', permission: 'LOCALIZACAO_VISUALIZAR' },
+                { text: 'Formatos LPN', icon: <Container size={20} />, path: '/cadastros/formatos-lpn', permission: 'ESTOQUE_GERENCIAR' }
             ]
         },
         {

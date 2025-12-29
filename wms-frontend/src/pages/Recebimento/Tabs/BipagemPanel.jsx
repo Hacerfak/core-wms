@@ -10,7 +10,7 @@ import {
 import { toast } from 'react-toastify';
 import { conferirProduto } from '../../../services/recebimentoService';
 
-const BipagemPanel = ({ recebimentoId, dadosRecebimento, onSucesso }) => {
+const BipagemPanel = ({ recebimentoId, dadosRecebimento, onSucesso, formatoId, onRequestFormato }) => {
     // 1. Refs para controle manual de foco (Crucial para Coletor)
     const skuRef = useRef(null);
     const loteRef = useRef(null);
@@ -120,6 +120,12 @@ const BipagemPanel = ({ recebimentoId, dadosRecebimento, onSucesso }) => {
 
         if (!form.sku || !form.qtd || !produtoAtivo) return;
 
+        if (!formatoId) {
+            toast.warning("Selecione o Formato de Armazenamento (Pallet/Caixa) antes de bipar!");
+            if (onRequestFormato) onRequestFormato(); // Abre o modal no pai
+            return;
+        }
+
         // Validações rápidas
         if (produtoAtivo.controlaLote && !form.lote) return toast.warning("Lote obrigatório!");
         if (produtoAtivo.controlaValidade && !form.validade) return toast.warning("Validade obrigatória!");
@@ -132,7 +138,7 @@ const BipagemPanel = ({ recebimentoId, dadosRecebimento, onSucesso }) => {
                 lote: form.lote,
                 validade: form.validade,
                 serial: form.serial
-            });
+            }, formatoId); // [ATUALIZADO] Passando formatoId
 
             toast.success(`Entrada Confirmada: ${form.volumes} vol. de ${produtoAtivo.sku}`);
 

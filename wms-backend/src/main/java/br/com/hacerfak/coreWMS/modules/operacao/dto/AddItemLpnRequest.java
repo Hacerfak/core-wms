@@ -8,10 +8,11 @@ import java.time.LocalDate;
 import br.com.hacerfak.coreWMS.modules.estoque.domain.StatusQualidade;
 
 public record AddItemLpnRequest(
-        @NotNull String sku,
-        @NotNull @Positive BigDecimal quantidade,
-        String lote,
-        LocalDate dataValidade,
-        String numeroSerie,
-        StatusQualidade statusQualidade) {
+                @NotNull String sku,
+                @NotNull @Positive BigDecimal quantidade,
+                String lote,
+                LocalDate dataValidade,
+                String numeroSerie,
+                Long formatoId,
+                StatusQualidade statusQualidade) {
 }

@@ -26,19 +26,6 @@ public class Area extends BaseEntity {
     @Column(nullable = false)
     private String nome;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private TipoLocalizacao tipo; // Define o propósito da área
-
-    @Builder.Default
-    private boolean padraoRecebimento = false;
-
-    @Builder.Default
-    private boolean padraoExpedicao = false;
-
-    @Builder.Default
-    private boolean padraoQuarentena = false;
-
     @Builder.Default
     private boolean ativo = true;
 }

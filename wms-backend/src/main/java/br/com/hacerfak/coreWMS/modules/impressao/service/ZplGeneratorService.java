@@ -28,7 +28,7 @@ public class ZplGeneratorService {
 
         Map<String, String> variaveis = new HashMap<>();
         variaveis.put("LPN_CODIGO", lpn.getCodigo());
-        variaveis.put("TIPO", lpn.getTipo().name());
+        variaveis.put("TIPO", lpn.getFormato().getCodigo());
 
         if (!lpn.getItens().isEmpty()) {
             var item = lpn.getItens().get(0);

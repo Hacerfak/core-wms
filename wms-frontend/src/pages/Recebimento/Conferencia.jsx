@@ -4,7 +4,7 @@ import {
     Box, Typography, Button, LinearProgress, Card, CardContent,
     Grid, IconButton, Tooltip, Paper, Divider, Alert, Chip
 } from '@mui/material';
-import { ArrowLeft, CheckCircle, XCircle, Package, Truck, FileText, Anchor } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle, Package, Truck, FileText, Anchor, Settings, Container } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { getRecebimentoById, getProgressoRecebimento, finalizarConferencia, cancelarConferencia } from '../../services/recebimentoService';
 import { getLocalizacoes } from '../../services/localizacaoService';
@@ -13,6 +13,7 @@ import ConfirmDialog from '../../components/ConfirmDialog';
 import BipagemPanel from './Tabs/BipagemPanel'; // Renomeado de BipagemTab
 import LpnsList from './Tabs/LpnsList'; // Renomeado de LpnsTab
 import ProgressoConferencia from './Components/ProgressoConferencia';
+import ModalSelecaoFormato from '../../components/Operacao/ModalSelecaoFormato'; // [Novo Import]
 
 const Conferencia = () => {
     const { id } = useParams();
@@ -27,8 +28,9 @@ const Conferencia = () => {
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [confirmData, setConfirmData] = useState({});
 
-    // Controle de Doca (caso precise trocar)
-    const [docaModalOpen, setDocaModalOpen] = useState(false);
+    // [NOVO] Controle do Formato de LPN
+    const [modalFormatoOpen, setModalFormatoOpen] = useState(false);
+    const [formatoSelecionado, setFormatoSelecionado] = useState(null); // Guarda o ID selecionado
 
     useEffect(() => { init(); }, [id]);
 
@@ -53,23 +55,20 @@ const Conferencia = () => {
         try {
             const data = await getProgressoRecebimento(id);
             setProgressoData(data);
-            // Atualiza o objeto recebimento também para refletir status dos itens
             const recAtualizado = await getRecebimentoById(id);
             setRecebimento(recAtualizado);
         } catch (e) { console.error(e); }
     };
 
-    const handleFinalizarClick = () => {
-        // Agora usamos um Dialog interno para escolher o Stage, ou assumimos um padrão
-        // Para simplificar a UX, vamos pedir o Stage no ConfirmDialog ou abrir um modal específico
-        // Aqui vou simplificar abrindo um Prompt customizado no ConfirmDialog se possível, 
-        // ou redirecionando para uma tela de "Resumo e Finalização".
-        // Vamos manter simples: Pedir confirmação e assumir que o usuário escolheu o Stage antes (se fosse o caso)
-        // Mas como removemos o select da tela principal para limpar, vamos abrir um modal de finalização.
+    // [NOVO] Handler ao selecionar formato no Modal
+    const handleFormatoSelect = (id) => {
+        setFormatoSelecionado(id);
+        setModalFormatoOpen(false);
+        toast.info("Formato de armazenamento definido para as próximas LPNs.");
+    };
 
-        // ... Lógica de abrir modal de finalização (não implementado aqui para brevidade, foco na UX da bipagem) ...
-        // Para este exemplo, vamos apenas alertar.
-        toast.info("Implementar Modal de Seleção de Stage Final aqui.");
+    const handleFinalizarClick = () => {
+        toast.info("Implementar fluxo de finalização.");
     };
 
     const handleSair = () => navigate('/recebimento/tarefas');
@@ -99,6 +98,20 @@ const Conferencia = () => {
                     </Box>
                 </Box>
 
+                {/* [NOVO] Botão/Indicador de Formato */}
+                <Box display="flex" alignItems="center" gap={2}>
+                    <Button
+                        variant={formatoSelecionado ? "outlined" : "contained"}
+                        color={formatoSelecionado ? "primary" : "warning"}
+                        size="small"
+                        onClick={() => setModalFormatoOpen(true)}
+                        startIcon={<Container size={16} />}
+                    >
+                        {formatoSelecionado ? "Alterar Formato" : "Selecionar Formato"}
+                    </Button>
+                    {formatoSelecionado && <Chip label="Formato Definido" color="primary" size="small" variant="outlined" />}
+                </Box>
+
                 <Box width={300}>
                     <ProgressoConferencia
                         previsto={progressoData.totalPrevisto}
@@ -121,15 +134,17 @@ const Conferencia = () => {
             {/* ÁREA DE TRABALHO (GRID) */}
             <Grid container spacing={2} sx={{ flex: 1, overflow: 'hidden' }}>
 
-                {/* ESQUERDA: WORKSTATION (BIPAGEM) - 70% da tela */}
+                {/* ESQUERDA: WORKSTATION (BIPAGEM) */}
                 <Grid item xs={12} md={8} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                     <BipagemPanel
                         recebimentoId={id}
                         dadosRecebimento={recebimento}
                         onSucesso={atualizarProgresso}
+                        formatoId={formatoSelecionado} // [NOVO] Passando o formato
+                        onRequestFormato={() => setModalFormatoOpen(true)} // [NOVO] Callback se faltar formato
                     />
 
-                    {/* LISTA DE LPNs RECENTES (ABAIXO DA BIPAGEM) */}
+                    {/* LISTA DE LPNs RECENTES */}
                     <Box sx={{ mt: 2, flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                         <Typography variant="subtitle2" fontWeight="bold" mb={1} color="text.secondary">
                             Volumes Gerados Recentemente
@@ -140,7 +155,7 @@ const Conferencia = () => {
                     </Box>
                 </Grid>
 
-                {/* DIREITA: CONTEXTO (ITENS DA NOTA) - 30% da tela */}
+                {/* DIREITA: CONTEXTO (ITENS DA NOTA) */}
                 <Grid item xs={12} md={4} sx={{ height: '100%', overflow: 'hidden' }}>
                     <Paper variant="outlined" sx={{ height: '100%', display: 'flex', flexDirection: 'column', borderRadius: 2, bgcolor: 'white' }}>
                         <Box p={2} borderBottom="1px solid #e2e8f0" bgcolor="#f1f5f9">
@@ -182,6 +197,13 @@ const Conferencia = () => {
                     </Paper>
                 </Grid>
             </Grid>
+
+            {/* [NOVO] MODAL DE SELEÇÃO */}
+            <ModalSelecaoFormato
+                open={modalFormatoOpen}
+                onClose={() => setModalFormatoOpen(false)}
+                onSelect={handleFormatoSelect}
+            />
 
             <ConfirmDialog
                 open={confirmOpen} onClose={() => setConfirmOpen(false)}

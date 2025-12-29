@@ -14,15 +14,19 @@ export const deleteRecebimento = async (id) => {
     await api.delete(`/api/recebimentos/${id}`);
 };
 
-export const conferirProduto = async (recebimentoId, sku, quantidade, dadosExtras = {}) => {
+export const conferirProduto = async (recebimentoId, sku, quantidade, dadosExtras = {}, formatoId) => {
     const payload = {
         solicitacaoId: Number(recebimentoId),
         sku: sku,
-        quantidadePorVolume: Number(quantidade),
-        quantidadeDeVolumes: Number(dadosExtras.volumes || 1), // Default 1
+
+        // --- CORREÇÃO: Nomes devem bater com o DTO Java (GerarLpnMassaRequest) ---
+        qtdPorVolume: Number(quantidade),       // Antes era: quantidadePorVolume
+        qtdVolumes: Number(dadosExtras.volumes || 1), // Antes era: quantidadeDeVolumes
+
         lote: dadosExtras.lote || null,
         dataValidade: dadosExtras.validade || null,
-        numeroSerie: dadosExtras.serial || null
+        numeroSerie: dadosExtras.serial || null,
+        formatoId: formatoId
     };
 
     const response = await api.post(`/api/recebimentos/${recebimentoId}/conferencia-massa`, payload);

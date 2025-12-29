@@ -21,9 +21,14 @@ public class Lpn extends BaseEntity {
     @Column(nullable = false, unique = true, length = 50)
     private String codigo; // O código de barras da etiqueta (ex: "LPN-123456")
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private TipoLpn tipo; // PALLET, CAIXA, GAIOLA
+    @ManyToOne(optional = false)
+    @JoinColumn(name = "formato_lpn_id", nullable = false)
+    private FormatoLpn formato;
+
+    // Método auxiliar para manter compatibilidade de código, se necessário
+    public String getTipoDescricao() {
+        return formato != null ? formato.getDescricao() : "Desconhecido";
+    }
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

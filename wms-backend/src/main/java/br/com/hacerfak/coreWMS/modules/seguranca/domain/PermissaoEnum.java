@@ -25,6 +25,7 @@ public enum PermissaoEnum {
 
     // --- OPERAÇÃO: ESTOQUE (Inventory) ---
     ESTOQUE_VISUALIZAR,
+    ESTOQUE_GERENCIAR,
     ESTOQUE_MOVIMENTAR,
     ESTOQUE_ARMAZENAR,
 

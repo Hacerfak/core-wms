@@ -1,10 +1,19 @@
 package br.com.hacerfak.coreWMS.modules.estoque.controller;
 
 import br.com.hacerfak.coreWMS.core.exception.EntityNotFoundException;
+import br.com.hacerfak.coreWMS.modules.cadastro.domain.Produto;
+import br.com.hacerfak.coreWMS.modules.cadastro.repository.ProdutoRepository;
+import br.com.hacerfak.coreWMS.modules.estoque.domain.Localizacao;
 import br.com.hacerfak.coreWMS.modules.estoque.domain.Lpn;
+import br.com.hacerfak.coreWMS.modules.estoque.repository.LocalizacaoRepository;
 import br.com.hacerfak.coreWMS.modules.estoque.repository.LpnRepository;
+import br.com.hacerfak.coreWMS.modules.estoque.service.LpnService;
 import br.com.hacerfak.coreWMS.modules.impressao.service.ImpressaoService;
 import br.com.hacerfak.coreWMS.modules.impressao.service.ZplGeneratorService;
+import br.com.hacerfak.coreWMS.modules.operacao.dto.AddItemLpnRequest;
+import br.com.hacerfak.coreWMS.modules.operacao.dto.GerarLpnMassaRequest;
+import br.com.hacerfak.coreWMS.modules.operacao.dto.GerarLpnVaziaRequest;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -20,11 +29,85 @@ import java.util.List;
 @RequiredArgsConstructor
 public class LpnController {
 
+    private final LpnService lpnService; // Service Principal
     private final LpnRepository lpnRepository;
     private final ZplGeneratorService zplService;
     private final ImpressaoService impressaoService;
 
-    // Listagem simples (útil para testes ou consultas)
+    // Repositórios auxiliares para lookup de entidades
+    private final ProdutoRepository produtoRepository;
+    private final LocalizacaoRepository localizacaoRepository;
+
+    // --- OPERAÇÃO ---
+
+    /**
+     * Gera LPNs vazias para impressão antecipada.
+     */
+    @PostMapping("/gerar-vazias")
+    @PreAuthorize("hasAuthority('ESTOQUE_MOVIMENTAR') or hasRole('ADMIN')")
+    public ResponseEntity<List<String>> gerarLpnsVazias(@RequestBody @Valid GerarLpnVaziaRequest dto) {
+        String usuario = getUsuarioLogado();
+        List<String> codigos = lpnService.gerarLpnsVazias(dto.quantidade(), dto.formatoId(), usuario);
+        return ResponseEntity.ok(codigos);
+    }
+
+    /**
+     * Gera LPNs em massa (Carga Fechada) já com conteúdo e estoque.
+     */
+    @PostMapping("/gerar-massa")
+    @PreAuthorize("hasAuthority('ESTOQUE_MOVIMENTAR') or hasRole('ADMIN')")
+    public ResponseEntity<List<String>> gerarLpnsMassa(@RequestBody @Valid GerarLpnMassaRequest dto) {
+        String usuario = getUsuarioLogado();
+
+        // Busca entidades necessárias para passar ao Service
+        Produto produto = produtoRepository.findByCodigoBarras(dto.sku())
+                .orElseThrow(() -> new EntityNotFoundException("Produto não encontrado"));
+
+        Localizacao local = localizacaoRepository.findById(dto.localizacaoId())
+                .orElseThrow(() -> new EntityNotFoundException("Localização não encontrada"));
+
+        List<String> codigos = lpnService.gerarLpnsComConteudo(
+                produto,
+                dto.qtdPorVolume(),
+                dto.qtdVolumes(),
+                dto.lote(),
+                dto.dataValidade(),
+                dto.numeroSerie(),
+                local,
+                dto.solicitacaoId(),
+                dto.formatoId(),
+                usuario);
+
+        return ResponseEntity.ok(codigos);
+    }
+
+    /**
+     * Adiciona Item na LPN (Bipagem / Conferência).
+     */
+    @PostMapping("/{codigo}/itens")
+    @PreAuthorize("hasAuthority('ESTOQUE_MOVIMENTAR') or hasRole('ADMIN')")
+    public ResponseEntity<Void> adicionarItem(
+            @PathVariable String codigo,
+            @RequestBody @Valid AddItemLpnRequest dto) {
+
+        String usuario = getUsuarioLogado();
+        lpnService.adicionarItem(codigo, dto, dto.formatoId(), usuario);
+        return ResponseEntity.ok().build();
+    }
+
+    /**
+     * Finaliza a LPN (Fecha o volume para armazenagem).
+     */
+    @PostMapping("/{codigo}/fechar")
+    @PreAuthorize("hasAuthority('ESTOQUE_MOVIMENTAR') or hasRole('ADMIN')")
+    public ResponseEntity<Void> fecharLpn(@PathVariable String codigo) {
+        String usuario = getUsuarioLogado();
+        lpnService.fecharLpn(codigo, usuario);
+        return ResponseEntity.ok().build();
+    }
+
+    // --- CONSULTAS E IMPRESSÃO (Mantidos do seu código original) ---
+
     @GetMapping
     @PreAuthorize("hasAuthority('ESTOQUE_VISUALIZAR') or hasRole('ADMIN')")
     public ResponseEntity<List<Lpn>> listarLpns() {
@@ -39,50 +122,32 @@ public class LpnController {
                 .orElseThrow(() -> new EntityNotFoundException("LPN não encontrada"));
     }
 
-    /**
-     * PREVIEW: Apenas retorna o código ZPL para validação visual (não imprime).
-     */
     @GetMapping(value = "/{id}/etiqueta/preview", produces = MediaType.TEXT_PLAIN_VALUE)
-    @PreAuthorize("hasAuthority('ESTOQUE_MOVIMENTAR') or hasRole('ADMIN')")
-    public ResponseEntity<String> visualizarEtiqueta(
-            @PathVariable Long id,
+    public ResponseEntity<String> visualizarEtiqueta(@PathVariable Long id,
             @RequestParam(required = false) Long templateId) {
-
-        Lpn lpn = lpnRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("LPN não encontrada"));
-
+        Lpn lpn = lpnRepository.findById(id).orElseThrow(() -> new EntityNotFoundException("LPN não encontrada"));
         String zpl = zplService.gerarZplParaLpn(templateId, lpn);
         return ResponseEntity.ok(zpl);
     }
 
-    /**
-     * IMPRESSÃO REAL: Gera o ZPL e envia para a fila do Agente.
-     */
     @PostMapping("/{id}/imprimir")
     @PreAuthorize("hasAuthority('ESTOQUE_MOVIMENTAR') or hasRole('ADMIN')")
     public ResponseEntity<Void> enviarParaImpressora(
             @PathVariable Long id,
             @RequestParam(required = false) Long templateId,
-            @RequestParam Long impressoraId) { // O Front deve enviar o ID da impressora selecionada
+            @RequestParam Long impressoraId) {
 
-        Lpn lpn = lpnRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("LPN não encontrada"));
-
-        // 1. Gera o conteúdo ZPL
+        Lpn lpn = lpnRepository.findById(id).orElseThrow(() -> new EntityNotFoundException("LPN não encontrada"));
         String zpl = zplService.gerarZplParaLpn(templateId, lpn);
-
-        // 2. Pega o usuário logado para auditoria
-        String usuario = "SISTEMA";
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth != null) {
-            usuario = auth.getName();
-        }
-
-        // 3. Envia para a fila (O Agente vai ler daqui)
-        // OBS: Certifique-se que seu ImpressaoService tem o método enviarParaFila
-        // aceitando ID da impressora
+        String usuario = getUsuarioLogado();
         impressaoService.enviarParaFila(zpl, impressoraId, usuario, "LPN_" + lpn.getCodigo());
 
         return ResponseEntity.ok().build();
+    }
+
+    // Helper para pegar usuário
+    private String getUsuarioLogado() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return (auth != null) ? auth.getName() : "SISTEMA";
     }
 }

@@ -198,18 +198,19 @@ public class RecebimentoWorkflowService {
                 // 1. Gera LPNs (Otimizado no LpnService)
                 List<String> codigosLpn = lpnService.gerarLpnsComConteudo(
                                 produto,
-                                dto.quantidadePorVolume(),
-                                dto.quantidadeDeVolumes(),
+                                dto.qtdPorVolume(),
+                                dto.qtdVolumes(),
                                 dto.lote(),
                                 dto.dataValidade(),
                                 dto.numeroSerie(),
                                 solicitacao.getDoca(),
                                 solicitacao.getId(),
+                                dto.formatoId(),
                                 usuario);
 
                 // 2. OTIMIZAÇÃO: Atualiza a contagem no banco via SQL
-                BigDecimal totalConferido = dto.quantidadePorVolume()
-                                .multiply(new BigDecimal(dto.quantidadeDeVolumes()));
+                BigDecimal totalConferido = dto.qtdPorVolume()
+                                .multiply(new BigDecimal(dto.qtdVolumes()));
 
                 itemSolicitacaoRepo.somarQuantidadeConferida(
                                 dto.solicitacaoId(),

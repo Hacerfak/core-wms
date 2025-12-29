@@ -4,9 +4,11 @@ import br.com.hacerfak.coreWMS.modules.estoque.domain.*;
 import br.com.hacerfak.coreWMS.modules.estoque.dto.*;
 import br.com.hacerfak.coreWMS.modules.estoque.service.MapeamentoService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.cache.annotation.CacheEvict;
 
 import java.util.List;
@@ -97,5 +99,23 @@ public class MapeamentoController {
     @PreAuthorize("hasAuthority('LOCALIZACAO_VISUALIZAR') or hasRole('ADMIN')")
     public ResponseEntity<Localizacao> buscarPorBarcode(@PathVariable String enderecoCompleto) {
         return ResponseEntity.ok(service.buscarPorEnderecoCompleto(enderecoCompleto));
+    }
+
+    // --- NOVO: IMPORTAÇÃO ---
+    @PostMapping(value = "/locais/importar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAuthority('LOCALIZACAO_GERENCIAR') or hasRole('ADMIN')")
+    @CacheEvict(value = "locais", allEntries = true)
+    public ResponseEntity<Void> importarLocais(@RequestParam("file") MultipartFile file) {
+        service.importarLocalizacoes(file);
+        return ResponseEntity.ok().build();
+    }
+
+    // --- NOVO: BULK UPDATE ---
+    @PostMapping("/locais/bulk-update")
+    @PreAuthorize("hasAuthority('LOCALIZACAO_GERENCIAR') or hasRole('ADMIN')")
+    @CacheEvict(value = "locais", allEntries = true)
+    public ResponseEntity<Void> atualizarMassa(@RequestBody LocalizacaoBulkUpdateDTO dto) {
+        service.atualizarEmMassa(dto);
+        return ResponseEntity.ok().build();
     }
 }
