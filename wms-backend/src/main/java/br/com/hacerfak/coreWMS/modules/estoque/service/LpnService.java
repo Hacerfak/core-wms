@@ -1,9 +1,11 @@
 package br.com.hacerfak.coreWMS.modules.estoque.service;
 
 import br.com.hacerfak.coreWMS.core.exception.EntityNotFoundException;
+import br.com.hacerfak.coreWMS.core.multitenant.TenantContext;
 import br.com.hacerfak.coreWMS.modules.cadastro.domain.Produto;
 import br.com.hacerfak.coreWMS.modules.cadastro.repository.ProdutoRepository;
 import br.com.hacerfak.coreWMS.modules.estoque.domain.*;
+import br.com.hacerfak.coreWMS.modules.estoque.event.LpnCriadaEvent;
 import br.com.hacerfak.coreWMS.modules.estoque.repository.EstoqueSaldoRepository;
 import br.com.hacerfak.coreWMS.modules.estoque.repository.FormatoLpnRepository; // NOVO IMPORT
 import br.com.hacerfak.coreWMS.modules.estoque.repository.LpnItemRepository;
@@ -11,6 +13,8 @@ import br.com.hacerfak.coreWMS.modules.estoque.repository.LpnRepository;
 import br.com.hacerfak.coreWMS.modules.estoque.repository.MovimentoEstoqueRepository;
 import br.com.hacerfak.coreWMS.modules.operacao.dto.AddItemLpnRequest;
 import lombok.RequiredArgsConstructor;
+
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,6 +37,7 @@ public class LpnService {
     private final EstoqueSaldoRepository estoqueSaldoRepository;
     private final FormatoLpnRepository formatoLpnRepository;
     private final MovimentoEstoqueRepository movimentoEstoqueRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 1. PRÉ-GERAÇÃO DE ETIQUETAS
@@ -157,8 +162,16 @@ public class LpnService {
             throw new IllegalStateException("Não é possível fechar uma LPN vazia.");
         }
 
+        String currentTenant = TenantContext.getTenant();
+
         lpn.setStatus(StatusLpn.FECHADO);
         lpnRepository.save(lpn);
+
+        eventPublisher.publishEvent(new LpnCriadaEvent(
+                lpn.getId(),
+                lpn.getCodigo(),
+                currentTenant));
+
     }
 
     // --- Auxiliares ---
@@ -211,6 +224,8 @@ public class LpnService {
         if (numeroSerie != null && !numeroSerie.isBlank() && qtdVolumes > 1) {
             throw new IllegalArgumentException("Itens serializados devem ser gerados um a um.");
         }
+
+        String currentTenant = TenantContext.getTenant();
 
         for (int i = 1; i <= qtdVolumes; i++) {
             String codigo = gerarCodigoLpnUnico();
@@ -270,9 +285,16 @@ public class LpnService {
             movimentosParaSalvar.add(movimento);
         }
 
-        lpnRepository.saveAll(lpnsParaSalvar);
+        List<Lpn> lpnsSalvas = lpnRepository.saveAll(lpnsParaSalvar);
         estoqueSaldoRepository.saveAll(saldosParaSalvar);
         movimentoEstoqueRepository.saveAll(movimentosParaSalvar);
+
+        for (Lpn lpn : lpnsSalvas) {
+            eventPublisher.publishEvent(new LpnCriadaEvent(
+                    lpn.getId(),
+                    lpn.getCodigo(),
+                    currentTenant));
+        }
 
         return codigosGerados;
     }
