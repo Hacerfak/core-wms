@@ -52,7 +52,7 @@ public class PortariaService {
 
         if (dto.tipo() == TipoAgendamento.ENTRADA) {
             SolicitacaoEntrada sol = SolicitacaoEntrada.builder()
-                    .codigoExterno("AGEND-" + codigo)
+                    .codigoExterno(codigo)
                     .status(StatusSolicitacao.CRIADA)
                     .dataEmissao(LocalDateTime.now())
                     .build();
@@ -78,7 +78,7 @@ public class PortariaService {
         }
 
         // 1. Importa os Itens (Cria Solicitação e Itens)
-        SolicitacaoEntrada novaSolicitacaoComItens = nfeImportService.importarXml(file);
+        SolicitacaoEntrada novaSolicitacaoComItens = nfeImportService.importarXml(file, agendamento.getCodigoReserva());
 
         // 2. Recupera Transportadora do XML e atualiza Agendamento (se não tiver uma
         // fixa)
@@ -281,8 +281,8 @@ public class PortariaService {
         Agendamento a = agendamentoRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Agendamento não encontrado"));
 
-        // Só cancela se não começou a operação física (Check-in)
-        if (a.getStatus() != StatusAgendamento.AGENDADO) {
+        // Só cancela se não começou a operação física (Check-in) ou não compareceu
+        if ((a.getStatus() != StatusAgendamento.AGENDADO && a.getStatus() != StatusAgendamento.NO_SHOW)) {
             throw new IllegalStateException("Não é possível cancelar. O veículo já realizou check-in.");
         }
 
@@ -306,6 +306,18 @@ public class PortariaService {
         Agendamento a = agendamentoRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Agendamento não encontrado"));
         a.setStatus(StatusAgendamento.NO_SHOW);
+
+        // REGRA: Agendamento não comparecido CANCELA a solicitação filha (Cascata de
+        // Status)
+        if (a.getSolicitacaoEntrada() != null) {
+            a.getSolicitacaoEntrada().setStatus(StatusSolicitacao.CANCELADA);
+            solicitacaoEntradaRepository.save(a.getSolicitacaoEntrada());
+        }
+        if (a.getSolicitacaoSaida() != null) {
+            a.getSolicitacaoSaida().setStatus(StatusSolicitacao.CANCELADA);
+            solicitacaoSaidaRepository.save(a.getSolicitacaoSaida());
+        }
+
         agendamentoRepository.save(a);
     }
 

@@ -190,7 +190,10 @@ const OperacaoPortaria = () => {
                                         {v.doca && (
                                             <Box display="flex" alignItems="center" gap={1} color="primary.main" bgcolor="#f0f9ff" p={0.5} borderRadius={1}>
                                                 <MapPin size={18} />
-                                                <Typography variant="body2" fontWeight="bold">Dirigir-se à: {v.doca.enderecoCompleto}</Typography>
+                                                <Typography variant="body2" fontWeight="bold">
+                                                    {/* AJUSTE AQUI: Descrição ou Endereço */}
+                                                    Dirigir-se à: {v.doca.descricao || v.doca.enderecoCompleto}
+                                                </Typography>
                                             </Box>
                                         )}
                                     </Box>
@@ -221,7 +224,7 @@ const OperacaoPortaria = () => {
                         >
                             <MenuItem value=""><em>Não definir agora</em></MenuItem>
                             {docasDisponiveis.map(d => (
-                                <MenuItem key={d.id} value={d.id}>{d.enderecoCompleto} {d.status === 'OCUPADO' ? '(Ocupada)' : ''}</MenuItem>
+                                <MenuItem key={d.id} value={d.id}>{d.descricao || d.enderecoCompleto} {d.status === 'OCUPADO' ? '(Ocupada)' : ''}</MenuItem>
                             ))}
                         </TextField>
 

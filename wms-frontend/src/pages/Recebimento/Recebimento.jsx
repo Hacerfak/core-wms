@@ -4,7 +4,7 @@ import {
     TableCell, TableContainer, TableHead, TableRow, Chip,
     Divider, IconButton, CircularProgress
 } from '@mui/material';
-import { UploadCloud, FileText, Check, X, Trash2, Package } from 'lucide-react';
+import { UploadCloud, FileText, Check, X, Trash2, Package, ArrowLeft } from 'lucide-react';
 import { toast } from 'react-toastify';
 import api from '../../services/api';
 import { useNavigate } from 'react-router-dom';
@@ -102,9 +102,12 @@ const Recebimento = () => {
     // --- RENDERIZAÇÃO ---
     return (
         <Box>
-            <Typography variant="h5" fontWeight="bold" mb={3} color="text.primary">
-                Recebimento de Nota Fiscal
-            </Typography>
+            <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+                <Box display="flex" alignItems="center" gap={2}>
+                    <Button startIcon={<ArrowLeft />} onClick={() => navigate('/recebimento/lista')} color="inherit">Voltar</Button>
+                    <Typography variant="h5" fontWeight="bold" mb={3} color="text.primary">Recebimento de Nota Fiscal</Typography>
+                </Box>
+            </Box>
 
             {/* ESTADO 1: NENHUM ARQUIVO SELECIONADO (AREA DE UPLOAD) */}
             {!previewData && (

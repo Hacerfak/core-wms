@@ -7,9 +7,7 @@ import {
     Home, PackagePlus, Box as BoxIcon, Truck, Settings, Users,
     Contact, Package, MapPin, ChevronDown, ChevronRight, Building2, Shield, History,
     LayoutDashboard, ClipboardCheck, FileText,
-    LayoutList, Printer,
-    Construction,
-    CalendarClock
+    LayoutList, Printer, Construction, Boxes,
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AuthContext } from '../contexts/AuthContext';
@@ -40,21 +38,13 @@ const Sidebar = () => {
             ]
         },
         {
-            id: 'portaria',
-            title: 'Portaria',
-            groupIcon: <Construction size={18} />,
-            items: [
-                { text: 'Visão Geral', icon: <CalendarClock size={20} />, path: '/portaria', permission: 'PORTARIA_VISUALIZAR' },
-                // Outros sub-itens se quiser acesso rápido, mas o Menu de Cards já resolve
-            ]
-        },
-        {
             id: 'operacao',
             title: 'Operação',
             groupIcon: <ClipboardCheck size={18} />, // Ícone de Tarefas/Operação
             items: [
+                { text: 'Portaria', icon: <Construction size={20} />, path: '/portaria', permission: 'PORTARIA_VISUALIZAR' },
                 { text: 'Recebimento', icon: <PackagePlus size={20} />, path: '/recebimento', permission: 'RECEBIMENTO_VISUALIZAR' },
-                { text: 'Estoque', icon: <BoxIcon size={20} />, path: '/estoque', permission: 'ESTOQUE_VISUALIZAR' },
+                { text: 'Armazenamento', icon: <Boxes size={20} />, path: '/estoque', permission: 'ESTOQUE_VISUALIZAR' },
                 { text: 'Expedição', icon: <Truck size={20} />, path: '/expedicao', permission: 'PEDIDO_VISUALIZAR' }
             ]
         },

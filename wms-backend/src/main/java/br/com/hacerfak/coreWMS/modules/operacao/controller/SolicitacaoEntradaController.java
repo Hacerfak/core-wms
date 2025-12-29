@@ -58,7 +58,7 @@ public class SolicitacaoEntradaController {
     @PreAuthorize("hasAuthority('RECEBIMENTO_IMPORTAR_XML') or hasRole('ADMIN')")
     public ResponseEntity<SolicitacaoEntrada> importarNfe(@RequestParam("file") MultipartFile file) {
         // O Service já devolve a solicitação criada com status e tarefas iniciais
-        return ResponseEntity.ok(nfeImportService.importarXml(file));
+        return ResponseEntity.ok(nfeImportService.importarXml(file, ""));
     }
 
     // ========================================================================

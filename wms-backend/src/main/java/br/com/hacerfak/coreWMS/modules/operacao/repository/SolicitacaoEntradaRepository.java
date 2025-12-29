@@ -32,7 +32,7 @@ public interface SolicitacaoEntradaRepository extends JpaRepository<SolicitacaoE
                    s.dataCriacao,
                    s.dataEmissao,
                    d.id,
-                   d.enderecoCompleto,
+                   COALESCE(d.descricao, d.enderecoCompleto),
                    a.id,
                    a.status,
                    a.placaVeiculo

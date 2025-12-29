@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, MenuItem, TextField } from '@mui/material';
 import { toast } from 'react-toastify';
 import { getLocalizacoes } from '../../../services/localizacaoService';
-import { atribuirDoca } from '../../../services/recebimentoService'; // Vamos garantir que esse export exista
+import { atribuirDoca } from '../../../services/recebimentoService';
 
 const AtribuirDocaModal = ({ open, onClose, solicitacao, onSuccess }) => {
     const [docas, setDocas] = useState([]);
@@ -42,6 +42,14 @@ const AtribuirDocaModal = ({ open, onClose, solicitacao, onSuccess }) => {
         }
     };
 
+    // Helper para exibição amigável
+    const formatDocaLabel = (d) => {
+        // Se tiver descrição (nome curto), usa. Senão usa o endereço completo.
+        const nome = d.descricao || d.enderecoCompleto;
+        const status = d.status === 'OCUPADO' ? ' (Ocupada)' : '';
+        return nome + status;
+    };
+
     return (
         <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
             <DialogTitle>Atribuir Doca</DialogTitle>
@@ -56,7 +64,7 @@ const AtribuirDocaModal = ({ open, onClose, solicitacao, onSuccess }) => {
                 >
                     {docas.map((d) => (
                         <MenuItem key={d.id} value={d.id}>
-                            {d.enderecoCompleto} {d.status === 'OCUPADO' ? '(Ocupada)' : ''}
+                            {formatDocaLabel(d)}
                         </MenuItem>
                     ))}
                 </TextField>

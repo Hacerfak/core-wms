@@ -36,7 +36,7 @@ public class NfeImportService {
     private final ParceiroRepository parceiroRepository;
 
     @Transactional
-    public SolicitacaoEntrada importarXml(MultipartFile file) {
+    public SolicitacaoEntrada importarXml(MultipartFile file, String codigoExterno) {
         try {
             InputStream is = file.getInputStream();
             DocumentBuilderFactory dbFactory = DocumentBuilderFactory.newInstance();
@@ -79,9 +79,16 @@ public class NfeImportService {
                 }
             }
 
-            // Cria a SOLICITAÇÃO (em vez de Recebimento)
+            String externo;
+            if (codigoExterno.isBlank()) {
+                externo = "---";
+            } else {
+                externo = codigoExterno;
+            }
+
+            // Cria a SOLICITAÇÃO
             SolicitacaoEntrada solicitacao = SolicitacaoEntrada.builder()
-                    .codigoExterno(nNF) // Usamos o número da nota como código externo
+                    .codigoExterno(externo)
                     .notaFiscal(nNF)
                     .chaveAcesso(chaveAcesso)
                     .fornecedor(fornecedor)

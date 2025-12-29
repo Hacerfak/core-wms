@@ -13,7 +13,6 @@ import ConfirmDialog from '../../components/ConfirmDialog';
 import BipagemPanel from './Tabs/BipagemPanel'; // Renomeado de BipagemTab
 import LpnsList from './Tabs/LpnsList'; // Renomeado de LpnsTab
 import ProgressoConferencia from './Components/ProgressoConferencia';
-import AtribuirDocaModal from './Components/AtribuirDocaModal'; // Reutilizando se precisar trocar
 
 const Conferencia = () => {
     const { id } = useParams();

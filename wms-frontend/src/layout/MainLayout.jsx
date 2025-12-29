@@ -45,7 +45,7 @@ const MainLayout = () => {
                     <Toolbar>
                         <Box sx={{ flexGrow: 1, display: 'flex', alignItems: 'center', gap: 2 }}>
                             <Typography variant="h6" sx={{ color: 'text.secondary', fontSize: '1rem', fontWeight: 500 }}>
-                                Visão Geral
+                                Empresa atual:
                             </Typography>
                             {empresaAtual && (
                                 <Chip icon={<Building2 size={16} />} label={empresaAtual.razaoSocial} color="primary" variant="outlined" size="small" />
