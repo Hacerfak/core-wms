@@ -395,8 +395,13 @@ const RecebimentoList = () => {
 
                                             {/* EXCLUIR */}
                                             {['CRIADA', 'AGUARDANDO_EXECUCAO'].includes(item.status) && (
-                                                <Tooltip title="Cancelar/Excluir">
-                                                    <IconButton size="small" color="error" onClick={() => handleDeleteClick(item.id, item.status)} sx={{ border: '1px solid #fee2e2', bgcolor: '#fef2f2' }}>
+                                                <Tooltip title="Excluir Solicitação">
+                                                    <IconButton
+                                                        size="small"
+                                                        color="error"
+                                                        onClick={() => handleDeleteClick(item.id, item.status)}
+                                                        sx={{ border: '1px solid #fee2e2', bgcolor: '#fef2f2' }}
+                                                    >
                                                         <Trash2 size={16} />
                                                     </IconButton>
                                                 </Tooltip>

@@ -47,7 +47,8 @@ public class LpnController {
     @PreAuthorize("hasAuthority('ESTOQUE_MOVIMENTAR') or hasRole('ADMIN')")
     public ResponseEntity<List<String>> gerarLpnsVazias(@RequestBody @Valid GerarLpnVaziaRequest dto) {
         String usuario = getUsuarioLogado();
-        List<String> codigos = lpnService.gerarLpnsVazias(dto.quantidade(), dto.formatoId(), usuario);
+        List<String> codigos = lpnService.gerarLpnsVazias(dto.quantidade(), dto.formatoId(), dto.solicitacaoId(),
+                usuario);
         return ResponseEntity.ok(codigos);
     }
 
@@ -120,6 +121,14 @@ public class LpnController {
         return lpnRepository.findById(id)
                 .map(ResponseEntity::ok)
                 .orElseThrow(() -> new EntityNotFoundException("LPN não encontrada"));
+    }
+
+    @GetMapping("/codigo/{codigo}")
+    @PreAuthorize("hasAuthority('ESTOQUE_VISUALIZAR') or hasAuthority('RECEBIMENTO_CONFERIR') or hasRole('ADMIN')")
+    public ResponseEntity<Lpn> buscarPorCodigo(@PathVariable String codigo) {
+        return lpnRepository.findByCodigo(codigo)
+                .map(ResponseEntity::ok)
+                .orElseThrow(() -> new EntityNotFoundException("LPN não encontrada com o código: " + codigo));
     }
 
     @GetMapping(value = "/{id}/etiqueta/preview", produces = MediaType.TEXT_PLAIN_VALUE)

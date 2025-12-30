@@ -4,6 +4,8 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 
 public record GerarLpnVaziaRequest(
-        @NotNull @Min(1) Integer quantidade,
-        @NotNull Long formatoId) {
+                @NotNull @Min(1) Integer quantidade,
+                @NotNull Long formatoId,
+                Long solicitacaoId,
+                Long docaId) {
 }

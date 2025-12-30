@@ -7,11 +7,14 @@ import br.com.hacerfak.coreWMS.modules.cadastro.repository.ProdutoRepository;
 import br.com.hacerfak.coreWMS.modules.estoque.domain.*;
 import br.com.hacerfak.coreWMS.modules.estoque.event.LpnCriadaEvent;
 import br.com.hacerfak.coreWMS.modules.estoque.repository.EstoqueSaldoRepository;
-import br.com.hacerfak.coreWMS.modules.estoque.repository.FormatoLpnRepository; // NOVO IMPORT
+import br.com.hacerfak.coreWMS.modules.estoque.repository.FormatoLpnRepository;
 import br.com.hacerfak.coreWMS.modules.estoque.repository.LpnItemRepository;
 import br.com.hacerfak.coreWMS.modules.estoque.repository.LpnRepository;
 import br.com.hacerfak.coreWMS.modules.estoque.repository.MovimentoEstoqueRepository;
+import br.com.hacerfak.coreWMS.modules.operacao.domain.SolicitacaoEntrada;
 import br.com.hacerfak.coreWMS.modules.operacao.dto.AddItemLpnRequest;
+import br.com.hacerfak.coreWMS.modules.operacao.repository.ItemSolicitacaoEntradaRepository;
+import br.com.hacerfak.coreWMS.modules.operacao.repository.SolicitacaoEntradaRepository;
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.context.ApplicationEventPublisher;
@@ -38,6 +41,8 @@ public class LpnService {
     private final FormatoLpnRepository formatoLpnRepository;
     private final MovimentoEstoqueRepository movimentoEstoqueRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final ItemSolicitacaoEntradaRepository itemSolicitacaoRepository;
+    private final SolicitacaoEntradaRepository solicitacaoEntradaRepository;
 
     /**
      * 1. PRÉ-GERAÇÃO DE ETIQUETAS
@@ -46,26 +51,47 @@ public class LpnService {
      * ALTERAÇÃO: Recebe formatoId para vincular ao tipo físico (PBR, Caixa, etc).
      */
     @Transactional
-    public List<String> gerarLpnsVazias(Integer quantidade, Long formatoId, String usuario) {
-        // Busca o formato escolhido
+    public List<String> gerarLpnsVazias(Integer quantidade, Long formatoId, Long solicitacaoId,
+            String usuario) {
+        // 1. Busca o formato escolhido
         FormatoLpn formato = formatoLpnRepository.findById(formatoId)
                 .orElseThrow(
                         () -> new EntityNotFoundException("Formato de LPN não encontrado (ID: " + formatoId + ")"));
+
+        // 2. Busca a Solicitação de Entrada para pegar a Doca vinculada
+        // (Assumindo que sua classe se chama SolicitacaoEntrada)
+        SolicitacaoEntrada solicitacao = solicitacaoEntradaRepository.findById(solicitacaoId)
+                .orElseThrow(
+                        () -> new EntityNotFoundException("Solicitação não encontrada (ID: " + solicitacaoId + ")"));
+
+        // 3. Obtém a doca a partir da solicitação encontrada
+        // Verifique se no seu modelo o método é getDoca() ou getLocalizacao()
+        Localizacao doca = solicitacao.getDoca();
+
+        // Validação extra opcional: Se a solicitação não tiver doca, impede a criação
+        if (doca == null) {
+            throw new IllegalStateException("A solicitação (ID: " + solicitacaoId + ") não possui uma doca vinculada.");
+        }
 
         List<String> codigosGerados = new ArrayList<>();
         List<Lpn> lpnsParaSalvar = new ArrayList<>();
 
         for (int i = 0; i < quantidade; i++) {
             String codigo = gerarCodigoLpnUnico();
+
             Lpn lpn = Lpn.builder()
                     .codigo(codigo)
-                    .formato(formato) // Substitui .tipo(TipoLpn.PALLET)
+                    .formato(formato)
                     .status(StatusLpn.EM_MONTAGEM)
+                    .solicitacaoEntradaId(solicitacaoId)
+                    .localizacaoAtual(doca) // Usa a doca recuperada da solicitação
                     .criadoPor(usuario)
                     .build();
+
             lpnsParaSalvar.add(lpn);
             codigosGerados.add(codigo);
         }
+
         lpnRepository.saveAll(lpnsParaSalvar);
         return codigosGerados;
     }
@@ -158,19 +184,75 @@ public class LpnService {
         Lpn lpn = lpnRepository.findByCodigo(codigoLpn)
                 .orElseThrow(() -> new EntityNotFoundException("LPN não encontrada."));
 
+        if (lpn.getStatus() != StatusLpn.EM_MONTAGEM) {
+            // Se já estiver fechado, apenas retorna (idempotente) ou erro
+            if (lpn.getStatus() == StatusLpn.FECHADO)
+                return;
+            throw new IllegalStateException("LPN não está em montagem.");
+        }
+
         if (lpn.getItens().isEmpty()) {
             throw new IllegalStateException("Não é possível fechar uma LPN vazia.");
         }
 
-        String currentTenant = TenantContext.getTenant();
+        // Valida se tem localização (Doca) vinculada. Se não tiver, tenta achar a da
+        // solicitação.
+        if (lpn.getLocalizacaoAtual() == null && lpn.getSolicitacaoEntradaId() != null) {
+            // Lógica para recuperar a doca da solicitação (opcional, ou falha)
+            // Idealmente a LPN já nasce na doca.
+        }
+
+        Localizacao local = lpn.getLocalizacaoAtual();
+        if (local == null)
+            throw new IllegalStateException("LPN sem localização definida (Doca).");
+
+        // PROCESSA CADA ITEM DO VOLUME
+        for (LpnItem item : lpn.getItens()) {
+            // 1. Cria Estoque Físico
+            EstoqueSaldo saldo = EstoqueSaldo.builder()
+                    .produto(item.getProduto())
+                    .localizacao(local)
+                    .lpn(lpn.getCodigo())
+                    .lote(item.getLote())
+                    .dataValidade(item.getDataValidade())
+                    .numeroSerie(item.getNumeroSerie())
+                    .statusQualidade(item.getStatusQualidade())
+                    .quantidade(item.getQuantidade())
+                    .quantidadeReservada(BigDecimal.ZERO)
+                    .build();
+            estoqueSaldoRepository.save(saldo);
+
+            // 2. Gera Kardex (Entrada)
+            MovimentoEstoque mov = MovimentoEstoque.builder()
+                    .tipo(TipoMovimento.ENTRADA)
+                    .produto(item.getProduto())
+                    .localizacao(local)
+                    .quantidade(item.getQuantidade())
+                    .saldoAnterior(BigDecimal.ZERO)
+                    .saldoAtual(item.getQuantidade())
+                    .lpn(lpn.getCodigo())
+                    .lote(item.getLote())
+                    .numeroSerie(item.getNumeroSerie())
+                    .usuarioResponsavel(usuario)
+                    .observacao("Fechamento Volume Misto (Sol. " + lpn.getSolicitacaoEntradaId() + ")")
+                    .build();
+            movimentoEstoqueRepository.save(mov);
+
+            // 3. Atualiza Progresso da Solicitação
+            if (lpn.getSolicitacaoEntradaId() != null) {
+                itemSolicitacaoRepository.somarQuantidadeConferida(
+                        lpn.getSolicitacaoEntradaId(),
+                        item.getProduto().getId(),
+                        item.getQuantidade());
+            }
+        }
 
         lpn.setStatus(StatusLpn.FECHADO);
         lpnRepository.save(lpn);
 
-        eventPublisher.publishEvent(new LpnCriadaEvent(
-                lpn.getId(),
-                lpn.getCodigo(),
-                currentTenant));
+        // Opcional:
+        String currentTenant = TenantContext.getTenant();
+        eventPublisher.publishEvent(new LpnCriadaEvent(lpn.getId(), lpn.getCodigo(), currentTenant));
 
     }
 

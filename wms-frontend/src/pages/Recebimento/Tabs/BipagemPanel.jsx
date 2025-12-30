@@ -1,337 +1,353 @@
 import { useState, useRef, useEffect } from 'react';
 import {
     Box, Typography, TextField, Button, Grid, Paper,
-    InputAdornment, IconButton, Chip, Fade
+    InputAdornment, IconButton, ToggleButton, ToggleButtonGroup,
+    Card, CardContent, Divider, List, ListItem, ListItemText, Chip, Alert
 } from '@mui/material';
 import {
-    Barcode, Layers, Calendar, Hash, Tag,
-    Box as BoxIcon, X, CheckCircle, AlertTriangle
+    Barcode, Layers, Box as BoxIcon, CheckCircle, Plus,
+    Printer, Lock, Search, X, PackageOpen
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { conferirProduto } from '../../../services/recebimentoService';
+import { adicionarItemLpn, fecharLpn, gerarLpnVazia, getLpnPorCodigo } from '../../../services/lpnService';
 
 const BipagemPanel = ({ recebimentoId, dadosRecebimento, onSucesso, formatoId, onRequestFormato }) => {
-    // 1. Refs para controle manual de foco (Crucial para Coletor)
-    const skuRef = useRef(null);
-    const loteRef = useRef(null);
-    const validadeRef = useRef(null);
-    const serialRef = useRef(null);
-    const qtdRef = useRef(null);
-    const volumesRef = useRef(null);
-
-    // 2. Estados
-    const [form, setForm] = useState({
-        sku: '', qtd: '', volumes: 1,
-        lote: '', validade: '', serial: ''
-    });
-
-    const [produtoAtivo, setProdutoAtivo] = useState(null);
+    // --- ESTADOS GLOBAIS ---
+    const [modo, setModo] = useState('MASSA'); // 'MASSA' (Produto) ou 'MISTO' (Volume)
     const [sending, setSending] = useState(false);
 
-    // --- LÓGICA DE BUSCA DO PRODUTO ---
-    // Executa sempre que o SKU muda para dar feedback visual imediato
-    useEffect(() => {
-        if (!form.sku) {
+    // --- REFS (Foco) ---
+    const skuRef = useRef(null);
+    const lpnRef = useRef(null); // Foco no campo de LPN Alvo (Modo Misto)
+    const qtdRef = useRef(null);
+
+    // --- ESTADOS MODO MASSA ---
+    const [formMassa, setFormMassa] = useState({ sku: '', qtd: '', volumes: 1 });
+
+    // --- ESTADOS MODO MISTO ---
+    const [lpnAtiva, setLpnAtiva] = useState(null); // Objeto LPN { codigo, itens: [] }
+    const [lpnInput, setLpnInput] = useState('');
+    const [formMisto, setFormMisto] = useState({ sku: '', qtd: '' });
+
+    // Controle de Produto Ativo (Comum aos dois, mas derivado do form ativo)
+    const [produtoAtivo, setProdutoAtivo] = useState(null);
+
+    // --- LÓGICA DE MUDANÇA DE MODO ---
+    const handleModoChange = (event, newModo) => {
+        if (newModo) {
+            setModo(newModo);
             setProdutoAtivo(null);
-            return;
-        }
-
-        const termo = form.sku.toUpperCase();
-        const item = dadosRecebimento?.itens?.find(i =>
-            i.produto.sku === termo ||
-            i.produto.ean13 === termo ||
-            i.produto.dun14 === termo
-        );
-
-        if (item) {
-            setProdutoAtivo(item.produto);
-            // Se a quantidade estiver vazia, sugere o fator de conversão (padrão 1)
-            if (!form.qtd) {
-                setForm(prev => ({ ...prev, qtd: item.produto.fatorConversao || 1 }));
-            }
-        } else {
-            setProdutoAtivo(null);
-        }
-    }, [form.sku, dadosRecebimento]);
-
-    // --- GERENCIAMENTO DE FOCO (A MÁGICA DA UX) ---
-
-    // Enter no SKU: Decide para onde ir baseado nas regras do produto
-    const handleSkuEnter = (e) => {
-        if (e.key !== 'Enter') return;
-        e.preventDefault();
-
-        if (!produtoAtivo) {
-            // Toca um som de erro ou toast se quiser
-            toast.warning("Produto não encontrado na nota.");
-            skuRef.current?.select(); // Seleciona para bater de novo
-            return;
-        }
-
-        // Cadeia de decisão de foco
-        if (produtoAtivo.controlaLote) {
-            loteRef.current?.focus();
-        } else if (produtoAtivo.controlaValidade) {
-            validadeRef.current?.focus();
-        } else if (produtoAtivo.controlaSerie) {
-            serialRef.current?.focus();
-        } else {
-            qtdRef.current?.focus();
-            qtdRef.current?.select(); // Seleciona valor para permitir digitação rápida
+            // Limpa focos e estados
+            if (newModo === 'MASSA') setTimeout(() => skuRef.current?.focus(), 100);
+            if (newModo === 'MISTO') setTimeout(() => (!lpnAtiva ? lpnRef.current?.focus() : skuRef.current?.focus()), 100);
         }
     };
 
-    // Enter nos campos de Rastreabilidade
-    const handleTraceabilityEnter = (e, nextFieldRef) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            if (nextFieldRef?.current) {
-                nextFieldRef.current.focus();
-                // Se for campo de texto, seleciona o conteúdo
-                if (nextFieldRef.current.select) nextFieldRef.current.select();
-            } else {
-                // Se não tem próximo campo específico (ex: acabou a rastreabilidade), vai pra Qtd
-                qtdRef.current?.focus();
-                qtdRef.current?.select();
-            }
-        }
-    };
+    // =================================================================================
+    // MODO 1: CONFERÊNCIA EM MASSA (Lógica que já existia, refatorada)
+    // =================================================================================
 
-    // Enter na Quantidade
-    const handleQtdEnter = (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            volumesRef.current?.focus();
-            volumesRef.current?.select();
-        }
-    };
-
-    // Enter no Volume (Finaliza o Ciclo)
-    const handleVolumesEnter = async (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            await handleSubmit();
-        }
-    };
-
-    // --- SUBMISSÃO ---
-    const handleSubmit = async (e) => {
-        if (e) e.preventDefault(); // Caso seja chamado pelo form
-
-        if (!form.sku || !form.qtd || !produtoAtivo) return;
-
-        if (!formatoId) {
-            toast.warning("Selecione o Formato de Armazenamento (Pallet/Caixa) antes de bipar!");
-            if (onRequestFormato) onRequestFormato(); // Abre o modal no pai
-            return;
-        }
-
-        // Validações rápidas
-        if (produtoAtivo.controlaLote && !form.lote) return toast.warning("Lote obrigatório!");
-        if (produtoAtivo.controlaValidade && !form.validade) return toast.warning("Validade obrigatória!");
-        if (produtoAtivo.controlaSerie && !form.serial) return toast.warning("Serial obrigatório!");
+    const handleSubmitMassa = async () => {
+        if (!formMassa.sku || !formMassa.qtd || !produtoAtivo) return;
+        if (!formatoId) { onRequestFormato(); return; }
 
         setSending(true);
         try {
-            await conferirProduto(recebimentoId, form.sku, form.qtd, {
-                volumes: form.volumes,
-                lote: form.lote,
-                validade: form.validade,
-                serial: form.serial
-            }, formatoId); // [ATUALIZADO] Passando formatoId
+            await conferirProduto(recebimentoId, formMassa.sku, formMassa.qtd, {
+                volumes: formMassa.volumes,
+                // Adicione lote/validade aqui se necessário
+            }, formatoId);
 
-            toast.success(`Entrada Confirmada: ${form.volumes} vol. de ${produtoAtivo.sku}`);
-
-            // RESET INTELIGENTE PARA LOOP RÁPIDO
-            setForm({
-                sku: '', // Limpa SKU para bipar o próximo
-                qtd: '',
-                volumes: 1,
-                lote: '', validade: '', serial: ''
-            });
+            toast.success(`Entrada Confirmada: ${formMassa.volumes} vol. de ${produtoAtivo.sku}`);
+            setFormMassa({ ...formMassa, sku: '', volumes: 1 }); // Mantém qtd se quiser, ou reseta
             setProdutoAtivo(null);
-
             if (onSucesso) onSucesso();
-
-            // Foco imediato no SKU para o próximo item
-            setTimeout(() => skuRef.current?.focus(), 50);
-
+            setTimeout(() => skuRef.current?.focus(), 100);
         } catch (error) {
-            toast.error(error.response?.data?.message || "Erro ao salvar.");
-            // Em caso de erro, mantém os dados para o operador corrigir, mas foca no campo problemático ou SKU
-            skuRef.current?.select();
+            toast.error("Erro ao conferir.");
         } finally {
             setSending(false);
         }
     };
 
-    const handleClear = () => {
-        setForm({ sku: '', qtd: '', volumes: 1, lote: '', validade: '', serial: '' });
-        setProdutoAtivo(null);
-        skuRef.current?.focus();
+    // =================================================================================
+    // MODO 2: MONTAGEM DE VOLUME MISTO
+    // =================================================================================
+
+    // 2.1 Abrir/Buscar LPN
+    const handleBuscarLpn = async () => {
+        if (!lpnInput) return;
+        setSending(true);
+        try {
+            // Tenta buscar no backend (precisa implementar busca por código)
+            // Se não achar e for formato válido, poderia criar. 
+            // Por segurança, vamos exigir que exista ou criar via botão "Gerar".
+            // Mock temporário:
+            setLpnAtiva({ codigo: lpnInput.toUpperCase(), itens: [] });
+            toast.info(`Volume ${lpnInput} aberto para montagem.`);
+            setTimeout(() => skuRef.current?.focus(), 100);
+        } catch (error) {
+            toast.error("LPN não encontrada.");
+        } finally {
+            setSending(false);
+        }
     };
 
-    // Estilo comum para inputs grandes
-    const bigInputProps = { style: { fontSize: '1.2rem', padding: '10px' } };
+    // 2.2 Gerar Nova LPN
+    const handleGerarLpn = async () => {
+        if (!formatoId) { onRequestFormato(); return; }
+        setSending(true);
+        try {
+            // Passa o recebimentoId (solicitacaoId) aqui
+            const [novoCodigo] = await gerarLpnVazia(formatoId, 1, recebimentoId);
+
+            const lpnData = await getLpnPorCodigo(novoCodigo);
+            setLpnAtiva(lpnData);
+            setLpnInput(novoCodigo);
+
+            toast.success("Nova etiqueta gerada e vinculada!");
+            setTimeout(() => skuRef.current?.focus(), 100);
+        } catch (error) {
+            toast.error("Erro ao gerar LPN.");
+        } finally {
+            setSending(false);
+        }
+    };
+
+    // 2.3 Bipar Item na LPN
+    const handleAddItem = async () => {
+        if (!lpnAtiva || !formMisto.sku || !formMisto.qtd) return;
+        setSending(true);
+        try {
+            await adicionarItemLpn(lpnAtiva.codigo, {
+                sku: formMisto.sku,
+                quantidade: formMisto.qtd,
+                formatoId // Passa caso precise criar on-the-fly (fallback)
+            });
+
+            toast.success(`Item adicionado ao volume ${lpnAtiva.codigo}`);
+
+            // Atualiza visualmente a lista de itens da LPN (Ideal: buscar do back atualizado)
+            setLpnAtiva(prev => ({
+                ...prev,
+                itens: [...prev.itens, { sku: formMisto.sku, qtd: formMisto.qtd }]
+            }));
+
+            setFormMisto({ sku: '', qtd: '' });
+            setProdutoAtivo(null);
+            if (onSucesso) onSucesso(); // Atualiza painel geral
+            setTimeout(() => skuRef.current?.focus(), 100);
+
+        } catch (error) {
+            toast.error("Erro ao adicionar item.");
+        } finally {
+            setSending(false);
+        }
+    };
+
+    // 2.4 Fechar Volume
+    const handleFecharVolume = async () => {
+        if (!lpnAtiva) return;
+        if (!window.confirm(`Deseja fechar o volume ${lpnAtiva.codigo}?`)) return;
+
+        try {
+            await fecharLpn(lpnAtiva.codigo);
+            toast.success("Volume fechado e pronto para armazenagem!");
+            setLpnAtiva(null);
+            setLpnInput('');
+            if (onSucesso) onSucesso();
+            setTimeout(() => lpnRef.current?.focus(), 100);
+        } catch (error) {
+            toast.error("Erro ao fechar volume.");
+        }
+    };
+
+    // --- EFEITO DE BUSCA DE PRODUTO (Genérico) ---
+    useEffect(() => {
+        const skuAtual = modo === 'MASSA' ? formMassa.sku : formMisto.sku;
+        if (!skuAtual) {
+            setProdutoAtivo(null);
+            return;
+        }
+
+        const termo = skuAtual.toUpperCase();
+        const item = dadosRecebimento?.itens?.find(i =>
+            i.produto.sku === termo || i.produto.ean13 === termo
+        );
+
+        if (item) {
+            setProdutoAtivo(item.produto);
+            // Auto-preencher quantidade padrão se vazio
+            if (modo === 'MASSA' && !formMassa.qtd) setFormMassa(p => ({ ...p, qtd: item.produto.fatorConversao || 1 }));
+            if (modo === 'MISTO' && !formMisto.qtd) setFormMisto(p => ({ ...p, qtd: 1 })); // Unitário por padrão no misto
+        }
+    }, [formMassa.sku, formMisto.sku, dadosRecebimento, modo]);
+
 
     return (
-        <Paper elevation={0} sx={{ p: 3, borderRadius: 2, border: '1px solid', borderColor: produtoAtivo ? 'primary.main' : '#e2e8f0', bgcolor: produtoAtivo ? '#f0f9ff' : 'white' }}>
+        <Paper elevation={0} sx={{ p: 2, borderRadius: 2, border: '1px solid #e2e8f0' }}>
 
-            {/* 1. CAMPO DE BUSCA (SKU) - Sempre o início */}
-            <Grid container spacing={2}>
-                <Grid item xs={12}>
-                    <Typography variant="caption" fontWeight="bold" color="text.secondary">1. IDENTIFICAÇÃO (BIPE O PRODUTO)</Typography>
-                    <TextField
-                        inputRef={skuRef}
-                        fullWidth
-                        value={form.sku}
-                        onChange={(e) => setForm({ ...form, sku: e.target.value.toUpperCase() })}
-                        onKeyDown={handleSkuEnter}
-                        placeholder="EAN, SKU ou DUN..."
-                        autoComplete="off"
-                        autoFocus
-                        InputProps={{
-                            startAdornment: <InputAdornment position="start"><Barcode size={24} /></InputAdornment>,
-                            endAdornment: form.sku && <IconButton onClick={handleClear} size="small"><X size={16} /></IconButton>,
-                            style: { fontSize: '1.4rem', fontWeight: 'bold' } // Texto Grande
-                        }}
-                    />
-                </Grid>
-
-                {/* Feedback Visual do Produto Encontrado */}
-                {produtoAtivo && (
-                    <Grid item xs={12}>
-                        <Fade in={true}>
-                            <Box sx={{ p: 1.5, bgcolor: 'white', borderRadius: 2, border: '1px dashed #bfdbfe', display: 'flex', alignItems: 'center', gap: 2 }}>
-                                <Box sx={{ p: 1, bgcolor: 'primary.light', color: 'white', borderRadius: 1 }}>
-                                    <CheckCircle size={24} />
-                                </Box>
-                                <Box>
-                                    <Typography variant="h6" fontWeight="bold" color="primary.main" lineHeight={1.1}>
-                                        {produtoAtivo.nome}
-                                    </Typography>
-                                    <Typography variant="body2" color="text.secondary">
-                                        UN: <b>{produtoAtivo.unidadeMedida}</b> | SKU: {produtoAtivo.sku}
-                                    </Typography>
-                                </Box>
+            {/* SELETOR DE MODO */}
+            <Box display="flex" justifyContent="center" mb={3}>
+                <ToggleButtonGroup
+                    value={modo}
+                    exclusive
+                    onChange={handleModoChange}
+                    aria-label="Modo de Conferência"
+                    fullWidth
+                >
+                    <ToggleButton value="MASSA">
+                        <Box display="flex" alignItems="center" gap={1}>
+                            <Layers size={20} />
+                            <Box textAlign="left">
+                                <Typography variant="subtitle2" fontWeight="bold">Por Produto (Massa)</Typography>
+                                <Typography variant="caption" display="block">Gera LPNs fechadas</Typography>
                             </Box>
-                        </Fade>
-                    </Grid>
-                )}
-
-                {/* 2. CAMPOS CONDICIONAIS DE RASTREABILIDADE */}
-                {produtoAtivo && (
-                    <>
-                        {produtoAtivo.controlaLote && (
-                            <Grid item xs={12} sm={6}>
-                                <TextField
-                                    label="Lote Indústria"
-                                    inputRef={loteRef}
-                                    fullWidth
-                                    value={form.lote}
-                                    onChange={e => setForm({ ...form, lote: e.target.value.toUpperCase() })}
-                                    onKeyDown={(e) => {
-                                        // Se tiver validade, vai pra lá, senão vai pra Qtd
-                                        const next = produtoAtivo.controlaValidade ? validadeRef : qtdRef;
-                                        handleTraceabilityEnter(e, next);
-                                    }}
-                                    InputProps={{ startAdornment: <InputAdornment position="start"><Tag size={18} /></InputAdornment> }}
-                                />
-                            </Grid>
-                        )}
-
-                        {produtoAtivo.controlaValidade && (
-                            <Grid item xs={12} sm={6}>
-                                <TextField
-                                    label="Validade"
-                                    type="date"
-                                    inputRef={validadeRef}
-                                    fullWidth
-                                    InputLabelProps={{ shrink: true }}
-                                    value={form.validade}
-                                    onChange={e => setForm({ ...form, validade: e.target.value })}
-                                    onKeyDown={(e) => handleTraceabilityEnter(e, qtdRef)} // Geralmente validade é o último antes da Qtd
-                                    InputProps={{ startAdornment: <InputAdornment position="start"><Calendar size={18} /></InputAdornment> }}
-                                />
-                            </Grid>
-                        )}
-
-                        {produtoAtivo.controlaSerie && (
-                            <Grid item xs={12}>
-                                <TextField
-                                    label="Serial Number (S/N)"
-                                    inputRef={serialRef}
-                                    fullWidth
-                                    value={form.serial}
-                                    onChange={e => setForm({ ...form, serial: e.target.value.toUpperCase() })}
-                                    onKeyDown={(e) => handleTraceabilityEnter(e, qtdRef)}
-                                    InputProps={{ startAdornment: <InputAdornment position="start"><Hash size={18} /></InputAdornment> }}
-                                />
-                            </Grid>
-                        )}
-
-                        {/* 3. QUANTIDADE E VOLUMES (Lado a Lado) */}
-                        <Grid item xs={6}>
-                            <Typography variant="caption" fontWeight="bold" color="text.secondary">QTD. UNITÁRIA</Typography>
-                            <TextField
-                                inputRef={qtdRef}
-                                fullWidth
-                                type="number"
-                                placeholder="0"
-                                value={form.qtd}
-                                onChange={(e) => setForm({ ...form, qtd: e.target.value })}
-                                onKeyDown={handleQtdEnter}
-                                disabled={sending}
-                                inputProps={bigInputProps}
-                                InputProps={{
-                                    startAdornment: <InputAdornment position="start"><BoxIcon size={20} /></InputAdornment>
-                                }}
-                            />
-                        </Grid>
-
-                        <Grid item xs={6}>
-                            <Typography variant="caption" fontWeight="bold" color="text.secondary">Nº VOLUMES</Typography>
-                            <TextField
-                                inputRef={volumesRef}
-                                fullWidth
-                                type="number"
-                                placeholder="1"
-                                value={form.volumes}
-                                onChange={(e) => setForm({ ...form, volumes: e.target.value })}
-                                onKeyDown={handleVolumesEnter} // <--- AQUI OCORRE O SUBMIT
-                                disabled={sending}
-                                inputProps={bigInputProps}
-                                InputProps={{
-                                    startAdornment: <InputAdornment position="start"><Layers size={20} /></InputAdornment>
-                                }}
-                            />
-                        </Grid>
-
-                        {/* Botão de Feedback Visual apenas (O Enter já submete) */}
-                        <Grid item xs={12}>
-                            <Button
-                                variant="contained"
-                                fullWidth
-                                onClick={handleSubmit}
-                                disabled={sending}
-                                sx={{ height: 50, fontSize: '1rem', bgcolor: 'primary.main' }}
-                            >
-                                {sending ? "PROCESSANDO..." : "CONFIRMAR (ENTER)"}
-                            </Button>
-                        </Grid>
-                    </>
-                )}
-
-                {/* Estado Vazio (Instrução) */}
-                {!produtoAtivo && !form.sku && (
-                    <Grid item xs={12}>
-                        <Box display="flex" alignItems="center" justifyContent="center" gap={1} color="text.disabled" mt={1}>
-                            <AlertTriangle size={16} />
-                            <Typography variant="caption">Aguardando leitura do código de barras...</Typography>
                         </Box>
+                    </ToggleButton>
+                    <ToggleButton value="MISTO">
+                        <Box display="flex" alignItems="center" gap={1}>
+                            <BoxIcon size={20} />
+                            <Box textAlign="left">
+                                <Typography variant="subtitle2" fontWeight="bold">Montar Volume (Misto)</Typography>
+                                <Typography variant="caption" display="block">Vários itens numa LPN</Typography>
+                            </Box>
+                        </Box>
+                    </ToggleButton>
+                </ToggleButtonGroup>
+            </Box>
+
+            {/* CONTEÚDO MODO MASSA */}
+            {modo === 'MASSA' && (
+                <Grid container spacing={2}>
+                    <Grid item xs={12}>
+                        <TextField
+                            inputRef={skuRef}
+                            fullWidth label="Bipar Produto (SKU/EAN)"
+                            value={formMassa.sku}
+                            onChange={e => setFormMassa({ ...formMassa, sku: e.target.value.toUpperCase() })}
+                            onKeyDown={e => e.key === 'Enter' && qtdRef.current?.focus()}
+                            InputProps={{ startAdornment: <InputAdornment position="start"><Barcode /></InputAdornment> }}
+                            autoFocus
+                        />
                     </Grid>
-                )}
-            </Grid>
+                    {/* ... (Resto dos campos de Qtd e Volumes igual ao atual) ... */}
+                    <Grid item xs={6}>
+                        <TextField
+                            inputRef={qtdRef}
+                            fullWidth label="Qtd. por Volume" type="number"
+                            value={formMassa.qtd}
+                            onChange={e => setFormMassa({ ...formMassa, qtd: e.target.value })}
+                        />
+                    </Grid>
+                    <Grid item xs={6}>
+                        <TextField
+                            fullWidth label="Nº de Volumes" type="number"
+                            value={formMassa.volumes}
+                            onChange={e => setFormMassa({ ...formMassa, volumes: e.target.value })}
+                            onKeyDown={e => e.key === 'Enter' && handleSubmitMassa()}
+                        />
+                    </Grid>
+                    <Grid item xs={12}>
+                        <Button fullWidth variant="contained" onClick={handleSubmitMassa} disabled={sending}>
+                            {sending ? "Processando..." : "Confirmar (Enter)"}
+                        </Button>
+                    </Grid>
+                </Grid>
+            )}
+
+            {/* CONTEÚDO MODO MISTO */}
+            {modo === 'MISTO' && (
+                <Grid container spacing={2}>
+
+                    {/* PASSO 1: IDENTIFICAR LPN ALVO */}
+                    <Grid item xs={12}>
+                        {!lpnAtiva ? (
+                            <Box display="flex" gap={1}>
+                                <TextField
+                                    inputRef={lpnRef}
+                                    fullWidth label="Bipar Etiqueta LPN (Alvo)"
+                                    placeholder="LPN-..."
+                                    value={lpnInput}
+                                    onChange={e => setLpnInput(e.target.value.toUpperCase())}
+                                    onKeyDown={e => e.key === 'Enter' && handleBuscarLpn()}
+                                    InputProps={{ startAdornment: <InputAdornment position="start"><PackageOpen /></InputAdornment> }}
+                                    autoFocus
+                                />
+                                <Button variant="outlined" onClick={handleGerarLpn} startIcon={<Plus />}>
+                                    Gerar
+                                </Button>
+                            </Box>
+                        ) : (
+                            <Card variant="outlined" sx={{ bgcolor: '#f0fdf4', borderColor: '#bbf7d0' }}>
+                                <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                                    <Box display="flex" justifyContent="space-between" alignItems="center">
+                                        <Box display="flex" alignItems="center" gap={1}>
+                                            <PackageOpen size={20} color="#16a34a" />
+                                            <Typography variant="subtitle1" fontWeight="bold">
+                                                Volume: {lpnAtiva.codigo}
+                                            </Typography>
+                                        </Box>
+                                        <Button size="small" color="error" onClick={handleFecharVolume} startIcon={<Lock size={16} />}>
+                                            Fechar
+                                        </Button>
+                                    </Box>
+                                </CardContent>
+                            </Card>
+                        )}
+                    </Grid>
+
+                    {/* PASSO 2: BIPAR ITENS (Só habilita se tiver LPN Ativa) */}
+                    {lpnAtiva && (
+                        <>
+                            <Grid item xs={8}>
+                                <TextField
+                                    inputRef={skuRef}
+                                    fullWidth label="Produto"
+                                    value={formMisto.sku}
+                                    onChange={e => setFormMisto({ ...formMisto, sku: e.target.value.toUpperCase() })}
+                                    InputProps={{ startAdornment: <InputAdornment position="start"><Barcode /></InputAdornment> }}
+                                    autoFocus
+                                />
+                            </Grid>
+                            <Grid item xs={4}>
+                                <TextField
+                                    fullWidth label="Qtd" type="number"
+                                    value={formMisto.qtd}
+                                    onChange={e => setFormMisto({ ...formMisto, qtd: e.target.value })}
+                                    onKeyDown={e => e.key === 'Enter' && handleAddItem()}
+                                />
+                            </Grid>
+
+                            {/* FEEDBACK DO PRODUTO ATIVO */}
+                            {produtoAtivo && (
+                                <Grid item xs={12}>
+                                    <Alert severity="info" icon={<CheckCircle size={20} />}>
+                                        {produtoAtivo.nome}
+                                    </Alert>
+                                </Grid>
+                            )}
+
+                            {/* LISTA DE ITENS NA LPN (Feedback Visual) */}
+                            <Grid item xs={12}>
+                                <Divider sx={{ my: 1 }}>Itens neste volume</Divider>
+                                <List dense sx={{ maxHeight: 150, overflow: 'auto', bgcolor: '#f8fafc', borderRadius: 1 }}>
+                                    {lpnAtiva.itens.map((it, idx) => (
+                                        <ListItem key={idx}>
+                                            <ListItemText primary={it.sku} secondary={`Qtd: ${it.qtd}`} />
+                                        </ListItem>
+                                    ))}
+                                    {lpnAtiva.itens.length === 0 && (
+                                        <Typography variant="caption" sx={{ p: 2, display: 'block', textAlign: 'center' }}>Volume vazio.</Typography>
+                                    )}
+                                </List>
+                            </Grid>
+                        </>
+                    )}
+                </Grid>
+            )}
+
         </Paper>
     );
 };

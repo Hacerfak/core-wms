@@ -33,9 +33,10 @@ export const conferirProduto = async (recebimentoId, sku, quantidade, dadosExtra
     return response.data;
 };
 
-export const finalizarConferencia = async (id) => {
-    const response = await api.post(`/api/recebimentos/${id}/finalizar`);
-    return response.data; // Retorna o objeto Recebimento atualizado (com o novo status)
+export const finalizarConferencia = async (id, stageId) => {
+    // Agora enviamos o stageId como Query Param
+    const response = await api.post(`/api/recebimentos/${id}/finalizar?stageId=${stageId}`);
+    return response.data;
 };
 
 export const cancelarConferencia = async (id) => {
